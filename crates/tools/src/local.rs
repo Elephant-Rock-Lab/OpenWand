@@ -100,12 +100,19 @@ impl Default for BuiltinToolProvider {
     }
 }
 
-/// Create the standard batch-1 set of local tools.
+/// Create the standard batch-1 set of local tools (read-only).
 pub fn batch1_local_tools() -> BuiltinToolProvider {
     let mut provider = BuiltinToolProvider::new();
     provider.register_fn(file_read_descriptor(), file_read_handler);
     provider.register_fn(file_list_descriptor(), file_list_handler);
     provider.register_fn(file_search_descriptor(), file_search_handler);
+    provider
+}
+
+/// Create the full set of local tools including write tools.
+pub fn batch2_local_tools() -> BuiltinToolProvider {
+    let mut provider = batch1_local_tools();
+    provider.register_fn(file_write_descriptor(), file_write_handler);
     provider
 }
 
@@ -425,6 +432,193 @@ async fn file_search_handler(args: serde_json::Value, ctx: ToolCallContext) -> T
     )
 }
 
+// ---- File Write ----
+
+/// Maximum file write size: 1 MB.
+const MAX_WRITE_SIZE: usize = 1_048_576;
+
+fn file_write_descriptor() -> ToolDef {
+    ToolDef {
+        name: canonical_local_tool_name("file_write"),
+        display_name: Some("Write File".into()),
+        description: "Write content to a file within the working directory. Requires explicit overwrite flag to replace existing files.".into(),
+        parameters_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path from working directory"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "File content to write"
+                },
+                "overwrite": {
+                    "type": "boolean",
+                    "description": "Whether to overwrite an existing file (default: false)"
+                }
+            },
+            "required": ["path", "content"]
+        }),
+        output_schema: None,
+        source: ToolSource::Local,
+        declared_effect: ToolEffect::Write,
+        risk_hints: vec!["Modifies filesystem".into()],
+        tags: vec!["local".into(), "file".into(), "write".into()],
+        annotations: Some(ToolAnnotations {
+            read_only_hint: Some(false),
+            destructive_hint: Some(false),
+            idempotent_hint: Some(false),
+            open_world_hint: Some(false),
+        }),
+    }
+}
+
+/// Validate a file write path. Returns the resolved full path or an error message.
+fn validate_write_path(
+    path_str: &str,
+    working_directory: &str,
+) -> Result<std::path::PathBuf, String> {
+    let path = std::path::Path::new(path_str);
+
+    // Reject absolute paths
+    if path.is_absolute() {
+        return Err(format!("Absolute paths are not allowed: {}", path_str));
+    }
+
+    // Reject parent escape in path components
+    for component in path.components() {
+        if component == std::path::Component::ParentDir {
+            return Err(format!("Parent directory traversal (..) is not allowed: {}", path_str));
+        }
+    }
+
+    // Resolve to full path
+    let working = std::path::Path::new(working_directory);
+    let full_path = working.join(path);
+
+    // Symlink escape check: canonicalize parent if it exists
+    // This catches cases where a symlink in working_directory points outside
+    if let Some(parent_dir) = full_path.parent() {
+        if parent_dir.exists() {
+            let canonical_working = working
+                .canonicalize()
+                .map_err(|e| format!("Cannot canonicalize working directory: {e}"))?;
+            let canonical_parent = parent_dir
+                .canonicalize()
+                .map_err(|e| format!("Cannot canonicalize parent directory: {e}"))?;
+            if !canonical_parent.starts_with(&canonical_working) {
+                return Err("Path escapes working directory (possible symlink)".into());
+            }
+        }
+    }
+
+    // Reject if target is an existing directory
+    if full_path.is_dir() {
+        return Err(format!("Cannot write to a directory: {}", path_str));
+    }
+
+    Ok(full_path)
+}
+
+async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> ToolResult {
+    let start = std::time::Instant::now();
+    let call_id = extract_call_id(&args);
+    let tool_name = canonical_local_tool_name("file_write");
+
+    let path_val = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                "Missing required parameter: path".into(),
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    };
+
+    let content = match args.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                "Missing required parameter: content".into(),
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    };
+
+    let overwrite = args
+        .get("overwrite")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Validate path
+    let full_path = match validate_write_path(path_val, &ctx.working_directory) {
+        Ok(p) => p,
+        Err(e) => {
+            return ToolResult::error(call_id, tool_name, e, start.elapsed().as_millis() as u64);
+        }
+    };
+
+    // Enforce size limit
+    if content.len() > MAX_WRITE_SIZE {
+        return ToolResult::error(
+            call_id,
+            tool_name,
+            format!(
+                "Content exceeds maximum write size ({} bytes > {} bytes)",
+                content.len(),
+                MAX_WRITE_SIZE
+            ),
+            start.elapsed().as_millis() as u64,
+        );
+    }
+
+    // Check overwrite
+    if full_path.exists() && !overwrite {
+        return ToolResult::error(
+            call_id,
+            tool_name,
+            format!(
+                "File already exists: {}. Set overwrite=true to replace.",
+                full_path.display()
+            ),
+            start.elapsed().as_millis() as u64,
+        );
+    }
+
+    // Create parent directories if needed
+    if let Some(parent) = full_path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                format!("Failed to create parent directory: {e}"),
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    }
+
+    // Write the file
+    match tokio::fs::write(&full_path, content).await {
+        Ok(()) => ToolResult::success(
+            call_id,
+            tool_name,
+            format!("Wrote {} bytes to {}", content.len(), full_path.display()),
+            start.elapsed().as_millis() as u64,
+        ),
+        Err(e) => ToolResult::error(
+            call_id,
+            tool_name,
+            format!("Failed to write file '{}': {}", full_path.display(), e),
+            start.elapsed().as_millis() as u64,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,15 +750,214 @@ mod tests {
     }
 
     #[test]
-    fn batch1_local_tools_have_read_or_search_effect() {
-        let provider = batch1_local_tools();
-        for tool in provider.available_descriptors() {
-            assert!(
-                matches!(tool.declared_effect, ToolEffect::Read | ToolEffect::Search),
-                "tool {} has unexpected effect {:?}",
-                tool.name,
-                tool.declared_effect
-            );
-        }
+    fn batch2_registers_four_tools_including_write() {
+        let provider = batch2_local_tools();
+        let tools = provider.available_descriptors();
+        assert_eq!(4, tools.len());
+
+        let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"local__file_read"));
+        assert!(names.contains(&"local__file_list"));
+        assert!(names.contains(&"local__file_search"));
+        assert!(names.contains(&"local__file_write"));
+    }
+
+    #[test]
+    fn file_write_declared_effect_is_write() {
+        let desc = file_write_descriptor();
+        assert_eq!(ToolEffect::Write, desc.declared_effect);
+    }
+
+    #[tokio::test]
+    async fn file_write_creates_new_file() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "hello.txt",
+            "content": "Hello, world!",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(!result.is_error, "Write failed: {}", result.output);
+
+        let content = tokio::fs::read_to_string(dir.path().join("hello.txt"))
+            .await
+            .unwrap();
+        assert_eq!("Hello, world!", content);
+    }
+
+    #[tokio::test]
+    async fn file_write_refuses_absolute_path() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let abs_path = if cfg!(windows) {
+            "C:\\Windows\\System32\\test.txt"
+        } else {
+            "/etc/passwd"
+        };
+
+        let args = serde_json::json!({
+            "path": abs_path,
+            "content": "hacked",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error, "Expected error for absolute path, got: {}", result.output);
+        assert!(result.output.contains("Absolute paths are not allowed"));
+    }
+
+    #[tokio::test]
+    async fn file_write_refuses_parent_escape() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "../../../etc/passwd",
+            "content": "hacked",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error);
+        assert!(result.output.contains("Parent directory traversal"));
+    }
+
+    #[tokio::test]
+    async fn file_write_refuses_overwrite_by_default() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::write(dir.path().join("existing.txt"), "original")
+            .await
+            .unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "existing.txt",
+            "content": "replacement",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error);
+        assert!(result.output.contains("already exists"));
+
+        let content = tokio::fs::read_to_string(dir.path().join("existing.txt"))
+            .await
+            .unwrap();
+        assert_eq!("original", content);
+    }
+
+    #[tokio::test]
+    async fn file_write_allows_overwrite_when_explicit() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::write(dir.path().join("existing.txt"), "original")
+            .await
+            .unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "existing.txt",
+            "content": "replacement",
+            "overwrite": true,
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(!result.is_error, "Overwrite failed: {}", result.output);
+
+        let content = tokio::fs::read_to_string(dir.path().join("existing.txt"))
+            .await
+            .unwrap();
+        assert_eq!("replacement", content);
+    }
+
+    #[tokio::test]
+    async fn file_write_refuses_directory_target() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::create_dir(dir.path().join("subdir")).await.unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "subdir",
+            "content": "content",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error);
+        assert!(result.output.contains("directory"));
+    }
+
+    #[tokio::test]
+    async fn file_write_enforces_size_limit() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let big_content = "x".repeat(MAX_WRITE_SIZE + 1);
+        let args = serde_json::json!({
+            "path": "big.txt",
+            "content": big_content,
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error);
+        assert!(result.output.contains("maximum write size"));
+        assert!(!dir.path().join("big.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn file_write_creates_parent_directories() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "deep/nested/dir/file.txt",
+            "content": "nested content",
+            "_call_id": "tc_test"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await
+            .unwrap();
+        assert!(!result.is_error, "Write failed: {}", result.output);
+
+        let content = tokio::fs::read_to_string(dir.path().join("deep/nested/dir/file.txt"))
+            .await
+            .unwrap();
+        assert_eq!("nested content", content);
     }
 }

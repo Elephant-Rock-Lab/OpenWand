@@ -44,11 +44,11 @@ struct Args {
     message: Option<String>,
 }
 
-fn build_smoke_policy() -> BuiltinPolicyEngine {
+fn build_write_policy() -> BuiltinPolicyEngine {
     BuiltinPolicyEngine::new(vec![
         openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
-            name: "Allow read-effect tools (smoke)".into(),
+            id: openwand_policy::PolicyRuleId("allow-read".into()),
+            name: "Allow read-effect tools".into(),
             enabled: true,
             priority: 0,
             class: openwand_policy::RuleClass::BuiltinDefault,
@@ -59,12 +59,12 @@ fn build_smoke_policy() -> BuiltinPolicyEngine {
                 risk: openwand_core::risk::RiskLevelSnapshot::Low,
                 confirmation: openwand_core::mode::ConfirmationLevel::Auto,
             },
-            reason_code: "smoke_allow_read".into(),
-            summary: "Allow read-effect tool calls for smoke testing.".into(),
+            reason_code: "allow_read".into(),
+            summary: "Allow read-effect tool calls.".into(),
         },
         openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("smoke-allow-search".into()),
-            name: "Allow search-effect tools (smoke)".into(),
+            id: openwand_policy::PolicyRuleId("allow-search".into()),
+            name: "Allow search-effect tools".into(),
             enabled: true,
             priority: 0,
             class: openwand_policy::RuleClass::BuiltinDefault,
@@ -75,8 +75,25 @@ fn build_smoke_policy() -> BuiltinPolicyEngine {
                 risk: openwand_core::risk::RiskLevelSnapshot::Low,
                 confirmation: openwand_core::mode::ConfirmationLevel::Auto,
             },
-            reason_code: "smoke_allow_search".into(),
-            summary: "Allow search-effect tool calls for smoke testing.".into(),
+            reason_code: "allow_search".into(),
+            summary: "Allow search-effect tool calls.".into(),
+        },
+        // Write requires explicit approval
+        openwand_policy::PolicyRule {
+            id: openwand_policy::PolicyRuleId("write-requires-approve".into()),
+            name: "Write-effect tools require user approval".into(),
+            enabled: true,
+            priority: 0,
+            class: openwand_policy::RuleClass::BuiltinDefault,
+            matcher: openwand_policy::ToolMatcher::ToolEffect {
+                effect: openwand_core::tool_vocab::ToolEffect::Write,
+            },
+            effect: openwand_policy::PolicyEffect::Allow {
+                risk: openwand_core::risk::RiskLevelSnapshot::Medium,
+                confirmation: openwand_core::mode::ConfirmationLevel::Approve,
+            },
+            reason_code: "write_requires_approval".into(),
+            summary: "Write-effect tools require explicit user approval.".into(),
         },
     ])
 }
@@ -98,13 +115,13 @@ async fn main() -> Result<()> {
     // 3. Create LLM client
     let llm: Arc<dyn LlmClient> = Arc::new(OpenAiCompatibleClient::new());
 
-    // 4. Create tools executor (local tools only)
+    // 4. Create tools executor (local tools including file_write)
     let tools: Arc<dyn ToolExecutor> = Arc::new(
-        CompositeToolExecutor::local_only(openwand_tools::local::batch1_local_tools())
+        CompositeToolExecutor::local_only(openwand_tools::local::batch2_local_tools())
     );
 
-    // 5. Create policy engine (Read + Search only)
-    let policy: Arc<dyn PolicyEngine> = Arc::new(build_smoke_policy());
+    // 5. Create policy engine (Read/Search auto, Write requires approval)
+    let policy: Arc<dyn PolicyEngine> = Arc::new(build_write_policy());
 
     // 6. Get user message
     let message = args.message.unwrap_or_else(|| {

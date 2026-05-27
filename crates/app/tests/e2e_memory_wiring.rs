@@ -6,13 +6,13 @@
 //!  prompt without manual database work."
 //!
 //! This test uses real SQLite (tempfile), real SqliteMemoryStore,
-//! real MemoryCoordinator, real KeywordExtractor.
+//! real MemoryCoordinator, real HeuristicExtractor.
 
 use openwand_app::memory_coordinator::MemoryCoordinator;
 use openwand_app::ui::memory_service::build_memory_panel;
 use openwand_core::events::{InferenceEvent, OpenWandTraceEvent, SessionEvent};
 use openwand_core::SessionId;
-use openwand_memory::testing::KeywordExtractor;
+use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{MemoryExtractor, MemoryQuery, MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::StoredEvent;
@@ -82,7 +82,7 @@ async fn e2e_remember_x_appears_in_memory_and_is_retrieved_later() {
             .await
             .unwrap(),
     );
-    let extractor: Arc<dyn MemoryExtractor> = Arc::new(KeywordExtractor);
+    let extractor: Arc<dyn MemoryExtractor> = Arc::new(HeuristicExtractor);
     let coordinator = MemoryCoordinator::new(
         memory_write.clone(),
         extractor,
@@ -182,7 +182,7 @@ async fn e2e_memory_coordinator_is_idempotent() {
             .await
             .unwrap(),
     );
-    let extractor: Arc<dyn MemoryExtractor> = Arc::new(KeywordExtractor);
+    let extractor: Arc<dyn MemoryExtractor> = Arc::new(HeuristicExtractor);
     let coord = MemoryCoordinator::new(memory_write, extractor, trace_for_coord);
 
     // Project twice

@@ -9,7 +9,7 @@
 
 use openwand_app::ui::memory_service::build_memory_panel;
 use openwand_core::SessionId;
-use openwand_memory::testing::KeywordExtractor;
+use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{
     CandidateKind, CandidateMemory, EpisodeRole, InMemoryMemoryStore, MemoryEpisode,
     MemoryExtractor, MemoryQuery, MemoryStore,
@@ -42,7 +42,7 @@ async fn projection_creates_episodes_from_trace() {
     memory.project_episode(episode).await.unwrap();
 
     // Extract and accept
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     let accepted = memory.extract_and_accept(&extractor).await.unwrap();
     assert_eq!(1, accepted.len());
     assert_eq!("Remember I use Rust", accepted[0].claim);
@@ -55,7 +55,7 @@ async fn memory_panel_refreshes_after_projection() {
     let episode = make_episode("ep_1", "trace_001", "sess_1", "Remember I use Rust");
     memory.project_episode(episode).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     memory.extract_and_accept(&extractor).await.unwrap();
 
     // Build panel — simulates UI refresh
@@ -72,7 +72,7 @@ async fn retrieved_memory_injected_into_prompt() {
     let episode = make_episode("ep_1", "trace_001", "sess_1", "Remember I prefer dark mode");
     memory.project_episode(episode).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     memory.extract_and_accept(&extractor).await.unwrap();
 
     // Simulate what the runner does: search by user message
@@ -108,7 +108,7 @@ async fn projection_error_does_not_corrupt_existing_records() {
     let episode = make_episode("ep_1", "trace_001", "sess_1", "Remember I use Rust");
     memory.project_episode(episode).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     memory.extract_and_accept(&extractor).await.unwrap();
 
     // Verify initial state
@@ -148,7 +148,7 @@ async fn memory_projection_runs_after_session_run() {
     memory.project_episode(episode).await.unwrap();
 
     // Extract and accept (automatic)
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     let accepted = memory.extract_and_accept(&extractor).await.unwrap();
     assert_eq!(1, accepted.len());
 
@@ -172,7 +172,7 @@ async fn manual_rebuild_recovers_from_empty() {
     let episode = make_episode("ep_1", "trace_001", "sess_1", "Remember I use Rust");
     memory.project_episode(episode).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     memory.extract_and_accept(&extractor).await.unwrap();
 
     // Verify record exists

@@ -8,7 +8,7 @@ use openwand_app::memory_coordinator::MemoryCoordinator;
 use openwand_core::SessionId;
 use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
 use openwand_llm::LlmClient;
-use openwand_memory::testing::KeywordExtractor;
+use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{MemoryExtractor, MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_policy::{BuiltinPolicyEngine, PolicyEngine};
 use openwand_session::config::RunConfig;
@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
         // Re-open memory store for write access through the store trait
         Arc::new(SqliteMemoryStore::open(std::path::Path::new(&args.db))?)
     };
-    let extractor: Arc<dyn MemoryExtractor> = Arc::new(KeywordExtractor);
+    let extractor: Arc<dyn MemoryExtractor> = Arc::new(HeuristicExtractor);
     let coordinator = MemoryCoordinator::new(
         memory_for_coordinator,
         extractor,

@@ -174,39 +174,43 @@ impl MemoryStore for InMemoryMemoryStore {
 
     async fn search_records(&self, query: MemoryQuery) -> Result<RetrievalContext, MemoryError> {
         let records = self.records.lock().unwrap();
-        let query_lower = query.text.to_lowercase();
+        let query_tokens = crate::query::tokenize(&query.text);
         let max = query.max_results.unwrap_or(10);
 
-        let mut facts = Vec::new();
-        let mut decisions = Vec::new();
-        let mut episodes = Vec::new();
+        let mut scored: Vec<(f64, MemoryRecord)> = Vec::new();
 
         for record in records.values() {
             if !record.is_active() {
                 continue;
             }
 
-            let claim_lower = record.claim.to_lowercase();
-            if !claim_lower.contains(&query_lower) {
+            let claim_tokens = crate::query::tokenize(&record.claim);
+            let match_count = query_tokens
+                .iter()
+                .filter(|qt| claim_tokens.iter().any(|ct| ct == *qt))
+                .count();
+
+            if match_count == 0 {
                 continue;
             }
 
+            let coverage = match_count as f64 / query_tokens.len().max(1) as f64;
+            let score = coverage * record.confidence;
+            scored.push((score, record.clone()));
+        }
+
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(max);
+
+        let mut facts = Vec::new();
+        let mut decisions = Vec::new();
+        let mut episodes = Vec::new();
+
+        for (_, record) in scored {
             match record.kind {
-                MemoryKind::Fact => {
-                    if facts.len() < max {
-                        facts.push(record.claim.clone());
-                    }
-                }
-                MemoryKind::Decision => {
-                    if decisions.len() < max {
-                        decisions.push(record.claim.clone());
-                    }
-                }
-                MemoryKind::Preference => {
-                    if episodes.len() < max {
-                        episodes.push(record.claim.clone());
-                    }
-                }
+                MemoryKind::Fact => facts.push(record.claim),
+                MemoryKind::Decision => decisions.push(record.claim),
+                MemoryKind::Preference => episodes.push(record.claim),
             }
         }
 

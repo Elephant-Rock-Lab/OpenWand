@@ -15,7 +15,7 @@ use openwand_memory::{
     CandidateKind, CandidateMemory, EpisodeRole, InMemoryMemoryStore,
     MemoryEpisode, MemoryExtractor, MemoryKind, MemoryQuery, MemoryStore,
 };
-use openwand_memory::testing::{KeywordExtractor, NullExtractor};
+use openwand_memory::testing::{HeuristicExtractor, NullExtractor};
 use chrono::Utc;
 
 fn make_episode(id: &str, trace_id: &str, session_id: &str, role: EpisodeRole, content: &str) -> MemoryEpisode {
@@ -60,7 +60,7 @@ async fn memory_projection_is_idempotent_by_source_trace_id() {
 
 #[tokio::test]
 async fn extractor_mock_returns_candidate_fact() {
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
 
     let episodes = vec![
         make_episode("ep1", "t1", "s1", EpisodeRole::User, "Remember that I use Rust"),
@@ -222,7 +222,7 @@ async fn memory_search_returns_relevant_fact() {
     store.project_episode(ep1).await.unwrap();
 
     // Extract and accept
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     store.extract_and_accept(&extractor).await.unwrap();
 
     // Search
@@ -242,7 +242,7 @@ async fn memory_context_formatting_for_llm_injection() {
     let ep1 = make_episode("ep1", "t1", "s1", EpisodeRole::User, "Remember I prefer dark mode");
     store.project_episode(ep1).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     store.extract_and_accept(&extractor).await.unwrap();
 
     let ctx = store

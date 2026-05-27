@@ -13,6 +13,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 tokio = { workspace = true }
+ulid = { version = "1", features = ["serde"] }
 
 [features]
 default = []

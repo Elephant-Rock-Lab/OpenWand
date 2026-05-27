@@ -590,7 +590,7 @@ async fn poll_and_project(
 
     let memory_write: Arc<dyn MemoryStore> = memory.clone() as Arc<dyn MemoryStore>;
     let extractor: Arc<dyn openwand_memory::MemoryExtractor> =
-        Arc::new(openwand_memory::testing::KeywordExtractor);
+        Arc::new(openwand_memory::testing::HeuristicExtractor);
     let coordinator = openwand_app::memory_coordinator::MemoryCoordinator::new(
         memory_write,
         extractor,

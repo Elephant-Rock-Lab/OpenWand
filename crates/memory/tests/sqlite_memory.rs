@@ -17,7 +17,7 @@ use openwand_memory::{
 #[cfg(feature = "sqlite")]
 use openwand_memory::SqliteMemoryStore;
 #[cfg(feature = "sqlite")]
-use openwand_memory::testing::KeywordExtractor;
+use openwand_memory::testing::HeuristicExtractor;
 
 use chrono::Utc;
 
@@ -173,7 +173,7 @@ async fn sqlite_memory_store_search_finds_matching_records() {
     store.project_episode(ep).await.unwrap();
 
     // Extract and accept
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     store.extract_and_accept(&extractor).await.unwrap();
 
     let ctx = store
@@ -197,7 +197,7 @@ async fn sqlite_memory_store_search_survives_reopen() {
         let ep = make_episode("ep1", "t1", "s1", EpisodeRole::User, "Remember I prefer dark mode");
         store.project_episode(ep).await.unwrap();
 
-        let extractor = KeywordExtractor;
+        let extractor = HeuristicExtractor;
         store.extract_and_accept(&extractor).await.unwrap();
     }
 
@@ -222,7 +222,7 @@ async fn sqlite_memory_store_full_round_trip_extract_search_format() {
     let ep = make_episode("ep1", "t1", "s1", EpisodeRole::User, "Remember I always use Rust");
     store.project_episode(ep).await.unwrap();
 
-    let extractor = KeywordExtractor;
+    let extractor = HeuristicExtractor;
     store.extract_and_accept(&extractor).await.unwrap();
 
     let ctx = store

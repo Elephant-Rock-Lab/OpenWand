@@ -406,33 +406,55 @@ impl MemoryStore for SqliteMemoryStore {
 
     async fn search_records(&self, query: MemoryQuery) -> Result<RetrievalContext, MemoryError> {
         let conn = self.conn.lock().unwrap();
-        let query_lower = query.text.to_lowercase();
         let max = query.max_results.unwrap_or(10);
 
+        // Fetch all active records
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
                         superseded_by, created_at, updated_at
                  FROM memory_record
-                 WHERE status = 'active' AND LOWER(claim) LIKE '%' || ?1 || '%'
+                 WHERE status = 'active'
                  ORDER BY created_at DESC",
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare search: {e}")))?;
 
-        let rows: Vec<MemoryRecord> = stmt
-            .query_map(rusqlite::params![query_lower], |row| {
-                Ok(Self::row_to_record(row))
-            })
+        let records: Vec<MemoryRecord> = stmt
+            .query_map([], |row| Ok(Self::row_to_record(row)))
             .map_err(|e| MemoryError::QueryFailed(format!("search: {e}")))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| MemoryError::QueryFailed(format!("collect: {e}")))?;
 
-        // Collect source info
+        // Token-based scoring
+        let query_tokens = crate::query::tokenize(&query.text);
+        let mut scored: Vec<(f64, MemoryRecord)> = Vec::new();
+
+        for record in records {
+            let claim_tokens = crate::query::tokenize(&record.claim);
+            let match_count = query_tokens
+                .iter()
+                .filter(|qt| claim_tokens.iter().any(|ct| ct == *qt))
+                .count();
+
+            if match_count == 0 {
+                continue;
+            }
+
+            // Score: fraction of query tokens matched, boosted by confidence
+            let coverage = match_count as f64 / query_tokens.len().max(1) as f64;
+            let score = coverage * record.confidence;
+            scored.push((score, record));
+        }
+
+        // Sort by score descending
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(max);
+
         let mut facts = Vec::new();
         let mut decisions = Vec::new();
         let mut episodes = Vec::new();
 
-        for record in rows.into_iter().take(max) {
+        for (_, record) in scored {
             match record.kind {
                 MemoryKind::Fact => facts.push(record.claim),
                 MemoryKind::Decision => decisions.push(record.claim),

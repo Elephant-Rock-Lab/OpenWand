@@ -15,6 +15,8 @@ pub enum MockPolicyBehavior {
     BlockToolName(String),
     /// Require confirmation for a specific tool name.
     RequireConfirmationFor(String),
+    /// Require confirmation for multiple tool names, allow the rest.
+    RequireConfirmationForMany(Vec<String>),
     Fail,
 }
 
@@ -42,6 +44,12 @@ impl MockPolicyEngine {
 
     pub fn require_confirmation_for(name: &str) -> Self {
         Self::new(MockPolicyBehavior::RequireConfirmationFor(name.into()))
+    }
+
+    pub fn require_confirmation_for_many(names: Vec<&str>) -> Self {
+        Self::new(MockPolicyBehavior::RequireConfirmationForMany(
+            names.into_iter().map(String::from).collect(),
+        ))
     }
 
     pub fn fail() -> Self {
@@ -124,6 +132,12 @@ impl PolicyEngine for MockPolicyEngine {
                 Ok(require_confirmation_evaluation(name))
             }
             MockPolicyBehavior::RequireConfirmationFor(_) => Ok(allow_evaluation()),
+            MockPolicyBehavior::RequireConfirmationForMany(names)
+                if names.iter().any(|n| request.tool_call.name == *n) =>
+            {
+                Ok(require_confirmation_evaluation(&request.tool_call.name))
+            }
+            MockPolicyBehavior::RequireConfirmationForMany(_) => Ok(allow_evaluation()),
             MockPolicyBehavior::Fail => Err(PolicyError::Internal(
                 "mock policy failure".into(),
             )),

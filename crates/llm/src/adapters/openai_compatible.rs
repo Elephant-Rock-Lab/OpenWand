@@ -11,7 +11,7 @@ use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 
 use crate::client::{LlmClient, LlmStream};
 use crate::error::LlmError;
@@ -31,7 +31,10 @@ pub struct OpenAiCompatibleClient {
 impl OpenAiCompatibleClient {
     pub fn new() -> Self {
         Self {
-            http: Client::new(),
+            http: Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .expect("Failed to build HTTP client"),
             buffer: Arc::new(Mutex::new(ToolCallBuffer::new())),
         }
     }
@@ -313,7 +316,7 @@ fn parse_sse_stream(
     stream
         .scan(
             (String::new(), buffer),
-            |(pending, _buf), chunk| {
+            |(pending, buf), chunk| {
                 let chunk = match chunk {
                     Ok(c) => c,
                     Err(e) => {
@@ -361,27 +364,26 @@ fn parse_sse_stream(
                                             }
                                         }
 
-                                        // Tool calls
+                                        // Tool calls — buffer start/args, emit on flush
                                         if let Some(ref tool_calls) = delta.tool_calls {
                                             for tc in tool_calls {
                                                 let id = tc.id.clone().unwrap_or_default();
                                                 if let Some(ref func) = tc.function {
-                                                    // Name arrived
-                                                    if let Some(ref name) = func.name {
-                                                        deltas.push(Ok(LlmDelta::ToolCallStart {
-                                                            id: id.clone(),
-                                                            name: Some(name.clone()),
-                                                        }));
-                                                    }
-                                                    // Arguments delta
-                                                    if let Some(ref args) = func.arguments {
-                                                        if !args.is_empty() {
-                                                            deltas.push(Ok(
-                                                                LlmDelta::ToolCallArgsDelta {
-                                                                    id: id.clone(),
-                                                                    delta: args.clone(),
-                                                                },
-                                                            ));
+                                                    // Feed into the shared buffer
+                                                    if let Ok(mut locked_buf) = buf.lock() {
+                                                        if let Some(ref name) = func.name {
+                                                            let _ = locked_buf.handle_start(
+                                                                id.clone(),
+                                                                Some(name.clone()),
+                                                            );
+                                                        }
+                                                        if let Some(ref args) = func.arguments {
+                                                            if !args.is_empty() {
+                                                                let _ = locked_buf.handle_args_delta(
+                                                                    id.clone(),
+                                                                    args.clone(),
+                                                                );
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -393,9 +395,23 @@ fn parse_sse_stream(
                                     if let Some(ref reason) = choice.finish_reason {
                                         match reason.as_str() {
                                             "tool_calls" => {
-                                                // Need to flush any buffered tool calls
-                                                // We can't do this async here, so we emit
-                                                // the Done with ToolCall stop reason
+                                                // Flush all buffered tool calls into ToolCallComplete deltas
+                                                if let Ok(mut locked_buf) = buf.lock() {
+                                                    let ids: Vec<String> = locked_buf.drain_ids();
+                                                    for id in ids {
+                                                        match locked_buf.complete(&id) {
+                                                            Ok(complete_delta) => {
+                                                                deltas.push(Ok(complete_delta));
+                                                            }
+                                                            Err(e) => {
+                                                                tracing::warn!(
+                                                                    "Failed to complete tool call {}: {e}",
+                                                                    id
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 deltas.push(Ok(LlmDelta::Done {
                                                     stop_reason: LlmStopReason::ToolCall,
                                                     usage: None,

@@ -17,7 +17,6 @@ use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::StoredEvent;
 use openwand_tools::composite::CompositeToolExecutor;
 use openwand_tools::executor::ToolExecutor;
-use openwand_tools::local::BuiltinToolProvider;
 use openwand_trace::TraceStore;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -70,11 +69,46 @@ async fn main() -> Result<()> {
 
     // 3. Create tools executor (local tools only, no MCP)
     let tools: Arc<dyn ToolExecutor> = Arc::new(
-        CompositeToolExecutor::local_only(BuiltinToolProvider::new())
+        CompositeToolExecutor::local_only(openwand_tools::local::batch1_local_tools())
     );
 
-    // 4. Create policy engine (no rules = allow all by default)
-    let policy: Arc<dyn PolicyEngine> = Arc::new(BuiltinPolicyEngine::new(vec![]));
+    // 4. Create policy engine (smoke-test profile: Read + Search only)
+    let allow_read_rule = openwand_policy::PolicyRule {
+        id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
+        name: "Allow read-effect tools (smoke)".into(),
+        enabled: true,
+        priority: 0,
+        class: openwand_policy::RuleClass::BuiltinDefault,
+        matcher: openwand_policy::ToolMatcher::ToolEffect {
+            effect: openwand_core::tool_vocab::ToolEffect::Read,
+        },
+        effect: openwand_policy::PolicyEffect::Allow {
+            risk: openwand_core::risk::RiskLevelSnapshot::Low,
+            confirmation: openwand_core::mode::ConfirmationLevel::Auto,
+        },
+        reason_code: "smoke_allow_read".into(),
+        summary: "Allow read-effect tool calls for smoke testing.".into(),
+    };
+    let allow_search_rule = openwand_policy::PolicyRule {
+        id: openwand_policy::PolicyRuleId("smoke-allow-search".into()),
+        name: "Allow search-effect tools (smoke)".into(),
+        enabled: true,
+        priority: 0,
+        class: openwand_policy::RuleClass::BuiltinDefault,
+        matcher: openwand_policy::ToolMatcher::ToolEffect {
+            effect: openwand_core::tool_vocab::ToolEffect::Search,
+        },
+        effect: openwand_policy::PolicyEffect::Allow {
+            risk: openwand_core::risk::RiskLevelSnapshot::Low,
+            confirmation: openwand_core::mode::ConfirmationLevel::Auto,
+        },
+        reason_code: "smoke_allow_search".into(),
+        summary: "Allow search-effect tool calls for smoke testing.".into(),
+    };
+    let policy: Arc<dyn PolicyEngine> = Arc::new(BuiltinPolicyEngine::new(vec![
+        allow_read_rule,
+        allow_search_rule,
+    ]));
 
     // 5. Create memory store (stub)
     let memory: Arc<dyn MemoryReadStore> = Arc::new(StubMemoryStore);
@@ -108,6 +142,7 @@ async fn main() -> Result<()> {
 
     // 8. Run the turn
     let mut run_config = RunConfig::default();
+    run_config.mode = openwand_core::mode::InteractionMode::Direct;
     run_config.llm_target = Some(openwand_llm::LlmTarget {
         provider: openwand_llm::LlmProvider::Custom {
             name: "lm-studio".into(),

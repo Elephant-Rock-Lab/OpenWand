@@ -141,6 +141,12 @@ impl ToolCallBuffer {
         })
     }
 
+    /// Return all buffered call IDs and clear the map.
+    /// Used to flush pending tool calls when finish_reason="tool_calls" arrives.
+    pub fn drain_ids(&mut self) -> Vec<String> {
+        self.calls.keys().cloned().collect()
+    }
+
     /// Clear all buffered calls.
     pub fn clear(&mut self) {
         self.calls.clear();

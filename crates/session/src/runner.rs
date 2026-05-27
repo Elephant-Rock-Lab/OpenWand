@@ -305,6 +305,8 @@ impl SessionRunner {
     ///
     /// **Critical invariant**: ToolExecutor::execute is only called after
     /// `tool.resumed` is durably recorded in trace.
+    /// Resolve the current pending approval from live session state.
+    /// For recovered approvals after restart, use `resolve_recovered_approval` instead.
     pub async fn resume_with_approval(
         &self,
         decision: ApprovalDecision,
@@ -341,6 +343,37 @@ impl SessionRunner {
         }
 
         Ok(result)
+    }
+
+    /// Resolve a recovered pending approval after restart.
+    ///
+    /// Unlike `resume_with_approval`, this does not require live `pending_approval` state.
+    /// It sources the pending tool call from trace via the recovery index.
+    ///
+    /// Returns Err if no recoverable pending approval exists.
+    pub async fn resolve_recovered_approval(
+        &self,
+        decision: ApprovalDecision,
+        config: RunConfig,
+    ) -> Result<ApprovalResult, SessionError> {
+        // Build recovery index from trace
+        let index = self.approval_recovery_index().await?;
+
+        // Must have exactly one pending approval
+        if index.conflicts.is_empty() && index.pending.len() == 1 && index.uncertain.is_empty() {
+            let tool_call_id = index.pending[0].context.tool_call_id.clone();
+            let result = self
+                .resolve_approval_internal(decision, config, tool_call_id)
+                .await?;
+            Ok(result)
+        } else if !index.pending.is_empty() {
+            Err(SessionError::Internal(format!(
+                "Cannot resolve: {} pending approvals, {} conflicts, {} uncertain",
+                index.pending.len(), index.conflicts.len(), index.uncertain.len()
+            )))
+        } else {
+            Err(SessionError::NoPendingApproval)
+        }
     }
 
     /// Unified approval resolver. Both live and recovered approvals use this path.

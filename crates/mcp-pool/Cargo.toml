@@ -31,3 +31,5 @@ testing = []
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 walkdir = "2"
 tempfile = "3"
+openwand-tools = { path = "../tools" }
+tokio-util = { workspace = true }

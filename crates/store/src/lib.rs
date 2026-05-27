@@ -7,6 +7,7 @@
 //! `TraceStore<StoredEvent>` is the concrete seam, where `StoredEvent`
 //! wraps `OpenWandTraceEvent` and implements `TraceEventEnvelope`.
 
+pub mod backends;
 pub mod envelope;
 pub mod error;
 

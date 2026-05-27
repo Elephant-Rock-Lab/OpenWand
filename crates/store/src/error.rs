@@ -19,3 +19,17 @@ pub enum StoreError {
     #[error("Writer channel closed")]
     WriterClosed,
 }
+
+#[cfg(feature = "sqlite")]
+impl From<rusqlite::Error> for StoreError {
+    fn from(e: rusqlite::Error) -> Self {
+        StoreError::Database(e.to_string())
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl From<StoreError> for openwand_trace::TraceError {
+    fn from(e: StoreError) -> Self {
+        openwand_trace::TraceError::Storage(e.to_string())
+    }
+}

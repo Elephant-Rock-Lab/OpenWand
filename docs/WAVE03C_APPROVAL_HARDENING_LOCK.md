@@ -143,8 +143,31 @@ Wave 03c: Approval hardening complete.
 - Unresolved suspension helper for crash recovery preparation
 ```
 
+## Accepted deviation: incomplete tool lifecycle event vocabulary
+
+The runner currently emits these tool trace events:
+
+```
+tool.suspended  — before pausing for approval
+tool.resumed    — before executing after approval
+tool.denied     — on rejection or hard block
+```
+
+The runner does **NOT** emit `tool.called` or `tool.completed` during normal
+tool execution. Tool results are written to Loro (projection), not trace.
+
+03c proves **execution prevention** — that `tool.resumed` must precede execution,
+and that execution is blocked when `tool.resumed` fails. It does NOT prove a
+complete tool lifecycle trace from `called` through `completed`/`failed`.
+
+A future reader should NOT assume the runner has a full tool event vocabulary.
+The trace contract covers the approval boundary (suspended/resumed/denied),
+not the execution boundary (called/completed/failed). The execution boundary
+is deferred to a future wave that adds tool lifecycle trace events.
+
 ## Honest gaps remaining
 
-1. **Crash recovery for pending approval** — `unresolved_suspensions()` detects them but doesn't recover. Persistence in SQLite/Loro needed.
-2. **Multi-tool batch approval** — When LLM emits multiple confirmation-requiring tools, only the first is suspended. The rest are silently deferred. No `tool.deferred` event type. This is a design choice, not a bug, but should be documented.
-3. **Rich UI reconstruction** — Approval requests are in-memory only. A crash loses the context needed for UI reconstruction.
+1. **Tool lifecycle events** — No `tool.called`/`tool.completed`/`tool.failed` in trace during normal execution. Tool results go to Loro only. A complete lifecycle trace is a separate concern from approval governance.
+2. **Crash recovery for pending approval** — `unresolved_suspensions()` detects them but doesn't recover. Persistence in SQLite/Loro needed.
+3. **Multi-tool batch approval** — When LLM emits multiple confirmation-requiring tools, only the first is suspended. The rest are silently deferred. No `tool.deferred` event type. This is a design choice, not a bug, but should be documented.
+4. **Rich UI reconstruction** — Approval requests are in-memory only. A crash loses the context needed for UI reconstruction.

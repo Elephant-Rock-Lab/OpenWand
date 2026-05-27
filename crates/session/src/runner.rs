@@ -310,33 +310,118 @@ impl SessionRunner {
         decision: ApprovalDecision,
         config: RunConfig,
     ) -> Result<ApprovalResult, SessionError> {
-        // Take the pending approval (exactly-once consumption)
-        let pending = self.pending_approval.lock().await.take();
-        let pending = pending.ok_or(SessionError::NoPendingApproval)?;
+        // Get the approval_request_id from live pending state WITHOUT consuming it.
+        // The resolver sources truth from trace; live pending is just a cache.
+        let approval_request_id = {
+            let guard = self.pending_approval.lock().await;
+            match guard.as_ref() {
+                Some(pending) => {
+                    // Extract from the suspended event's context.
+                    // The record_tool_suspended method embeds ApprovalContextSnapshot
+                    // which contains the approval_request_id.
+                    // For the live path, we get it from the pending tool's gate evaluation.
+                    // We need to look it up from trace since PendingTool doesn't store arid.
+                    // Instead, scan trace for the most recent tool.suspended with this tool_call_id.
+                    pending.tool_call.id.clone()
+                }
+                None => return Err(SessionError::NoPendingApproval),
+            }
+        };
 
-        let tool_call_id = pending.tool_call.id.clone();
-        let tool_name = pending.tool_call.name.clone();
+        // Use the unified resolver
+        let result = self
+            .resolve_approval_internal(decision, config, approval_request_id)
+            .await?;
+
+        // Only clear live pending state after successful resolution
+        if result.decision == ApprovalDecision::Approved
+            || result.decision == ApprovalDecision::Rejected
+        {
+            self.pending_approval.lock().await.take();
+        }
+
+        Ok(result)
+    }
+
+    /// Unified approval resolver. Both live and recovered approvals use this path.
+    /// Sources truth from trace, not from in-memory pending state.
+    async fn resolve_approval_internal(
+        &self,
+        decision: ApprovalDecision,
+        config: RunConfig,
+        tool_call_id: ToolCallId,
+    ) -> Result<ApprovalResult, SessionError> {
+        use crate::approval_recovery::{classify_approval_state, ApprovalTraceState};
+
+        // Build recovery index from trace (source of truth)
+        let index = self.approval_recovery_index().await?;
+
+        // Find the pending approval by tool_call_id
+        let matching = index
+            .pending
+            .iter()
+            .find(|p| p.context.tool_call_id == tool_call_id);
+
+        let pending = match matching {
+            Some(p) => p.clone(),
+            None => {
+                return Err(SessionError::NoPendingApproval);
+            }
+        };
+
+        // Check for conflicts
+        if !index.conflicts.is_empty() {
+            return Err(SessionError::Internal(format!(
+                "Cannot resolve approval: {} conflict(s) detected",
+                index.conflicts.len()
+            )));
+        }
+
+        let tool_name = pending.tool_name.clone();
+        let tool_call_id = pending.context.tool_call_id.clone();
+        let approval_request_id = pending.context.approval_request_id.clone();
 
         match decision {
             ApprovalDecision::Approved => {
-                // Record tool.resumed in trace BEFORE execution
-                // This is the durable approval record
-                self.record_tool_resumed(&pending).await?;
+                // 1. Append tool.resumed BEFORE execution (durable approval proof)
+                let resumed_event = OpenWandTraceEvent::Tool(ToolEvent::Resumed {
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    resolution: "approved".into(),
+                    approval_request_id: Some(approval_request_id.clone()),
+                });
+                self.mutation
+                    .apply(
+                        Actor::System { component: "gate".into() },
+                        resumed_event,
+                        vec![],
+                        None,
+                        self.stream_id.clone(),
+                    )
+                    .await?;
 
-                // NOW execute the tool
-                let tools_call: openwand_tools::executor::ToolCall = (&pending.tool_call).into();
+                // 2. Execute tool using persisted arguments from context
+                let tools_call = openwand_tools::executor::ToolCall {
+                    id: tool_call_id.clone(),
+                    name: tool_name.clone(),
+                    arguments: pending.context.arguments.clone(),
+                };
                 let context = build_tool_context(
                     self.session_id.clone(),
                     config.working_directory.clone(),
                     self.cancellation.clone(),
                 );
-
                 let result = self.tools.execute(&tools_call, &context).await;
                 let tool_result = crate::tool::ToolResult::from(result);
 
-                // Record in Loro state
+                // 3. Record in Loro state
                 self.loro_state
                     .append_tool_result(&tool_result, None::<&str>)
+                    .map_err(SessionError::Internal)?;
+
+                // 4. Clear waiting approval in Loro
+                self.loro_state
+                    .clear_waiting_approval()
                     .map_err(SessionError::Internal)?;
 
                 Ok(ApprovalResult {
@@ -347,19 +432,41 @@ impl SessionRunner {
                 })
             }
             ApprovalDecision::Rejected => {
-                // Record tool.denied in trace (no execution)
-                self.record_tool_denied_event(&pending).await?;
+                // 1. Append tool.denied (no execution)
+                let denied_event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    approval_request_id: Some(approval_request_id.clone()),
+                    reason: Some("user_rejected".into()),
+                });
+                self.mutation
+                    .apply(
+                        Actor::System { component: "gate".into() },
+                        denied_event,
+                        vec![],
+                        None,
+                        self.stream_id.clone(),
+                    )
+                    .await?;
 
-                // Inject denied result into conversation so LLM can adjust
+                // 2. Inject denied result into conversation for LLM continuation
                 let denied_result = crate::tool::ToolResult {
-                    tool_call_id: pending.tool_call.id.clone(),
-                    tool_name: pending.tool_call.name.clone(),
-                    output: format!("Tool '{}' was denied by user. Do not retry without asking differently.", pending.tool_call.name),
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    output: format!(
+                        "Tool '{}' was denied by user. Do not retry without asking differently.",
+                        tool_name
+                    ),
                     is_error: true,
                     duration_ms: 0,
                 };
                 self.loro_state
                     .append_tool_result(&denied_result, None::<&str>)
+                    .map_err(SessionError::Internal)?;
+
+                // 3. Clear waiting approval in Loro
+                self.loro_state
+                    .clear_waiting_approval()
                     .map_err(SessionError::Internal)?;
 
                 Ok(ApprovalResult {

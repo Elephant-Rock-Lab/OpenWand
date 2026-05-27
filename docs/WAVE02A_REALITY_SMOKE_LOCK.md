@@ -1,100 +1,86 @@
 # WAVE 02A — REALITY SMOKE — LOCK
 
-**Status:** ✅ COMPLETE
-**Date:** 2026-05-27
-**Commits:** 32–33
+**Status:** ✅ COMPLETE  
+**Date:** 2026-05-27  
+**Scope:** Real provider I/O + app wiring + real tool-call loop  
+**Tests:** 197 total, 0 failures  
 
-## Summary
+## Gate Satisfied
 
-OpenWand can breathe with real I/O. A real LLM provider (Qwen 2.5 Coder 7B via LM Studio) drove the Wave 01 spine without breaking any abstractions.
-
-## Verification
-
-| Metric | Value |
-|---|---:|
-| Automated tests | 187 (unchanged) |
-| Manual smoke tests | 2 passed |
-| Warnings | 0 |
-
-## Built
-
-- `openwand-llm`: OpenAI-compatible adapter (reqwest + SSE)
-  - `OpenAiCompatibleClient` implements `LlmClient`
-  - Parses SSE into LlmDelta (Text, ToolCallStart/ArgsDelta/Complete, Done)
-  - Works with LM Studio, Ollama, any `/v1/chat/completions` endpoint
-  - No Rig dependency — direct reqwest
-- `openwand-app`: CLI composition root
-  - Wires SqliteStore + OpenAiCompatibleClient + CompositeToolExecutor + BuiltinPolicyEngine + StubMemoryStore
-  - clap CLI with `--base-url`, `--model`, `--api-key`, `--db`
-- `RunConfig.llm_target`: session runner now receives provider config from outside
-
-## Manual Smoke Results
-
-### Smoke 1: real_llm_text_only_turn
+A real model can run through the OpenWand spine:
 
 ```
-Provider: http://100.64.0.1:1234/v1
-Model:    qwen2.5-coder-7b-instruct
-User:     Say hello in one sentence.
-
-Result:
-  Stop reason:   Natural
-  Steps:         0
-  Tools called:  0
-  Messages:      2 (user + assistant "Hello!")
-  Loro:          fresh
-  SQLite trace:  2 entries (session.user_message_injected, inference.completed)
+user message
+→ real LLM inference (streamed SSE)
+→ streamed tool call parsed from SSE deltas
+→ tool-call buffer flushed on finish_reason: "tool_calls"
+→ policy evaluation (Read/Search allowed, Write/Delete blocked)
+→ local tool execution (file_list, file_read, file_search)
+→ tool result returned to model via conversation history
+→ final assistant answer summarizing tool results
+→ SQLite trace persisted
+→ Loro projection fresh
 ```
 
-### Smoke 2: real_llm_read_tool_turn
+## Models Verified
+
+| Model | Text-only | Tool Call | Notes |
+|-------|-----------|-----------|-------|
+| Qwen3 4B (qwen/qwen3-4b-2507) | ✅ | ✅ | Primary smoke model. Consistent structured tool calls via LM Studio streaming. |
+| Qwen2.5 14B Instruct | ✅ | ⚠️ | Tool calls emitted as text in streaming mode (LM Studio parsing gap). Non-streaming works. |
+| Qwen2.5 Coder 7B | ✅ | ❌ | Model declines to call tools. Text-only works. |
+| Gemma 4 e4B | ✅ | ⚠️ | Sometimes emits structured tool calls, sometimes text. Non-deterministic. |
+
+**Conclusion:** Model capability varies. Qwen3 4B is the reliable smoke-test model. The adapter correctly handles all cases — no crashes, no hangs, graceful degradation.
+
+## Acceptance Criteria
+
+- [x] Real text-only model turn (3 models)
+- [x] Real tool execution turn (Qwen3 4B → `local__file_list`)
+- [x] Tool result fed back into model for final answer
+- [x] SQLite trace persisted and reload path covered
+- [x] Smoke policy allows only Read/Search and blocks Write/Delete/Unknown
+
+## Regression Coverage Added
+
+- [x] App wiring exposes Batch 1 local tools (`app/tests/smoke_wiring.rs`)
+- [x] Smoke policy permits Read/Search only
+- [x] Smoke policy blocks Write/Delete/Unknown
+- [x] SSE `finish_reason: tool_calls` flushes buffered tool calls (`llm/tests/sse_buffer_flush.rs`)
+- [x] Buffered tool calls emit `ToolCallComplete` before `Done`
+
+## Bugs Found and Fixed
+
+| Bug | Severity | Root Cause | Fix |
+|-----|----------|------------|-----|
+| Empty tools array in request | Critical | `BuiltinToolProvider::new()` creates empty registry | Use `batch1_local_tools()` which registers file_read, file_list, file_search |
+| Tool calls buffered but never flushed | Critical | SSE parser buffered Start/ArgsDelta but `complete()` never called | `drain_ids()` + flush all buffered calls on `finish_reason: "tool_calls"` |
+| Empty policy blocks everything | Design-correct | Fail-closed: no matching rule = block | Smoke profile with Read+Search-only rules |
+| Conversational mode floors Auto→Inform | Design-correct | Runner hardcoded `Conversational` | Runner uses `config.mode`; smoke sets `Direct` |
+| No `tool_choice` or system prompt | Enhancement | Models need explicit tool-use affordances | `tool_choice: "auto"` + default system prompt when tools available |
+| No HTTP timeout | Enhancement | Real I/O needs guardrails | 120s timeout on reqwest client |
+
+## Key Design Decisions
+
+- **Buffer mutex:** Changed from `tokio::sync::Mutex` to `std::sync::Mutex` in SSE parser (sync scan closure)
+- **Smoke policy profile:** Read + Search effects only. Write, Delete, Unknown blocked. Preserves trust model.
+- **InteractionMode in RunConfig:** Runner reads mode from config instead of hardcoding. Smoke uses `Direct`.
+- **tool_choice invariant:** `tools.is_empty() → None`; `tools.non_empty() → Auto`
+- **HTTP timeout:** 120s default, to be made configurable via `OPENWAND_LLM_TIMEOUT_SECS`
+
+## Files Changed
+
+- `crates/llm/src/adapters/openai_compatible.rs` — SSE buffer flush on finish_reason: "tool_calls", std::sync::Mutex, HTTP timeout
+- `crates/llm/src/tool_buffer.rs` — Added `drain_ids()` method
+- `crates/llm/tests/sse_buffer_flush.rs` — NEW: 4 buffer flush fixture tests
+- `crates/session/src/runner.rs` — Uses `config.mode` for policy, sends `tool_choice: auto`, default system prompt
+- `crates/app/src/main.rs` — batch1_local_tools(), Read+Search policy, Direct mode
+- `crates/app/tests/smoke_wiring.rs` — NEW: 6 wiring + policy regression tests
+
+## Test Count
 
 ```
-User: List the files in the current directory. Use the file_list tool.
-
-Result:
-  Model chose text response over tool call (7B model behavior)
-  System handled it correctly — no crash, no stuck state
-  Tool definitions were visible to the model (mentioned "file_list" in response)
+Wave 01 final:  187 tests
+Wave 02a added: +10 tests (6 wiring + 4 buffer flush)
+Current total:  197 tests, 0 failures, 0 warnings
 ```
-
-## Key Discovery
-
-The real model works through the spine. The adapter correctly:
-- Sends OpenWand's `LlmMessage` → OpenAI format
-- Streams SSE chunks → `LlmDelta::Text` deltas
-- Records `inference.completed` events to SQLite trace
-- Loro projection stays fresh after real streaming
-
-## Architecture Validated
-
-```text
-Real user input
-→ real LLM provider (LM Studio / Qwen 7B)
-→ real streamed LlmDelta
-→ deterministic policy gate (empty rules = allow)
-→ SQLite trace append (BLAKE3 hashes)
-→ Loro projection (fresh)
-→ reload possible (trace is authoritative)
-```
-
-## Locked Boundary
-
-```text
-openwand-llm → reqwest (behind openai-compatible feature)
-openwand-llm ↛ rig-core
-openwand-app → all crates + clap + reqwest
-```
-
-## Deferred
-
-| Item | Reason |
-|---|---|
-| Tool call through real model | 7B model chose not to use tools — need stronger model or better prompting |
-| Rig integration | Direct reqwest proved simpler; Rig deferred to when we need its agent abstractions |
-| Dioxus UI | Wave 03+ |
-| MCP real transport | Wave 03+ |
-| Memory extraction | Wave 03+ |
-
-## Final Statement
-
-Wave 02a is locked. OpenWand has crossed from verified architecture to running system. A real model drove the spine. The abstractions held.

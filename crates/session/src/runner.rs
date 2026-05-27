@@ -169,7 +169,7 @@ impl SessionRunner {
 
             // ToolGate
             self.emit_phase(Phase::ToolGate, step).await;
-            let gated = self.gate_tool_calls(&inference_output.tool_calls).await?;
+            let gated = self.gate_tool_calls(&inference_output.tool_calls, config.mode.clone()).await?;
 
             if gated.blocked_any {
                 self.record_blocked_tools(&gated.blocked).await?;
@@ -301,12 +301,18 @@ impl SessionRunner {
                 api_key: None,
             }),
             messages: llm_messages,
-            system_prompt: config.system_prompt.clone().unwrap_or_default(),
-            tools: llm_tools,
+            system_prompt: config.system_prompt.clone().unwrap_or_else(|| {
+                if llm_tools.is_empty() {
+                    String::new()
+                } else {
+                    "You are a helpful assistant with access to tools. When the user asks you to perform an action that can be fulfilled by one of your tools, call the tool instead of explaining how to do it manually.".to_string()
+                }
+            }),
+            tools: llm_tools.clone(),
             thinking_budget: None,
             max_tokens: Some(4096),
             temperature: Some(0.7),
-            tool_choice: None,
+            tool_choice: if llm_tools.is_empty() { None } else { Some(openwand_llm::LlmToolChoice::Auto) },
             provider_options: serde_json::Value::Null,
         })
     }
@@ -357,6 +363,7 @@ impl SessionRunner {
     async fn gate_tool_calls(
         &self,
         calls: &[ToolCall],
+        mode: InteractionMode,
     ) -> Result<GatedTools, SessionError> {
         let mut allowed = Vec::new();
         let mut blocked = Vec::new();
@@ -376,7 +383,7 @@ impl SessionRunner {
                         declared_effect: openwand_core::tool_vocab::ToolEffect::Unknown,
                     }
                 },
-                mode: InteractionMode::Conversational,
+                mode: mode.clone(),
                 context: openwand_policy::PolicyContext {
                     working_directory: self.working_directory.clone(),
                     model: "mock".into(),

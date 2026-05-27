@@ -15,9 +15,17 @@ chrono = { workspace = true, features = ["serde"] }
 tokio = { workspace = true }
 ulid = { version = "1", features = ["serde"] }
 
+[dependencies.rusqlite]
+version = "0.32"
+features = ["bundled"]
+optional = true
+
 [features]
 default = []
 testing = []
+sqlite = ["rusqlite"]
+sqlite-testing = ["sqlite"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tempfile = "3"

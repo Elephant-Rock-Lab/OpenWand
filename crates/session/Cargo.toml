@@ -27,6 +27,7 @@ loro = { workspace = true }
 [features]
 default = []
 testing = ["openwand-trace/testing"]
+sqlite-testing = ["openwand-store/sqlite"]
 
 [dev-dependencies]
 cargo_metadata = { workspace = true }

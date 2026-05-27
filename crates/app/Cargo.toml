@@ -7,6 +7,11 @@ edition.workspace = true
 name = "openwand"
 path = "src/main.rs"
 
+[[bin]]
+name = "openwand-ui"
+path = "src/ui_main.rs"
+required-features = ["desktop"]
+
 [dependencies]
 tokio = { workspace = true, features = ["full"] }
 async-trait = { workspace = true }
@@ -24,3 +29,11 @@ openwand-policy = { path = "../policy" }
 openwand-llm = { path = "../llm", features = ["openai-compatible"] }
 openwand-memory = { path = "../memory" }
 openwand-trace = { path = "../trace" }
+
+# Desktop UI (feature-gated)
+dioxus = { version = "=0.7.9", optional = true, features = ["desktop"] }
+dioxus-desktop = { version = "=0.7.9", optional = true }
+
+[features]
+default = []
+desktop = ["dioxus", "dioxus-desktop"]

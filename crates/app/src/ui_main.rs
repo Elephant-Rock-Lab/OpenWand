@@ -102,14 +102,22 @@ fn init_service() -> Arc<UiSessionService> {
         .join("openwand")
         .join("openwand.db");
 
-    let store = tokio::task::block_in_place(|| {
+    // Open two connections: registry and trace (SqliteStore is not Clone)
+    let store_registry = tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(
             SqliteStore::open(SqliteStoreConfig::file(&db_path))
         )
     }).expect("Failed to open store");
 
-    let registry: Arc<dyn SessionRegistryStore> = Arc::new(store);
-    Arc::new(UiSessionService::new(registry))
+    let store_trace = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(
+            SqliteStore::open(SqliteStoreConfig::file(&db_path))
+        )
+    }).expect("Failed to open trace store");
+
+    let registry: Arc<dyn SessionRegistryStore> = Arc::new(store_registry);
+    let trace: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> = Arc::new(store_trace);
+    Arc::new(UiSessionService::new(registry, trace))
 }
 
 // ── Root Component ────────────────────────────────────────
@@ -156,7 +164,7 @@ fn App() -> Element {
                                             if let Ok(sessions) = svc.list_sessions() {
                                                 *SESSION_LIST.write() = sessions;
                                             }
-                                            if let Ok(view) = svc.open_session(&id) {
+                                            if let Ok(view) = svc.open_session(&id).await {
                                                 *CURRENT_SESSION.write() = Some(view);
                                             }
                                             *SELECTED_SESSION_ID.write() = Some(id);
@@ -196,7 +204,7 @@ fn App() -> Element {
                                             let svc = svc.clone();
                                             spawn(async move {
                                                 *SELECTED_SESSION_ID.write() = Some(id.clone());
-                                                match svc.open_session(&id) {
+                                                match svc.open_session(&id).await {
                                                     Ok(view) => {
                                                         *CURRENT_SESSION.write() = Some(view);
                                                     }

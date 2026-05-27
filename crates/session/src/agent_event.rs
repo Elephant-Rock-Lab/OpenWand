@@ -17,6 +17,7 @@ pub enum AgentEvent {
         session_id: SessionId,
         tool_name: String,
         tool_call_id: ToolCallId,
+        result_preview: String,
         is_error: bool,
     },
     RunCompleted {

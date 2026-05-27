@@ -740,3 +740,122 @@ mod tests {
         assert_eq!(entry1.entry_hash, entry2.prev_hash.unwrap());
     }
 }
+
+/// A trace store wrapper that fails on append when the event_kind matches
+/// a configured predicate. Used for hostile ordering tests.
+///
+/// All other operations delegate to the inner store.
+pub struct FailOnAppend<E> {
+    inner: Arc<dyn TraceStore<E>>,
+    fail_on: Arc<std::sync::Mutex<Option<Box<dyn Fn(&str) -> bool + Send + Sync>>>>,
+}
+
+impl<E: Send + Sync + 'static> FailOnAppend<E> {
+    pub fn new(
+        inner: Arc<dyn TraceStore<E>>,
+        fail_on: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Self {
+        Self {
+            inner,
+            fail_on: Arc::new(std::sync::Mutex::new(Some(fail_on))),
+        }
+    }
+
+    /// Create a FailOnAppend that fails when event_kind contains the given substring.
+    pub fn fail_on_kind(inner: Arc<dyn TraceStore<E>>, kind_substring: &str) -> Self {
+        let substr = kind_substring.to_string();
+        Self::new(inner, Box::new(move |kind: &str| kind.contains(&substr)))
+    }
+}
+
+#[async_trait]
+impl<E: TraceEventEnvelope + Clone + Send + Sync + 'static> TraceStore<E> for FailOnAppend<E> {
+    async fn append(&self, command: AppendTraceEntry<E>) -> Result<TraceId, TraceError> {
+        let event_kind = command.event.event_kind();
+        let should_fail = {
+            let guard = self.fail_on.lock().unwrap();
+            if let Some(ref pred) = *guard {
+                pred(event_kind)
+            } else {
+                false
+            }
+        };
+
+        if should_fail {
+            return Err(TraceError::AppendFailed(format!(
+                "Intentional failure for event_kind: {event_kind}"
+            )));
+        }
+
+        self.inner.append(command).await
+    }
+
+    async fn append_and_project(
+        &self,
+        command: AppendTraceEntry<E>,
+        projectors: &[&str],
+    ) -> Result<TraceId, TraceError> {
+        let event_kind = command.event.event_kind();
+        let should_fail = {
+            let guard = self.fail_on.lock().unwrap();
+            if let Some(ref pred) = *guard {
+                pred(event_kind)
+            } else {
+                false
+            }
+        };
+
+        if should_fail {
+            return Err(TraceError::AppendFailed(format!(
+                "Intentional failure for event_kind: {event_kind}"
+            )));
+        }
+
+        self.inner.append_and_project(command, projectors).await
+    }
+
+    async fn get(&self, id: TraceId) -> Result<Option<TraceEntry<E>>, TraceError> {
+        self.inner.get(id).await
+    }
+
+    async fn get_with_relations(
+        &self,
+        id: TraceId,
+    ) -> Result<Option<TraceEntryWithRelations<E>>, TraceError> {
+        self.inner.get_with_relations(id).await
+    }
+
+    async fn scan(&self, query: TraceQuery) -> Result<TracePage<E>, TraceError> {
+        self.inner.scan(query).await
+    }
+
+    async fn scan_relations(
+        &self,
+        query: RelationQuery,
+    ) -> Result<Vec<TraceRelation>, TraceError> {
+        self.inner.scan_relations(query).await
+    }
+
+    async fn current_global_sequence(&self) -> Result<u64, TraceError> {
+        self.inner.current_global_sequence().await
+    }
+
+    async fn current_stream_sequence(
+        &self,
+        stream_id: &TraceStreamId,
+    ) -> Result<u64, TraceError> {
+        self.inner.current_stream_sequence(stream_id).await
+    }
+
+    async fn initialize(&self) -> Result<(), TraceError> {
+        self.inner.initialize().await
+    }
+
+    async fn rebuild_projection(
+        &self,
+        projector_name: &str,
+        from: Option<TraceId>,
+    ) -> Result<(), TraceError> {
+        self.inner.rebuild_projection(projector_name, from).await
+    }
+}

@@ -19,6 +19,9 @@ pub enum TraceError {
     #[error("Projection error: {0}")]
     Projection(String),
 
+    #[error("Append failed: {0}")]
+    AppendFailed(String),
+
     #[error("Serialization error: {0}")]
     Serialization(String),
 

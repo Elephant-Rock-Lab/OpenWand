@@ -346,6 +346,18 @@ impl SessionRunner {
                 // Record tool.denied in trace (no execution)
                 self.record_tool_denied_event(&pending).await?;
 
+                // Inject denied result into conversation so LLM can adjust
+                let denied_result = crate::tool::ToolResult {
+                    tool_call_id: pending.tool_call.id.clone(),
+                    tool_name: pending.tool_call.name.clone(),
+                    output: format!("Tool '{}' was denied by user. Do not retry without asking differently.", pending.tool_call.name),
+                    is_error: true,
+                    duration_ms: 0,
+                };
+                self.loro_state
+                    .append_tool_result(&denied_result, None::<&str>)
+                    .map_err(SessionError::Internal)?;
+
                 Ok(ApprovalResult {
                     decision: ApprovalDecision::Rejected,
                     tool_name,

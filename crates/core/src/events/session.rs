@@ -27,6 +27,10 @@ pub enum SessionEvent {
     UserMessageInjected {
         text: String,
     },
+    AssistantMessageGenerated {
+        text: String,
+        model: String,
+    },
 }
 
 impl SessionEvent {
@@ -37,6 +41,7 @@ impl SessionEvent {
             Self::StepStarted { .. } => "session.step_started",
             Self::StepCompleted { .. } => "session.step_completed",
             Self::UserMessageInjected { .. } => "session.user_message_injected",
+            Self::AssistantMessageGenerated { .. } => "session.assistant_message_generated",
         }
     }
 }

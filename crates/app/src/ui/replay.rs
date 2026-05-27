@@ -56,13 +56,13 @@ pub async fn replay_timeline(
     };
 
     let mut all_items = Vec::new();
-    let mut last_seen: Option<openwand_trace::ids::TraceId> = None;
+    let mut cursor = None;
 
     loop {
         let query = TraceQuery {
             stream_id: Some(stream_id.clone()),
             limit: Some(100),
-            cursor: last_seen.clone(),
+            cursor,
             ..Default::default()
         };
 
@@ -81,9 +81,12 @@ pub async fn replay_timeline(
             }
         }
 
-        // Cursor-based pagination not implemented in scan yet.
-        // Break after first page since we fetch all entries anyway.
-        break;
+        // If we got fewer than limit entries, we're done.
+        // Otherwise, advance cursor and continue.
+        if page.entries.len() < 100 {
+            break;
+        }
+        cursor = page.next_cursor;
     }
 
     Ok(all_items)
@@ -127,6 +130,16 @@ fn map_event(
         })),
 
         openwand_core::events::OpenWandTraceEvent::Session(
+            openwand_core::events::SessionEvent::AssistantMessageGenerated { text, .. }
+        ) => Some(UiTimelineItem::Message(UiMessage {
+            role: UiMessageRole::Assistant,
+            text: text.clone(),
+            trace_id: Some(trace_id.to_string()),
+            timestamp: Some(timestamp),
+            is_error: false,
+        })),
+
+        openwand_core::events::OpenWandTraceEvent::Session(
             openwand_core::events::SessionEvent::Started { .. }
         ) => Some(UiTimelineItem::RunMarker {
             kind: "run_started".into(),
@@ -142,21 +155,11 @@ fn map_event(
             timestamp,
         }),
 
+        // Inference completion is provider metadata; actual assistant text
+        // is in Session::AssistantMessageGenerated above.
         openwand_core::events::OpenWandTraceEvent::Inference(
             openwand_core::events::InferenceEvent::Completed { .. }
-        ) => {
-            // Inference completion marks an assistant turn.
-            // The actual text is in Loro, but for replay we need
-            // to get it from somewhere. For now, we record a placeholder.
-            // The real fix: record assistant text in trace too.
-            Some(UiTimelineItem::Message(UiMessage {
-                role: UiMessageRole::Assistant,
-                text: "(assistant response — full text in Loro rebuild)".into(),
-                trace_id: Some(trace_id.to_string()),
-                timestamp: Some(timestamp),
-                is_error: false,
-            }))
-        }
+        ) => None,
 
         openwand_core::events::OpenWandTraceEvent::Tool(
             openwand_core::events::ToolEvent::Called {

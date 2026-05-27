@@ -484,6 +484,22 @@ fn do_scan(
         params.push(Box::new(to as i64));
     }
 
+    // Cursor-based pagination: if a cursor TraceId is provided,
+    // look up its global_sequence and filter entries after it.
+    if let Some(ref cursor) = query.cursor {
+        let cursor_seq: Option<i64> = conn
+            .query_row(
+                "SELECT global_sequence FROM trace_entry WHERE id = ?1",
+                rusqlite::params![cursor.0],
+                |row| row.get::<_, i64>(0),
+            )
+            .ok();
+        if let Some(seq) = cursor_seq {
+            sql.push_str(" AND global_sequence > ?");
+            params.push(Box::new(seq));
+        }
+    }
+
     // Order by global sequence
     sql.push_str(" ORDER BY global_sequence ASC");
 

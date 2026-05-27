@@ -272,6 +272,26 @@ impl SessionRunner {
             )
             .await?;
 
+        // Record durable assistant message text in trace
+        let assistant_event = OpenWandTraceEvent::Session(
+            SessionEvent::AssistantMessageGenerated {
+                text: text.to_string(),
+                model: "unknown".into(),
+            },
+        );
+        self.mutation
+            .apply(
+                Actor::Llm {
+                    model: "mock".into(),
+                    provider: "mock".into(),
+                },
+                assistant_event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+
         self.loro_state
             .append_assistant_message(text, None::<&str>)
             .map_err(SessionError::Internal)?;

@@ -12,6 +12,7 @@
 
 pub mod adapters;
 pub mod agent_event;
+pub mod approval_recovery;
 pub mod config;
 pub mod error;
 pub mod loro_state;

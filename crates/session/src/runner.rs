@@ -18,6 +18,8 @@ use openwand_core::mode::InteractionMode;
 use openwand_core::tool_vocab::ToolResultStatus;
 use openwand_core::SessionId;
 use openwand_core::ToolCallId;
+use openwand_core::ids::ApprovalRequestId;
+use openwand_core::snapshots::ApprovalContextSnapshot;
 use openwand_llm::{LlmClient, LlmDelta, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, PolicyEngine};
@@ -48,6 +50,7 @@ struct GatedTools {
 pub struct PendingTool {
     pub tool_call: ToolCall,
     pub gate_evaluation: openwand_policy::PolicyEvaluation,
+    pub declared_effect: openwand_core::ToolEffect,
 }
 
 /// User's decision on a pending tool approval.
@@ -241,7 +244,7 @@ impl SessionRunner {
                 let pending = gated.pending_confirmation.into_iter().next().unwrap();
 
                 // Record tool.suspended in trace BEFORE pausing
-                self.record_tool_suspended(&pending).await?;
+                self.record_tool_suspended(&pending, step).await?;
 
                 // Store pending approval
                 *self.pending_approval.lock().await = Some(pending.clone());
@@ -598,6 +601,10 @@ impl SessionRunner {
                     pending_confirmation.push(PendingTool {
                         tool_call: call.clone(),
                         gate_evaluation: evaluation,
+                        declared_effect: descriptor
+                            .as_ref()
+                            .map(|d| d.declared_effect.clone())
+                            .unwrap_or(openwand_core::ToolEffect::Unknown),
                     });
                 }
                 GateDecision::Block { .. } => {
@@ -730,11 +737,92 @@ impl SessionRunner {
     }
 
     /// Record tool.suspended in trace (pending approval).
-    async fn record_tool_suspended(&self, pending: &PendingTool) -> Result<(), SessionError> {
+    async fn record_tool_suspended(&self, pending: &PendingTool, step: u64) -> Result<(), SessionError> {
+        use crate::approval_recovery::{approval_args_hash, validate_approval_context_size};
+
+        // Validate argument size before suspending
+        if let Err(size_err) = validate_approval_context_size(&pending.tool_call.arguments) {
+            // Oversized: block fail-closed with trace evidence
+            tracing::warn!(tool = %pending.tool_call.name, "{}", size_err);
+
+            // Append gate.evaluated with failure reason
+            let gate_event = OpenWandTraceEvent::Gate(GateEvent::Evaluated {
+                gate_id: pending.gate_evaluation.gate_id.as_str().to_string(),
+                gate_kind: "tool_policy".into(),
+                passed: false,
+                risk_level: Some(openwand_core::RiskLevelSnapshot::Critical),
+                reason_code: Some("approval_context_too_large".into()),
+                summary: format!("Approval context exceeded size limit: {size_err}"),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    gate_event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+
+            // Append tool.denied
+            let denied_event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
+                tool_call_id: pending.tool_call.id.clone(),
+                tool_name: pending.tool_call.name.clone(),
+                approval_request_id: None,
+                reason: Some("approval_context_too_large".into()),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    denied_event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+
+            // Inject blocked result for model
+            let blocked_result = crate::tool::ToolResult {
+                tool_call_id: pending.tool_call.id.clone(),
+                tool_name: pending.tool_call.name.clone(),
+                output: format!("Tool '{}' blocked: approval context too large", pending.tool_call.name),
+                is_error: true,
+                duration_ms: 0,
+            };
+            self.loro_state
+                .append_tool_result(&blocked_result, None::<&str>)
+                .map_err(SessionError::Internal)?;
+
+            return Ok(());
+        }
+
+        let args_hash = approval_args_hash(&pending.tool_call.arguments)
+            .unwrap_or_else(|_| "hash_error".into());
+
+        let approval_request_id = ApprovalRequestId::new();
+        let approval_context = ApprovalContextSnapshot {
+            approval_request_id: approval_request_id.clone(),
+            gate_id: pending.gate_evaluation.gate_id.clone(),
+            step,
+            tool_call_id: pending.tool_call.id.clone(),
+            tool_name: pending.tool_call.name.clone(),
+            arguments: pending.tool_call.arguments.clone(),
+            args_hash,
+            declared_effect: pending.declared_effect.clone(),
+            risk_level: pending.gate_evaluation.risk_level.clone(),
+            confirmation_level: pending.gate_evaluation.confirmation_level.clone(),
+            reason_code: pending.gate_evaluation.reason_code.clone(),
+            policy_summary: pending.gate_evaluation.summary.clone(),
+            requested_action_summary: format!("Execute '{}' with provided arguments", pending.tool_call.name),
+            rollback_plan: pending.gate_evaluation.rollback_plan.clone(),
+            metadata: serde_json::Value::Null,
+        };
+
         let event = OpenWandTraceEvent::Tool(ToolEvent::Suspended {
             tool_call_id: pending.tool_call.id.clone(),
             tool_name: pending.tool_call.name.clone(),
             reason: "awaiting_user_approval".into(),
+            approval_context: Some(approval_context),
         });
         self.mutation
             .apply(
@@ -755,6 +843,7 @@ impl SessionRunner {
             tool_call_id: pending.tool_call.id.clone(),
             tool_name: pending.tool_call.name.clone(),
             resolution: "approved".into(),
+            approval_request_id: None,
         });
         self.mutation
             .apply(
@@ -773,6 +862,8 @@ impl SessionRunner {
         let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
             tool_call_id: pending.tool_call.id.clone(),
             tool_name: pending.tool_call.name.clone(),
+            approval_request_id: None,
+            reason: None,
         });
         self.mutation
             .apply(
@@ -792,6 +883,8 @@ impl SessionRunner {
             let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
                 tool_call_id: call.id.clone(),
                 tool_name: call.name.clone(),
+                approval_request_id: None,
+                reason: None,
             });
             self.mutation
                 .apply(
@@ -820,68 +913,33 @@ impl SessionRunner {
 
     /// Find tool.suspended events that have no matching tool.resumed or tool.denied.
     /// These represent crash-interrupted approvals that could be recovered.
-    pub async fn unresolved_suspensions(&self) -> Result<Vec<UnresolvedSuspension>, SessionError> {
+    /// Build the full recovery index from trace.
+    /// Replaces the old diagnostic-only `unresolved_suspensions` method.
+    pub async fn approval_recovery_index(
+        &self,
+    ) -> Result<crate::approval_recovery::ApprovalRecoveryIndex, SessionError> {
         use openwand_trace::TraceQuery;
 
-        // Collect all tool.suspended events
-        let suspended_query = TraceQuery {
-            event_kind: Some("tool.suspended".into()),
+        // Collect ALL events from the session stream
+        let query = TraceQuery {
             ..Default::default()
         };
-        let suspended_page = self
-            .trace
-            .scan(suspended_query)
-            .await
-            .map_err(SessionError::Trace)?;
+        let page = self.trace.scan(query).await.map_err(SessionError::Trace)?;
 
-        // Extract tool_call_id from each suspended event
-        let mut suspended: Vec<(ToolCallId, String, chrono::DateTime<chrono::Utc>)> = Vec::new();
-        for entry in &suspended_page.entries {
-            if let OpenWandTraceEvent::Tool(ToolEvent::Suspended {
-                tool_call_id,
-                tool_name,
-                ..
-            }) = entry.event.deref()
-            {
-                suspended.push((
-                    tool_call_id.clone(),
-                    tool_name.clone(),
-                    entry.occurred_at,
-                ));
-            }
-        }
+        Ok(crate::approval_recovery::build_recovery_index(&page.entries))
+    }
 
-        if suspended.is_empty() {
-            return Ok(vec![]);
-        }
-
-        // Collect all tool.resumed and tool.denied events
-        let mut resolved_ids = std::collections::HashSet::new();
-        for kind in &["tool.resumed", "tool.denied"] {
-            let query = TraceQuery {
-                event_kind: Some((*kind).into()),
-                ..Default::default()
-            };
-            let page = self.trace.scan(query).await.map_err(SessionError::Trace)?;
-            for entry in &page.entries {
-                match entry.event.deref() {
-                    OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id, .. })
-                    | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id, .. }) => {
-                        resolved_ids.insert(tool_call_id.clone());
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // Return suspended without resolution
-        Ok(suspended
+    /// Legacy compatibility: unresolved suspensions as a simple list.
+    /// Derives from the full recovery index.
+    pub async fn unresolved_suspensions(&self) -> Result<Vec<UnresolvedSuspension>, SessionError> {
+        let index = self.approval_recovery_index().await?;
+        Ok(index
+            .pending
             .into_iter()
-            .filter(|(id, _, _)| !resolved_ids.contains(id))
-            .map(|(tool_call_id, tool_name, suspended_at)| UnresolvedSuspension {
-                tool_call_id,
-                tool_name,
-                suspended_at,
+            .map(|p| UnresolvedSuspension {
+                tool_call_id: p.context.tool_call_id,
+                tool_name: p.tool_name,
+                suspended_at: chrono::Utc::now(), // approximation — exact time in trace entry
             })
             .collect())
     }

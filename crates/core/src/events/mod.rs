@@ -246,6 +246,8 @@ mod tests {
         let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
             tool_call_id: crate::ids::ToolCallId::new(),
             tool_name: "rm_rf".into(),
+            approval_request_id: None,
+            reason: None,
         });
         let json = serde_json::to_value(&event).unwrap();
 

@@ -133,4 +133,45 @@ impl SessionHarness {
         let memory = Arc::new(MockMemoryReadStore::new());
         Self::build(trace, llm, tools, policy, memory)
     }
+
+    /// Multi-tool batch: LLM emits write_A, write_B, read_C.
+    /// Policy: write_A and write_B require confirmation, read_C allowed.
+    /// Only write_A should suspend; write_B and read_C should NOT execute.
+    pub fn multi_tool_batch() -> Self {
+        let trace = Arc::new(InMemoryTraceStore::new());
+        let id_a = ToolCallId::new();
+        let id_b = ToolCallId::new();
+        let id_c = ToolCallId::new();
+        let llm = Arc::new(MockLlmClient::multi_tool_then_stop(vec![
+            (id_a.as_str().to_string(), "local__write_A".into(), serde_json::json!({"path": "a.txt"})),
+            (id_b.as_str().to_string(), "local__write_B".into(), serde_json::json!({"path": "b.txt"})),
+            (id_c.as_str().to_string(), "local__read_C".into(), serde_json::json!({"path": "c.txt"})),
+        ]));
+        let tools = Arc::new(MockToolExecutor::with_many(&["write_A", "write_B", "read_C"]));
+        let policy = Arc::new(MockPolicyEngine::require_confirmation_for_many(
+            vec!["local__write_A", "local__write_B"],
+        ));
+        let memory = Arc::new(MockMemoryReadStore::new());
+        Self::build(trace, llm, tools, policy, memory)
+    }
+
+    /// Multi-turn: tool call on first turn, text on second.
+    /// For testing rejection→continuation.
+    pub fn write_tool_then_text_after_denial() -> Self {
+        let trace = Arc::new(InMemoryTraceStore::new());
+        let tool_call_id = ToolCallId::new();
+        let llm = Arc::new(MockLlmClient::tool_then_text_after_denial(
+            tool_call_id.as_str().to_string(),
+            "local__file_write",
+            serde_json::json!({"path": "test.txt", "content": "hello"}),
+            "Understood, I won't write that file. Is there something else I can help with?",
+        ));
+        let tools = Arc::new(MockToolExecutor::with_success(
+            "local__file_write",
+            "Wrote 5 bytes to test.txt",
+        ));
+        let policy = Arc::new(MockPolicyEngine::require_confirmation_for("local__file_write"));
+        let memory = Arc::new(MockMemoryReadStore::new());
+        Self::build(trace, llm, tools, policy, memory)
+    }
 }

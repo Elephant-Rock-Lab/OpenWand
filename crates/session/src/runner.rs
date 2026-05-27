@@ -23,6 +23,7 @@ use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, PolicyEngine};
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::{Actor, TraceStore, TraceStreamId, TraceStreamScope};
+use std::ops::Deref;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -816,4 +817,80 @@ impl SessionRunner {
         }
         Ok(())
     }
+
+    /// Find tool.suspended events that have no matching tool.resumed or tool.denied.
+    /// These represent crash-interrupted approvals that could be recovered.
+    pub async fn unresolved_suspensions(&self) -> Result<Vec<UnresolvedSuspension>, SessionError> {
+        use openwand_trace::TraceQuery;
+
+        // Collect all tool.suspended events
+        let suspended_query = TraceQuery {
+            event_kind: Some("tool.suspended".into()),
+            ..Default::default()
+        };
+        let suspended_page = self
+            .trace
+            .scan(suspended_query)
+            .await
+            .map_err(SessionError::Trace)?;
+
+        // Extract tool_call_id from each suspended event
+        let mut suspended: Vec<(ToolCallId, String, chrono::DateTime<chrono::Utc>)> = Vec::new();
+        for entry in &suspended_page.entries {
+            if let OpenWandTraceEvent::Tool(ToolEvent::Suspended {
+                tool_call_id,
+                tool_name,
+                ..
+            }) = entry.event.deref()
+            {
+                suspended.push((
+                    tool_call_id.clone(),
+                    tool_name.clone(),
+                    entry.occurred_at,
+                ));
+            }
+        }
+
+        if suspended.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Collect all tool.resumed and tool.denied events
+        let mut resolved_ids = std::collections::HashSet::new();
+        for kind in &["tool.resumed", "tool.denied"] {
+            let query = TraceQuery {
+                event_kind: Some((*kind).into()),
+                ..Default::default()
+            };
+            let page = self.trace.scan(query).await.map_err(SessionError::Trace)?;
+            for entry in &page.entries {
+                match entry.event.deref() {
+                    OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id, .. })
+                    | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id, .. }) => {
+                        resolved_ids.insert(tool_call_id.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Return suspended without resolution
+        Ok(suspended
+            .into_iter()
+            .filter(|(id, _, _)| !resolved_ids.contains(id))
+            .map(|(tool_call_id, tool_name, suspended_at)| UnresolvedSuspension {
+                tool_call_id,
+                tool_name,
+                suspended_at,
+            })
+            .collect())
+    }
+}
+
+/// An unresolved tool suspension — tool.suspended with no matching tool.resumed or tool.denied.
+#[derive(Debug, Clone)]
+pub struct UnresolvedSuspension {
+    pub tool_call_id: ToolCallId,
+    pub tool_name: String,
+    pub suspended_at: chrono::DateTime<chrono::Utc>,
 }

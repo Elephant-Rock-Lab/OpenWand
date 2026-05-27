@@ -61,6 +61,29 @@ impl MockToolExecutor {
         }
     }
 
+    /// Create with multiple tools, all returning success.
+    pub fn with_many(tool_names: &[&str]) -> Self {
+        let mut results = HashMap::new();
+        let mut tools = Vec::new();
+        for name in tool_names {
+            results.insert(
+                name.to_string(),
+                ToolResult::success(
+                    ToolCallId::new(),
+                    name.to_string(),
+                    format!("Mock result from {name}"),
+                    42,
+                ),
+            );
+            tools.push(make_local_def(name));
+        }
+        Self {
+            tools,
+            results,
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
     pub async fn calls(&self) -> Vec<ToolCall> {
         self.calls.lock().await.clone()
     }

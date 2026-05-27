@@ -346,3 +346,34 @@ async fn session_no_concurrent_runner() {
         rejections
     );
 }
+
+// ---- Memory injection ----
+
+#[tokio::test]
+async fn session_memory_retrieval_called_during_run() {
+    use openwand_memory::RetrievalContext;
+    use openwand_session::testing::mock_memory::MockMemoryReadStore;
+
+    let _mock_memory = MockMemoryReadStore::with_result(RetrievalContext {
+        facts: vec!["User prefers dark mode".into()],
+        decisions: vec![],
+        episodes: vec![],
+        query_text: "dark mode".into(),
+        total_hits: 1,
+    });
+
+    let harness = SessionHarness::text_only();
+    // We can't swap memory after construction, so let's test via the mock already in harness
+    // The harness uses MockMemoryReadStore::new() which returns empty results.
+    // Let's verify the memory was queried.
+
+    harness
+        .runner
+        .run_turn("What is my preference?".into(), default_config())
+        .await
+        .expect("turn should run");
+
+    // Verify memory was queried during the run
+    let calls = harness.memory.calls().await;
+    assert!(!calls.is_empty(), "Memory should have been queried during run");
+}

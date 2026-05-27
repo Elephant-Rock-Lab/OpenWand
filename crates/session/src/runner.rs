@@ -300,12 +300,17 @@ impl SessionRunner {
     }
 
     async fn assemble_llm_request(&self, config: &RunConfig) -> Result<LlmRequest, SessionError> {
-        // Memory retrieval
-        let _memory_context = self
-            .memory
-            .search(MemoryQuery::new(""))
-            .await
-            .unwrap_or_else(|_| openwand_memory::RetrievalContext::empty());
+        // Memory retrieval — use last user message as query for relevant context
+        let last_user_text = self.loro_state.last_user_message_text().unwrap_or_default();
+        let memory_context = if !last_user_text.is_empty() {
+            self.memory
+                .search(MemoryQuery::new(&last_user_text))
+                .await
+                .unwrap_or_else(|_| openwand_memory::RetrievalContext::empty())
+        } else {
+            openwand_memory::RetrievalContext::empty()
+        };
+        let memory_block = memory_context.to_context_block();
 
         // Build messages from Loro
         let messages = self.loro_state.messages().map_err(SessionError::Internal)?;
@@ -330,11 +335,15 @@ impl SessionRunner {
             }),
             messages: llm_messages,
             system_prompt: config.system_prompt.clone().unwrap_or_else(|| {
-                if llm_tools.is_empty() {
+                let mut base = if llm_tools.is_empty() {
                     String::new()
                 } else {
                     "You are a helpful assistant with access to tools. When the user asks you to perform an action that can be fulfilled by one of your tools, call the tool instead of explaining how to do it manually.".to_string()
+                };
+                if let Some(ref block) = memory_block {
+                    base.push_str(&format!("\n\n## Retrieved Memory Context\n\n{}\n\nUse this context when relevant to the user's request.", block));
                 }
+                base
             }),
             tools: llm_tools.clone(),
             thinking_budget: None,

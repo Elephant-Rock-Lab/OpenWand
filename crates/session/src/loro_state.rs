@@ -130,6 +130,20 @@ impl LoroSessionState {
         Ok(())
     }
 
+    /// Get the text of the last user message.
+    /// Used for memory retrieval context.
+    pub fn last_user_message_text(&self) -> Option<String> {
+        let messages = self.messages().ok()?;
+        messages
+            .iter()
+            .rev()
+            .find(|m| m.role == MessageRole::User)
+            .and_then(|m| match &m.content {
+                MessageContent::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+    }
+
     /// Check if projection is marked stale.
     pub fn projection_is_stale(&self) -> Result<bool, String> {
         let root = self.doc.get_map("session");

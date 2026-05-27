@@ -4157,6 +4157,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "blake3",
+ "cargo_metadata",
  "chrono",
  "openwand-core",
  "openwand-trace",

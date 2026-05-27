@@ -318,6 +318,42 @@ pub enum AlreadyResolved {
     Denied,
 }
 
+/// Classify the trace state for a specific approval_request_id.
+/// Used by the unified resolver to decide what to do.
+pub fn classify_approval_state(
+    index: &ApprovalRecoveryIndex,
+    approval_request_id: &ApprovalRequestId,
+) -> ApprovalTraceState {
+    // Check for conflicts first
+    if !index.conflicts.is_empty() {
+        return ApprovalTraceState::Conflict(index.conflicts.clone());
+    }
+
+    // Check if this specific approval is in the pending list
+    let matching: Vec<_> = index
+        .pending
+        .iter()
+        .filter(|p| p.context.approval_request_id == *approval_request_id)
+        .collect();
+
+    match matching.len() {
+        0 => {
+            // Not in pending — check if it was already resolved
+            // We can't determine Approved vs Denied from the index alone
+            // without scanning the original entries for this specific arid.
+            // For now, if it's not pending and not conflicting, it's not found.
+            // The resolver should re-scan trace for this specific case.
+            ApprovalTraceState::NotFound
+        }
+        1 => ApprovalTraceState::Pending(matching[0].clone()),
+        _ => ApprovalTraceState::Conflict(vec![
+            ApprovalRecoveryConflict::MultipleUnresolvedApprovals {
+                count: matching.len(),
+            },
+        ]),
+    }
+}
+
 /// UI model for approval reconstruction from trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalUiModel {

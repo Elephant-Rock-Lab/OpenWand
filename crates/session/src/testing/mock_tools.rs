@@ -64,6 +64,11 @@ impl MockToolExecutor {
     pub async fn calls(&self) -> Vec<ToolCall> {
         self.calls.lock().await.clone()
     }
+
+    /// Number of times execute() was called.
+    pub async fn execution_count(&self) -> usize {
+        self.calls.lock().await.len()
+    }
 }
 
 fn make_local_def(name: &str) -> ToolDef {

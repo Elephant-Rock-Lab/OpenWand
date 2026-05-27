@@ -1,6 +1,8 @@
 use openwand_core::SessionId;
 use serde::{Deserialize, Serialize};
 
+use openwand_core::ToolCallId;
+
 /// Transient events emitted during a run for UI consumption.
 /// Not authoritative — not recorded in trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,11 +22,22 @@ pub enum AgentEvent {
         result_preview: String,
         is_error: bool,
     },
+    /// Runner is suspended waiting for user approval of a tool call.
+    ApprovalRequested {
+        session_id: SessionId,
+        tool_name: String,
+        tool_call_id: ToolCallId,
+        reason: String,
+    },
+    /// User's approval decision has been processed.
+    ApprovalResolved {
+        session_id: SessionId,
+        tool_name: String,
+        tool_call_id: ToolCallId,
+        approved: bool,
+    },
     RunCompleted {
         session_id: SessionId,
         stop_reason: String,
     },
 }
-
-// We need ToolCallId from core
-use openwand_core::ToolCallId;

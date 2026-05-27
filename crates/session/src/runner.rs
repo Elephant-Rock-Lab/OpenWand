@@ -10,10 +10,14 @@ use crate::phase::Phase;
 use crate::projector::LoroProjector;
 use crate::tool::ToolCall;
 use crate::SessionError;
-use openwand_core::events::{InferenceEvent, OpenWandTraceEvent, SessionEvent};
+use openwand_core::events::{
+    GateEvent, InferenceEvent, OpenWandTraceEvent, SessionEvent, ToolEvent,
+};
 use openwand_store::StoredEvent;
 use openwand_core::mode::InteractionMode;
+use openwand_core::tool_vocab::ToolResultStatus;
 use openwand_core::SessionId;
+use openwand_core::ToolCallId;
 use openwand_llm::{LlmClient, LlmDelta, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, PolicyEngine};
@@ -30,15 +34,44 @@ struct InferenceOutput {
 
 struct GatedTools {
     allowed: Vec<ToolCall>,
-    blocked: Vec<ToolCall>,
-    blocked_any: bool,
+    /// Tools that hit RequireConfirmation (may be resumable in Conversational mode).
+    pending_confirmation: Vec<PendingTool>,
+    /// Tools that were hard-blocked by policy (Block decision).
+    hard_blocked: Vec<ToolCall>,
+    /// True if any tool was blocked (either hard or pending).
+    any_blocked: bool,
+}
+
+/// A tool that requires confirmation before execution.
+#[derive(Debug, Clone)]
+pub struct PendingTool {
+    pub tool_call: ToolCall,
+    pub gate_evaluation: openwand_policy::PolicyEvaluation,
+}
+
+/// User's decision on a pending tool approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    /// User approved — execute the tool.
+    Approved,
+    /// User rejected — do not execute.
+    Rejected,
+}
+
+/// Result of resuming a pending approval.
+#[derive(Debug, Clone)]
+pub struct ApprovalResult {
+    pub decision: ApprovalDecision,
+    pub tool_name: String,
+    pub tool_call_id: ToolCallId,
+    /// If approved and executed: the tool result.
+    pub tool_result: Option<crate::tool::ToolResult>,
 }
 
 pub struct SessionRunner {
     pub session_id: SessionId,
     stream_id: TraceStreamId,
 
-    #[allow(dead_code)] // Cloned for MutationHelper
     trace: Arc<dyn TraceStore<StoredEvent>>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<dyn ToolExecutor>,
@@ -54,6 +87,9 @@ pub struct SessionRunner {
     cancellation: CancellationToken,
 
     working_directory: String,
+
+    /// Pending tool awaiting user approval. Set when runner suspends for confirmation.
+    pending_approval: Mutex<Option<PendingTool>>,
 }
 
 impl SessionRunner {
@@ -96,6 +132,7 @@ impl SessionRunner {
             run_lock: Mutex::new(()),
             cancellation: CancellationToken::new(),
             working_directory,
+            pending_approval: Mutex::new(None),
         }
     }
 
@@ -112,6 +149,11 @@ impl SessionRunner {
     /// Get a receiver for AgentEvents.
     pub fn subscribe(&self) -> broadcast::Receiver<AgentEvent> {
         self.agent_event_tx.subscribe()
+    }
+
+    /// Get the current pending approval (if any).
+    pub async fn pending_approval(&self) -> Option<PendingTool> {
+        self.pending_approval.lock().await.clone()
     }
 
     /// Run one user turn through the 10-phase loop.
@@ -174,9 +216,47 @@ impl SessionRunner {
             self.emit_phase(Phase::ToolGate, step).await;
             let gated = self.gate_tool_calls(&inference_output.tool_calls, config.mode.clone()).await?;
 
-            if gated.blocked_any {
-                self.record_blocked_tools(&gated.blocked).await?;
+            // Record gate evaluations in trace for ALL decisions
+            self.record_gate_evaluations(&gated).await?;
+
+            if !gated.hard_blocked.is_empty() {
+                // Hard-blocked tools: record denied, stop
+                self.record_denied_tools(&gated.hard_blocked).await?;
                 stop_reason = RunStopReason::ToolBlocked;
+                break;
+            }
+
+            if !gated.pending_confirmation.is_empty() {
+                // In Direct mode: treat pending as blocked (no way to get approval)
+                if matches!(config.mode, InteractionMode::Direct) {
+                    let blocked_calls: Vec<ToolCall> = gated.pending_confirmation.iter().map(|p| p.tool_call.clone()).collect();
+                    self.record_denied_tools(&blocked_calls).await?;
+                    stop_reason = RunStopReason::ToolBlocked;
+                    break;
+                }
+
+                // In Conversational/AutoRouting: suspend for approval
+                // Only one pending tool at a time (batch 1 simplification)
+                let pending = gated.pending_confirmation.into_iter().next().unwrap();
+
+                // Record tool.suspended in trace BEFORE pausing
+                self.record_tool_suspended(&pending).await?;
+
+                // Store pending approval
+                *self.pending_approval.lock().await = Some(pending.clone());
+
+                // Emit approval requested event
+                let _ = self.agent_event_tx.send(AgentEvent::ApprovalRequested {
+                    session_id: self.session_id.clone(),
+                    tool_name: pending.tool_call.name.clone(),
+                    tool_call_id: pending.tool_call.id.clone(),
+                    reason: format!(
+                        "Tool '{}' requires your approval before execution.",
+                        pending.tool_call.name
+                    ),
+                });
+
+                stop_reason = RunStopReason::AwaitingApproval;
                 break;
             }
 
@@ -214,6 +294,68 @@ impl SessionRunner {
         })
     }
 
+    /// Resume a pending approval with the user's decision.
+    ///
+    /// On approval: records `tool.resumed` in trace, then executes the tool.
+    /// On rejection: records `tool.denied` in trace, feeds rejection to LLM.
+    ///
+    /// **Critical invariant**: ToolExecutor::execute is only called after
+    /// `tool.resumed` is durably recorded in trace.
+    pub async fn resume_with_approval(
+        &self,
+        decision: ApprovalDecision,
+        config: RunConfig,
+    ) -> Result<ApprovalResult, SessionError> {
+        // Take the pending approval (exactly-once consumption)
+        let pending = self.pending_approval.lock().await.take();
+        let pending = pending.ok_or(SessionError::NoPendingApproval)?;
+
+        let tool_call_id = pending.tool_call.id.clone();
+        let tool_name = pending.tool_call.name.clone();
+
+        match decision {
+            ApprovalDecision::Approved => {
+                // Record tool.resumed in trace BEFORE execution
+                // This is the durable approval record
+                self.record_tool_resumed(&pending).await?;
+
+                // NOW execute the tool
+                let tools_call: openwand_tools::executor::ToolCall = (&pending.tool_call).into();
+                let context = build_tool_context(
+                    self.session_id.clone(),
+                    config.working_directory.clone(),
+                    self.cancellation.clone(),
+                );
+
+                let result = self.tools.execute(&tools_call, &context).await;
+                let tool_result = crate::tool::ToolResult::from(result);
+
+                // Record in Loro state
+                self.loro_state
+                    .append_tool_result(&tool_result, None::<&str>)
+                    .map_err(SessionError::Internal)?;
+
+                Ok(ApprovalResult {
+                    decision: ApprovalDecision::Approved,
+                    tool_name,
+                    tool_call_id,
+                    tool_result: Some(tool_result),
+                })
+            }
+            ApprovalDecision::Rejected => {
+                // Record tool.denied in trace (no execution)
+                self.record_tool_denied_event(&pending).await?;
+
+                Ok(ApprovalResult {
+                    decision: ApprovalDecision::Rejected,
+                    tool_name,
+                    tool_call_id,
+                    tool_result: None,
+                })
+            }
+        }
+    }
+
     // ---- Internal helpers ----
 
     async fn emit_phase(&self, phase: Phase, step: u64) {
@@ -246,7 +388,6 @@ impl SessionRunner {
     }
 
     async fn record_assistant_message(&self, text: &str) -> Result<(), SessionError> {
-        // Record in trace
         let event = OpenWandTraceEvent::Inference(InferenceEvent::Completed {
             model: "mock".into(),
             tokens: openwand_core::snapshots::TokenUsageSnapshot {
@@ -272,7 +413,6 @@ impl SessionRunner {
             )
             .await?;
 
-        // Record durable assistant message text in trace
         let assistant_event = OpenWandTraceEvent::Session(
             SessionEvent::AssistantMessageGenerated {
                 text: text.to_string(),
@@ -300,7 +440,6 @@ impl SessionRunner {
     }
 
     async fn assemble_llm_request(&self, config: &RunConfig) -> Result<LlmRequest, SessionError> {
-        // Memory retrieval — use last user message as query for relevant context
         let last_user_text = self.loro_state.last_user_message_text().unwrap_or_default();
         let memory_context = if !last_user_text.is_empty() {
             self.memory
@@ -312,14 +451,12 @@ impl SessionRunner {
         };
         let memory_block = memory_context.to_context_block();
 
-        // Build messages from Loro
         let messages = self.loro_state.messages().map_err(SessionError::Internal)?;
         let llm_messages: Vec<openwand_llm::LlmMessage> = messages
             .iter()
             .filter_map(|m| message_to_llm_message(m))
             .collect();
 
-        // Tools
         let tool_defs = self.tools.available_tools();
         let llm_tools: Vec<openwand_llm::LlmToolDef> =
             tool_defs.iter().map(|t| tool_def_to_llm_tool(t)).collect();
@@ -403,8 +540,9 @@ impl SessionRunner {
         mode: InteractionMode,
     ) -> Result<GatedTools, SessionError> {
         let mut allowed = Vec::new();
-        let mut blocked = Vec::new();
-        let mut blocked_any = false;
+        let mut pending_confirmation = Vec::new();
+        let mut hard_blocked = Vec::new();
+        let mut any_blocked = false;
 
         for call in calls {
             let descriptor = self.tools.get_descriptor(&call.name);
@@ -432,8 +570,8 @@ impl SessionRunner {
             let evaluation = match self.policy.evaluate_tool_call(policy_request).await {
                 Ok(eval) => eval,
                 Err(_) => {
-                    blocked_any = true;
-                    blocked.push(call.clone());
+                    any_blocked = true;
+                    hard_blocked.push(call.clone());
                     continue;
                 }
             };
@@ -443,20 +581,24 @@ impl SessionRunner {
                     allowed.push(call.clone());
                 }
                 GateDecision::RequireConfirmation { .. } => {
-                    blocked_any = true;
-                    blocked.push(call.clone());
+                    any_blocked = true;
+                    pending_confirmation.push(PendingTool {
+                        tool_call: call.clone(),
+                        gate_evaluation: evaluation,
+                    });
                 }
                 GateDecision::Block { .. } => {
-                    blocked_any = true;
-                    blocked.push(call.clone());
+                    any_blocked = true;
+                    hard_blocked.push(call.clone());
                 }
             }
         }
 
         Ok(GatedTools {
             allowed,
-            blocked,
-            blocked_any,
+            pending_confirmation,
+            hard_blocked,
+            any_blocked,
         })
     }
 
@@ -467,7 +609,6 @@ impl SessionRunner {
     ) -> Result<Vec<crate::tool::ToolResult>, SessionError> {
         let mut results = Vec::new();
         for call in calls {
-            // Emit ToolCallStarted
             let _ = self.agent_event_tx.send(AgentEvent::ToolCallStarted {
                 session_id: self.session_id.clone(),
                 tool_name: call.name.clone(),
@@ -484,7 +625,6 @@ impl SessionRunner {
             let result = self.tools.execute(&tools_call, &context).await;
             let tool_result = crate::tool::ToolResult::from(result);
 
-            // Emit ToolCallCompleted with result preview
             let preview = {
                 let text = &tool_result.output;
                 if text.len() > 200 {
@@ -506,7 +646,150 @@ impl SessionRunner {
         Ok(results)
     }
 
-    async fn record_blocked_tools(&self, _calls: &[ToolCall]) -> Result<(), SessionError> {
+    // ---- Trace recording ----
+
+    /// Record gate.evaluated for every gate decision (allow, confirm, block).
+    async fn record_gate_evaluations(&self, gated: &GatedTools) -> Result<(), SessionError> {
+        // Record gate events for allowed tools
+        for call in &gated.allowed {
+            let event = OpenWandTraceEvent::Gate(GateEvent::Evaluated {
+                gate_id: call.id.to_string(),
+                gate_kind: "policy".into(),
+                passed: true,
+                risk_level: Some(openwand_core::risk::RiskLevelSnapshot::Low),
+                reason_code: Some("allowed".into()),
+                summary: format!("Tool '{}' passed policy gate", call.name),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+        }
+
+        // Record gate events for pending-confirmation tools
+        for pending in &gated.pending_confirmation {
+            let event = OpenWandTraceEvent::Gate(GateEvent::Evaluated {
+                gate_id: pending.tool_call.id.to_string(),
+                gate_kind: "policy".into(),
+                passed: false,
+                risk_level: Some(openwand_core::risk::RiskLevelSnapshot::Medium),
+                reason_code: Some("require_confirmation".into()),
+                summary: format!("Tool '{}' requires confirmation", pending.tool_call.name),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+        }
+
+        // Record gate events for hard-blocked tools
+        for call in &gated.hard_blocked {
+            let event = OpenWandTraceEvent::Gate(GateEvent::Evaluated {
+                gate_id: call.id.to_string(),
+                gate_kind: "policy".into(),
+                passed: false,
+                risk_level: Some(openwand_core::risk::RiskLevelSnapshot::High),
+                reason_code: Some("blocked".into()),
+                summary: format!("Tool '{}' blocked by policy", call.name),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Record tool.suspended in trace (pending approval).
+    async fn record_tool_suspended(&self, pending: &PendingTool) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Suspended {
+            tool_call_id: pending.tool_call.id.clone(),
+            tool_name: pending.tool_call.name.clone(),
+            reason: "awaiting_user_approval".into(),
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "gate".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Record tool.resumed in trace (approval granted).
+    /// This is the durable approval record — must exist before ToolExecutor::execute.
+    async fn record_tool_resumed(&self, pending: &PendingTool) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Resumed {
+            tool_call_id: pending.tool_call.id.clone(),
+            tool_name: pending.tool_call.name.clone(),
+            resolution: "approved".into(),
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "gate".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Record tool.denied in trace (approval rejected or hard-blocked).
+    async fn record_tool_denied_event(&self, pending: &PendingTool) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
+            tool_call_id: pending.tool_call.id.clone(),
+            tool_name: pending.tool_call.name.clone(),
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "gate".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Record tool.denied for hard-blocked tools (no pending approval context).
+    async fn record_denied_tools(&self, calls: &[ToolCall]) -> Result<(), SessionError> {
+        for call in calls {
+            let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
+                tool_call_id: call.id.clone(),
+                tool_name: call.name.clone(),
+            });
+            self.mutation
+                .apply(
+                    Actor::System { component: "gate".into() },
+                    event,
+                    vec![],
+                    None,
+                    self.stream_id.clone(),
+                )
+                .await?;
+        }
         Ok(())
     }
 

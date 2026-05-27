@@ -13,6 +13,8 @@ use tokio::sync::Mutex;
 pub enum MockPolicyBehavior {
     AllowAll,
     BlockToolName(String),
+    /// Require confirmation for a specific tool name.
+    RequireConfirmationFor(String),
     Fail,
 }
 
@@ -38,6 +40,10 @@ impl MockPolicyEngine {
         Self::new(MockPolicyBehavior::BlockToolName(name.into()))
     }
 
+    pub fn require_confirmation_for(name: &str) -> Self {
+        Self::new(MockPolicyBehavior::RequireConfirmationFor(name.into()))
+    }
+
     pub fn fail() -> Self {
         Self::new(MockPolicyBehavior::Fail)
     }
@@ -57,6 +63,23 @@ fn allow_evaluation() -> PolicyEvaluation {
         matched_rules: vec![],
         reason_code: "mock_allow".into(),
         summary: "Mock policy: allowed".into(),
+        rollback_required: false,
+        rollback_plan: None,
+    }
+}
+
+fn require_confirmation_evaluation(tool_name: &str) -> PolicyEvaluation {
+    PolicyEvaluation {
+        gate_id: GateId::new(),
+        decision: GateDecision::RequireConfirmation {
+            level: ConfirmationLevel::Approve,
+        },
+        risk_level: RiskLevelSnapshot::Medium,
+        confirmation_level: ConfirmationLevel::Approve,
+        findings: vec![],
+        matched_rules: vec![],
+        reason_code: "mock_require_confirmation".into(),
+        summary: format!("Mock policy: '{}' requires confirmation", tool_name),
         rollback_required: false,
         rollback_plan: None,
     }
@@ -95,6 +118,12 @@ impl PolicyEngine for MockPolicyEngine {
                 Ok(block_evaluation("blocked_by_mock_policy"))
             }
             MockPolicyBehavior::BlockToolName(_) => Ok(allow_evaluation()),
+            MockPolicyBehavior::RequireConfirmationFor(name)
+                if request.tool_call.name == *name =>
+            {
+                Ok(require_confirmation_evaluation(name))
+            }
+            MockPolicyBehavior::RequireConfirmationFor(_) => Ok(allow_evaluation()),
             MockPolicyBehavior::Fail => Err(PolicyError::Internal(
                 "mock policy failure".into(),
             )),

@@ -114,4 +114,23 @@ impl SessionHarness {
         let memory = Arc::new(MockMemoryReadStore::new());
         Self::build(trace, llm, tools, policy, memory)
     }
+
+    /// Tool turn with a write tool that requires confirmation.
+    /// Policy: local__file_write requires confirmation, all others allowed.
+    pub fn write_tool_requires_confirmation() -> Self {
+        let trace = Arc::new(InMemoryTraceStore::new());
+        let tool_call_id = ToolCallId::new();
+        let llm = Arc::new(MockLlmClient::tool_then_stop(
+            tool_call_id.as_str().to_string(),
+            "local__file_write",
+            serde_json::json!({"path": "test.txt", "content": "hello"}),
+        ));
+        let tools = Arc::new(MockToolExecutor::with_success(
+            "local__file_write",
+            "Wrote 5 bytes to test.txt",
+        ));
+        let policy = Arc::new(MockPolicyEngine::require_confirmation_for("local__file_write"));
+        let memory = Arc::new(MockMemoryReadStore::new());
+        Self::build(trace, llm, tools, policy, memory)
+    }
 }

@@ -98,9 +98,11 @@ fn translate_event(event: &AgentEvent) -> Option<UiRunEvent> {
         AgentEvent::RunCompleted {
             stop_reason, ..
         } => Some(UiRunEvent::Completed {
-            steps: 0,   // we don't have this from AgentEvent
-            tools: 0,   // we don't have this from AgentEvent
+            steps: 0,
+            tools: 0,
             reason: stop_reason.clone(),
         }),
+        AgentEvent::ApprovalRequested { .. } => None, // handled at session level
+        AgentEvent::ApprovalResolved { .. } => None,   // handled at session level
     }
 }

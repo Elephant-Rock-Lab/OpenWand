@@ -5,6 +5,7 @@
 //!
 //! Principle: "Rig speaks to providers. OpenWand decides what provider output is allowed to become."
 
+pub mod adapters;
 pub mod client;
 pub mod error;
 pub mod request;

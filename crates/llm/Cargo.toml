@@ -1,0 +1,29 @@
+[package]
+name = "openwand-llm"
+version.workspace = true
+edition.workspace = true
+description = "OpenWand provider-normalized LLM boundary — session's view of all LLM providers"
+
+[dependencies]
+openwand-core = { path = "../core" }
+async-trait = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures = "0.3"
+chrono = { workspace = true, features = ["serde"] }
+tracing = { workspace = true }
+
+# No rig-core yet — 01b proves the OpenWand contract first.
+# rig-core adapter comes later for manual smoke tests.
+
+# No dependency on openwand-session, openwand-trace, openwand-memory,
+# openwand-policy, openwand-tools, openwand-mcp-pool, openwand-store,
+# loro, rmcp.
+
+[features]
+default = []
+testing = []
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

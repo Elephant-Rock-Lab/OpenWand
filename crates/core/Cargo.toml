@@ -1,0 +1,14 @@
+[package]
+name = "openwand-core"
+version.workspace = true
+edition.workspace = true
+description = "OpenWand vocabulary crate — domain IDs, event DTOs, shared enums"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+ulid = { version = "1", features = ["serde"] }
+
+# NO openwand-trace, session, memory, tools, policy, store, loro, rig, rmcp,
+# tokio, blake3, uuid, thiserror, or any other internal crate.

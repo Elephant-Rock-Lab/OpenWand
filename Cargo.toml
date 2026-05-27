@@ -1,0 +1,67 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/trace",
+    "crates/store",
+    "crates/session",
+    "crates/memory",
+    "crates/tools",
+    "crates/mcp-pool",
+    "crates/policy",
+    "crates/llm",
+    "crates/skills",
+    "crates/goals",
+    "crates/content",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/user/openwand"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+tokio-util = "0.7"
+futures = "0.3"
+loro = "1"
+cargo_metadata = "0.19"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Crypto / hashing
+blake3 = "1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Internal crates
+openwand-core = { path = "crates/core" }
+openwand-trace = { path = "crates/trace" }
+openwand-store = { path = "crates/store" }
+openwand-session = { path = "crates/session" }
+openwand-memory = { path = "crates/memory" }
+openwand-tools = { path = "crates/tools" }
+openwand-mcp-pool = { path = "crates/mcp-pool" }
+openwand-policy = { path = "crates/policy" }
+openwand-llm = { path = "crates/llm" }
+openwand-skills = { path = "crates/skills" }
+openwand-goals = { path = "crates/goals" }
+openwand-content = { path = "crates/content" }

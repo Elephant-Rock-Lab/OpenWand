@@ -225,3 +225,13 @@ impl MemoryStore for InMemoryMemoryStore {
         Ok(records.values().filter(|r| r.is_active()).cloned().collect())
     }
 }
+
+#[async_trait]
+impl crate::store::MemoryReadStore for InMemoryMemoryStore {
+    async fn search(
+        &self,
+        query: MemoryQuery,
+    ) -> Result<RetrievalContext, MemoryError> {
+        self.search_records(query).await
+    }
+}

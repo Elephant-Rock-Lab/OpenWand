@@ -1,13 +1,15 @@
-//! OpenWand Desktop UI — Wave 02b-3 Live Run View.
+//! OpenWand Desktop UI — Wave 02g Real Memory Wiring.
 //!
 //! Run with: cargo run --bin openwand-ui --features desktop
 
 use dioxus::prelude::*;
 use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
+use openwand_app::ui::memory_dto::UiMemoryPanel;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
-use openwand_app::ui::{CreateSessionRequest, UiSessionSummary, UiSessionView, UiSessionService};
+use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
+use openwand_memory::{MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_session::runner::SessionRunner;
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::SessionRegistryStore;
@@ -18,7 +20,7 @@ fn main() {
     let desktop_cfg = Config::new().with_window(
         WindowBuilder::new()
             .with_title("OpenWand")
-            .with_inner_size(LogicalSize::new(960, 640)),
+            .with_inner_size(LogicalSize::new(1100, 700)),
     );
 
     LaunchBuilder::new().with_cfg(desktop_cfg).launch(App);
@@ -31,11 +33,11 @@ static SELECTED_SESSION_ID: GlobalSignal<Option<String>> = Signal::global(|| Non
 static CURRENT_SESSION: GlobalSignal<Option<UiSessionView>> = Signal::global(|| None);
 static RUN_STATE: GlobalSignal<UiRunState> = Signal::global(UiRunState::default);
 static STATUS_TEXT: GlobalSignal<String> = Signal::global(|| "Ready".into());
+static MEMORY_PANEL: GlobalSignal<UiMemoryPanel> = Signal::global(UiMemoryPanel::empty);
 
 /// Active runner + handle for the selected session.
 static ACTIVE_RUNNER: GlobalSignal<Option<ActiveRun>> = Signal::global(|| None);
 
-/// Tracks the active run (runner + cancellation + bridge state).
 pub struct ActiveRun {
     pub runner: Arc<SessionRunner>,
     pub cancellation: CancellationToken,
@@ -44,22 +46,8 @@ pub struct ActiveRun {
 
 // ── App Init ──────────────────────────────────────────────
 
-/// Stub memory store — returns empty context.
-struct StubMemoryStore;
-
-#[async_trait::async_trait]
-impl openwand_memory::MemoryReadStore for StubMemoryStore {
-    async fn search(
-        &self,
-        _query: openwand_memory::MemoryQuery,
-    ) -> std::result::Result<openwand_memory::RetrievalContext, openwand_memory::MemoryError> {
-        Ok(openwand_memory::RetrievalContext::empty())
-    }
-}
-
-/// Build the smoke policy (Read + Search only).
 fn build_smoke_policy() -> openwand_policy::BuiltinPolicyEngine {
-    let rules = vec![
+    openwand_policy::BuiltinPolicyEngine::new(vec![
         openwand_policy::PolicyRule {
             id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
             name: "Allow read-effect tools (smoke)".into(),
@@ -92,32 +80,41 @@ fn build_smoke_policy() -> openwand_policy::BuiltinPolicyEngine {
             reason_code: "smoke_allow_search".into(),
             summary: "Allow search-effect tools.".into(),
         },
-    ];
-    openwand_policy::BuiltinPolicyEngine::new(rules)
+    ])
+}
+
+fn db_path() -> std::path::PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("openwand")
+        .join("openwand.db")
 }
 
 fn init_service() -> Arc<UiSessionService> {
-    let db_path = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("openwand")
-        .join("openwand.db");
+    let path = db_path();
 
-    // Open two connections: registry and trace (SqliteStore is not Clone)
     let store_registry = tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(
-            SqliteStore::open(SqliteStoreConfig::file(&db_path))
+            SqliteStore::open(SqliteStoreConfig::file(&path))
         )
     }).expect("Failed to open store");
 
     let store_trace = tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(
-            SqliteStore::open(SqliteStoreConfig::file(&db_path))
+            SqliteStore::open(SqliteStoreConfig::file(&path))
         )
     }).expect("Failed to open trace store");
 
     let registry: Arc<dyn SessionRegistryStore> = Arc::new(store_registry);
     let trace: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> = Arc::new(store_trace);
     Arc::new(UiSessionService::new(registry, trace))
+}
+
+fn init_memory() -> Arc<SqliteMemoryStore> {
+    let path = db_path();
+    Arc::new(
+        SqliteMemoryStore::open(&path).expect("Failed to open memory store")
+    )
 }
 
 // ── Root Component ────────────────────────────────────────
@@ -130,16 +127,16 @@ fn App() -> Element {
         }
         svc
     });
+    let memory: Arc<SqliteMemoryStore> = use_hook(init_memory);
 
     rsx! {
         div { style: "display: flex; height: 100vh; font-family: system-ui; margin: 0;",
 
-            // Left sidebar
+            // Left sidebar — sessions
             div {
-                style: "width: 280px; min-width: 280px; background: #f7f7f7;
+                style: "width: 260px; min-width: 260px; background: #f7f7f7;
                         border-right: 1px solid #ddd; display: flex; flex-direction: column;",
 
-                // Header
                 div { style: "padding: 12px 16px; border-bottom: 1px solid #ddd;
                               display: flex; justify-content: space-between; align-items: center;",
                     span { style: "font-weight: 600; font-size: 14px;", "Sessions" }
@@ -181,63 +178,119 @@ fn App() -> Element {
                     }
                 }
 
-                // Session list
                 div { style: "flex: 1; overflow-y: auto;",
                     for session in SESSION_LIST.read().iter() {
-                        {
-                            let id = session.session_id.clone();
-                            let title = session.title.clone().unwrap_or_else(|| "Untitled".into());
-                            let model = session.model.clone().unwrap_or_else(|| "No model".into());
-                            let status = session.status.clone();
-                            let selected = SELECTED_SESSION_ID.read().as_deref() == Some(id.as_str());
-                            let bg = if selected { "#e0e8f0" } else { "transparent" };
-                            let svc = service.clone();
-                            rsx! {
-                                div {
-                                    key: "{id}",
-                                    style: "padding: 10px 16px; cursor: pointer; background: {bg};
-                                            border-bottom: 1px solid #eee;",
-                                    onclick: {
-                                        let svc = svc.clone();
-                                        move |_| {
-                                            let id = id.clone();
-                                            let svc = svc.clone();
-                                            spawn(async move {
-                                                *SELECTED_SESSION_ID.write() = Some(id.clone());
-                                                match svc.open_session(&id).await {
-                                                    Ok(view) => {
-                                                        *CURRENT_SESSION.write() = Some(view);
-                                                    }
-                                                    Err(e) => {
-                                                        *STATUS_TEXT.write() = format!("Error: {e}");
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    },
-                                    div { style: "font-size: 13px; font-weight: 500; color: #333;",
-                                        "{title}"
-                                    }
-                                    div { style: "font-size: 11px; color: #888; margin-top: 3px;",
-                                        "{model} - {status}"
-                                    }
-                                }
-                            }
-                        }
+                        { render_session_item(session, service.clone()) }
                     }
                     if SESSION_LIST.read().is_empty() {
                         div { style: "padding: 24px 16px; color: #999; font-size: 13px; text-align: center;",
-                            "No sessions yet."
-                            br {}
-                            "Click \"+ New\" to create one."
+                            "No sessions yet. Click \"+ New\" to create one."
                         }
                     }
                 }
             }
 
-            // Right pane
-            div { style: "flex: 1; display: flex; flex-direction: column;",
-                {render_detail_pane(service.clone())}
+            // Center — main content
+            div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0;",
+                { render_detail_pane(service.clone(), memory.clone()) }
+            }
+
+            // Right sidebar — memory panel
+            div {
+                style: "width: 240px; min-width: 240px; background: #fafafa;
+                        border-left: 1px solid #ddd; display: flex; flex-direction: column;",
+
+                div { style: "padding: 12px 16px; border-bottom: 1px solid #ddd;",
+                    span { style: "font-weight: 600; font-size: 14px;", "Memory" }
+                    span { style: "font-size: 11px; color: #888; margin-left: 8px;",
+                        "{MEMORY_PANEL.read().active_count} records"
+                    }
+                }
+
+                div { style: "flex: 1; overflow-y: auto;",
+                    for record in MEMORY_PANEL.read().records.iter() {
+                        { render_memory_record(record) }
+                    }
+                    if MEMORY_PANEL.read().records.is_empty() {
+                        div { style: "padding: 24px 16px; color: #999; font-size: 12px; text-align: center;",
+                            "No memories yet."
+                            br {}
+                            "Say \"remember X\" to create one."
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService>) -> Element {
+    let id = session.session_id.clone();
+    let title = session.title.clone().unwrap_or_else(|| "Untitled".into());
+    let model = session.model.clone().unwrap_or_else(|| "No model".into());
+    let status = session.status.clone();
+    let selected = SELECTED_SESSION_ID.read().as_deref() == Some(id.as_str());
+    let bg = if selected { "#e0e8f0" } else { "transparent" };
+
+    rsx! {
+        div {
+            key: "{id}",
+            style: "padding: 10px 16px; cursor: pointer; background: {bg};
+                    border-bottom: 1px solid #eee;",
+            onclick: {
+                let svc = service.clone();
+                move |_| {
+                    let id = id.clone();
+                    let svc = svc.clone();
+                    spawn(async move {
+                        *SELECTED_SESSION_ID.write() = Some(id.clone());
+                        match svc.open_session(&id).await {
+                            Ok(view) => {
+                                *CURRENT_SESSION.write() = Some(view);
+                            }
+                            Err(e) => {
+                                *STATUS_TEXT.write() = format!("Error: {e}");
+                            }
+                        }
+                    });
+                }
+            },
+            div { style: "font-size: 13px; font-weight: 500; color: #333;",
+                "{title}"
+            }
+            div { style: "font-size: 11px; color: #888; margin-top: 3px;",
+                "{model} - {status}"
+            }
+        }
+    }
+}
+
+fn render_memory_record(record: &openwand_app::ui::memory_dto::UiMemoryRecord) -> Element {
+    let kind_color = match record.kind.as_str() {
+        "decision" => "#d4a017",
+        "preference" => "#8b5cf6",
+        _ => "#4a90d9",
+    };
+    let confidence_str = format!("{:.0}%", record.confidence * 100.0);
+
+    rsx! {
+        div {
+            style: "padding: 10px 16px; border-bottom: 1px solid #eee;",
+            div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;",
+                span {
+                    style: "font-size: 10px; padding: 2px 6px; border-radius: 3px;
+                            background: {kind_color}; color: white; font-weight: 600;",
+                    "{record.kind}"
+                }
+                span { style: "font-size: 10px; color: #aaa;",
+                    "{confidence_str}"
+                }
+            }
+            div { style: "font-size: 12px; color: #333; line-height: 1.4;",
+                "{record.claim}"
+            }
+            div { style: "font-size: 10px; color: #aaa; margin-top: 4px;",
+                "{record.source_count} sources"
             }
         }
     }
@@ -245,10 +298,9 @@ fn App() -> Element {
 
 // ── Detail Pane ───────────────────────────────────────────
 
-fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
+fn render_detail_pane(service: Arc<UiSessionService>, memory: Arc<SqliteMemoryStore>) -> Element {
     let current = CURRENT_SESSION.read().clone();
     let run_state = RUN_STATE.read().clone();
-    let has_runner = ACTIVE_RUNNER.read().is_some();
 
     match current {
         Some(view) => {
@@ -267,7 +319,6 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
                             "{session_id}"
                         }
                     }
-                    // Phase / run status badge
                     if is_running {
                         div { style: "padding: 4px 10px; background: #e8f4e8; border: 1px solid #a0c8a0;
                                       border-radius: 12px; font-size: 11px; font-weight: 600; color: #2d6a2d;",
@@ -279,7 +330,6 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
 
                 // Messages area
                 div { style: "flex: 1; overflow-y: auto; padding: 16px 20px; background: #fff;",
-                    // Streaming text
                     if !run_state.streamed_text.is_empty() {
                         div { style: "margin-bottom: 12px; padding: 10px 14px; background: #f0f0f0;
                                      border: 1px solid #ddd; border-radius: 6px;",
@@ -289,27 +339,22 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
                             div { style: "font-size: 13px; color: #333; white-space: pre-wrap;",
                                 "{run_state.streamed_text}"
                                 if is_running {
-                                    span { style: "color: #4a90d9; animation: blink 1s infinite;",
-                                        "▍"
-                                    }
+                                    span { style: "color: #4a90d9;", "▍" }
                                 }
                             }
                         }
                     }
 
-                    // Tool events
                     for event in run_state.tool_events.iter() {
-                        {render_tool_event(event.clone())}
+                        { render_tool_event(event.clone()) }
                     }
 
-                    // Empty state
                     if run_state.streamed_text.is_empty() && run_state.tool_events.is_empty() && !is_running {
                         div { style: "color: #999; font-size: 14px; text-align: center; margin-top: 40px;",
                             "Type a message below to start"
                         }
                     }
 
-                    // Error display
                     if let Some(ref err) = run_state.error {
                         div { style: "margin-top: 12px; padding: 10px 14px; background: #fde8e8;
                                      border: 1px solid #e8a0a0; border-radius: 6px; color: #cc3333;
@@ -324,6 +369,8 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
                               display: flex; gap: 8px; align-items: flex-end;",
                     {
                         let svc = service.clone();
+                        let mem = memory.clone();
+                        let sid = session_id.clone();
                         rsx! {
                             textarea {
                                 style: "flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid #ddd;
@@ -332,60 +379,52 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
                                 rows: "1",
                                 placeholder: if is_running { "Running..." } else { "Type a message..." },
                                 disabled: is_running,
-                                onkeydown: {
-                                    let svc = svc.clone();
-                                    move |e: KeyboardEvent| {
-                                        if e.key() == Key::Enter && !e.modifiers().shift() {
-                                            e.prevent_default();
-                                            // Trigger send via the send button's logic
-                                            // We'll use a GlobalSignal for input text
-                                        }
-                                    }
-                                },
                                 onchange: {
                                     move |e: FormEvent| {
                                         *INPUT_TEXT.write() = e.value().clone();
                                     }
                                 }
                             }
-                        }
-                    }
-                    button {
-                        style: if is_running {
-                            "padding: 8px 16px; font-size: 13px; background: #ccc; color: white;
-                             border: none; border-radius: 4px; cursor: not-allowed;"
-                        } else {
-                            "padding: 8px 16px; font-size: 13px; background: #4a90d9; color: white;
-                             border: none; border-radius: 4px; cursor: pointer;"
-                        },
-                        disabled: is_running,
-                        onclick: {
-                            let svc = service.clone();
-                            let sid = session_id.clone();
-                            move |_| {
-                                let svc = svc.clone();
-                                let sid = sid.clone();
-                                let text = INPUT_TEXT.read().clone();
-                                if text.is_empty() { return; }
-                                *INPUT_TEXT.write() = String::new();
-                                spawn(async move {
-                                    handle_send(svc, sid, text).await;
-                                });
+                            button {
+                                style: if is_running {
+                                    "padding: 8px 16px; font-size: 13px; background: #ccc; color: white;
+                                     border: none; border-radius: 4px; cursor: not-allowed;"
+                                } else {
+                                    "padding: 8px 16px; font-size: 13px; background: #4a90d9; color: white;
+                                     border: none; border-radius: 4px; cursor: pointer;"
+                                },
+                                disabled: is_running,
+                                onclick: {
+                                    let svc = svc.clone();
+                                    let mem = mem.clone();
+                                    let sid = sid.clone();
+                                    move |_| {
+                                        let svc = svc.clone();
+                                        let mem = mem.clone();
+                                        let sid = sid.clone();
+                                        let text = INPUT_TEXT.read().clone();
+                                        if text.is_empty() { return; }
+                                        *INPUT_TEXT.write() = String::new();
+                                        spawn(async move {
+                                            handle_send(svc, mem, sid, text).await;
+                                        });
+                                    }
+                                },
+                                if is_running { "Running..." } else { "Send" }
                             }
-                        },
-                        if is_running { "Running..." } else { "Send" }
-                    }
-                    if is_running {
-                        button {
-                            style: "padding: 8px 12px; font-size: 13px; background: #d94a4a;
-                                    color: white; border: none; border-radius: 4px; cursor: pointer;",
-                            onclick: move |_| {
-                                if let Some(ref run) = *ACTIVE_RUNNER.read() {
-                                    run.cancellation.cancel();
+                            if is_running {
+                                button {
+                                    style: "padding: 8px 12px; font-size: 13px; background: #d94a4a;
+                                            color: white; border: none; border-radius: 4px; cursor: pointer;",
+                                    onclick: move |_| {
+                                        if let Some(ref run) = *ACTIVE_RUNNER.read() {
+                                            run.cancellation.cancel();
+                                        }
+                                        *STATUS_TEXT.write() = "Run cancelled".into();
+                                    },
+                                    "Cancel"
                                 }
-                                *STATUS_TEXT.write() = "Run cancelled".into();
-                            },
-                            "Cancel"
+                            }
                         }
                     }
                 }
@@ -406,8 +445,6 @@ fn render_detail_pane(service: Arc<UiSessionService>) -> Element {
     }
 }
 
-// ── Tool Event Card ───────────────────────────────────────
-
 fn render_tool_event(event: UiRunEvent) -> Element {
     match event {
         UiRunEvent::ToolCallStarted { id, name } => rsx! {
@@ -416,31 +453,25 @@ fn render_tool_event(event: UiRunEvent) -> Element {
                          display: flex; align-items: center; gap: 8px;",
                 div { style: "width: 8px; height: 8px; background: #f0c040; border-radius: 50%;" }
                 div {
-                    div { style: "font-size: 11px; font-weight: 600; color: #888;",
-                        "Tool Call"
-                    }
-                    div { style: "font-size: 12px; color: #555;",
-                        "{name}"
-                    }
+                    div { style: "font-size: 11px; font-weight: 600; color: #888;", "Tool Call" }
+                    div { style: "font-size: 12px; color: #555;", "{name}" }
                 }
             }
         },
         UiRunEvent::ToolCallCompleted { id, name, output, is_error } => {
             let bg = if is_error { "#fde8e8" } else { "#e8f4e8" };
             let border = if is_error { "#e8a0a0" } else { "#a0c8a0" };
-            let dot_color = if is_error { "#cc3333" } else { "#33aa33" };
+            let dot = if is_error { "#cc3333" } else { "#33aa33" };
             rsx! {
                 div { style: "margin-bottom: 8px; padding: 8px 12px; background: {bg};
                              border: 1px solid {border}; border-radius: 6px;
                              display: flex; align-items: flex-start; gap: 8px;",
-                    div { style: "width: 8px; height: 8px; background: {dot_color}; border-radius: 50%; margin-top: 4px;" }
+                    div { style: "width: 8px; height: 8px; background: {dot}; border-radius: 50%; margin-top: 4px;" }
                     div { style: "flex: 1;",
                         div { style: "font-size: 11px; font-weight: 600; color: #888;",
                             if is_error { "Tool Error" } else { "Tool Result" }
                         }
-                        div { style: "font-size: 12px; color: #555;",
-                            "{name}"
-                        }
+                        div { style: "font-size: 12px; color: #555;", "{name}" }
                         if !output.is_empty() {
                             div { style: "font-size: 11px; color: #777; margin-top: 4px;
                                          max-height: 80px; overflow-y: auto; white-space: pre-wrap;",
@@ -463,15 +494,13 @@ static INPUT_TEXT: GlobalSignal<String> = Signal::global(String::new);
 
 async fn handle_send(
     service: Arc<UiSessionService>,
+    memory: Arc<SqliteMemoryStore>,
     session_id: String,
     text: String,
 ) {
     *STATUS_TEXT.write() = "Starting run...".into();
-
-    // Reset run state
     *RUN_STATE.write() = UiRunState::new_running();
 
-    // Build LLM target from session or defaults
     let llm_target = LlmTarget {
         provider: openwand_llm::LlmProvider::Custom { name: "lm-studio".into() },
         model: "qwen/qwen3-4b-2507".into(),
@@ -479,21 +508,16 @@ async fn handle_send(
         api_key: Some("lm-studio".into()),
     };
 
-    // Build the runner
-    let db_path = dirs::data_dir()
-        .unwrap()
-        .join("openwand")
-        .join("openwand.db");
+    let path = db_path();
 
-    // Open a second store connection for the runner's trace
+    // Open store connections
     let trace_store: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> =
         Arc::new(
-            openwand_store::backends::sqlite::SqliteStore::open(
-                openwand_store::backends::sqlite::SqliteStoreConfig::file(&db_path)
-            )
-            .await
-            .expect("Failed to open trace store")
+            SqliteStore::open(SqliteStoreConfig::file(&path))
+                .await
+                .expect("Failed to open trace store")
         );
+
     let llm: Arc<dyn openwand_llm::LlmClient> = Arc::new(
         openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient::new()
     );
@@ -502,12 +526,8 @@ async fn handle_send(
             openwand_tools::local::batch1_local_tools()
         )
     );
-    let policy: Arc<dyn openwand_policy::PolicyEngine> = Arc::new(
-        build_smoke_policy()
-    );
-    let memory: Arc<dyn openwand_memory::MemoryReadStore> = Arc::new(
-        StubMemoryStore
-    );
+    let policy: Arc<dyn openwand_policy::PolicyEngine> = Arc::new(build_smoke_policy());
+    let memory_read: Arc<dyn MemoryReadStore> = memory.clone() as Arc<dyn MemoryReadStore>;
 
     let runner = Arc::new(SessionRunner::new(
         SessionId(session_id.clone()),
@@ -515,23 +535,22 @@ async fn handle_send(
         llm,
         tools,
         policy,
-        memory,
+        memory_read,
         ".".into(),
     ));
 
-    // Start run via service
-    match service.start_run(&session_id, text, llm_target, runner.clone()).await {
+    match service.start_run(&session_id, text.clone(), llm_target, runner.clone()).await {
         Ok(handle) => {
-            let state = handle.state.clone();
             *ACTIVE_RUNNER.write() = Some(ActiveRun {
-                runner,
+                runner: runner.clone(),
                 cancellation: handle.cancellation,
-                state: handle.state,
+                state: handle.state.clone(),
             });
             *STATUS_TEXT.write() = "Run started".into();
 
-            // Poll the bridge state into RUN_STATE GlobalSignal
-            poll_run_state(state).await;
+            // Poll until done, then project memory
+            let state = handle.state;
+            poll_and_project(state, memory, runner).await;
         }
         Err(e) => {
             *STATUS_TEXT.write() = format!("Run error: {e}");
@@ -541,26 +560,59 @@ async fn handle_send(
     }
 }
 
-/// Poll the shared run state and sync to the GlobalSignal.
-/// Runs until the run completes or is cancelled.
-async fn poll_run_state(state: Arc<std::sync::Mutex<UiRunState>>) {
+async fn poll_and_project(
+    state: Arc<std::sync::Mutex<UiRunState>>,
+    memory: Arc<SqliteMemoryStore>,
+    runner: Arc<SessionRunner>,
+) {
+    // Poll run state
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-        let snapshot = {
-            let s = state.lock().unwrap();
-            s.clone()
-        };
+        let snapshot = state.lock().unwrap().clone();
         *RUN_STATE.write() = snapshot;
 
         match RUN_STATE.read().status {
             UiRunStatus::Completed | UiRunStatus::Failed | UiRunStatus::Cancelled => {
-                let status_str = format!("{:?}", RUN_STATE.read().status);
-                *STATUS_TEXT.write() = format!("Run {}", status_str);
-                // Clear active runner
-                *ACTIVE_RUNNER.write() = None;
                 break;
             }
             _ => {}
         }
     }
+
+    // Run memory projection
+    let path = db_path();
+    let trace_for_coordinator: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> =
+        Arc::new(
+            SqliteStore::open(SqliteStoreConfig::file(&path))
+                .await
+                .expect("Failed to open trace for coordinator")
+        );
+
+    let memory_write: Arc<dyn MemoryStore> = memory.clone() as Arc<dyn MemoryStore>;
+    let extractor: Arc<dyn openwand_memory::MemoryExtractor> =
+        Arc::new(openwand_memory::testing::KeywordExtractor);
+    let coordinator = openwand_app::memory_coordinator::MemoryCoordinator::new(
+        memory_write,
+        extractor,
+        trace_for_coordinator,
+    );
+
+    let session_id = runner.session_id.clone();
+    let projection = coordinator.project_after_run(&session_id).await;
+
+    // Refresh memory panel
+    match openwand_app::ui::memory_service::build_memory_panel(&*memory).await {
+        Ok(panel) => {
+            *MEMORY_PANEL.write() = panel;
+            *STATUS_TEXT.write() = format!(
+                "Run complete. Memory: {} new records.",
+                projection.records_accepted
+            );
+        }
+        Err(e) => {
+            *STATUS_TEXT.write() = format!("Run complete. Memory panel error: {e}");
+        }
+    }
+
+    *ACTIVE_RUNNER.write() = None;
 }

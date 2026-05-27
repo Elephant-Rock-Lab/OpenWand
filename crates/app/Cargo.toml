@@ -36,7 +36,7 @@ openwand-store = { path = "../store", features = ["sqlite"] }
 openwand-tools = { path = "../tools" }
 openwand-policy = { path = "../policy" }
 openwand-llm = { path = "../llm", features = ["openai-compatible"] }
-openwand-memory = { path = "../memory" }
+openwand-memory = { path = "../memory", features = ["sqlite", "testing"] }
 openwand-trace = { path = "../trace" }
 
 # Desktop UI (feature-gated)

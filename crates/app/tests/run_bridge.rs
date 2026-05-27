@@ -160,6 +160,7 @@ async fn ui_run_bridge_preserves_tool_result_events() {
         session_id: SessionId::new(),
         tool_name: "local__search".into(),
         tool_call_id: ToolCallId("tc_2".into()),
+        result_preview: "search results...".into(),
         is_error: true,
     }).unwrap();
 
@@ -168,9 +169,10 @@ async fn ui_run_bridge_preserves_tool_result_events() {
     let s = state.lock().unwrap();
     assert_eq!(1, s.tool_events.len());
     match &s.tool_events[0] {
-        UiRunEvent::ToolCallCompleted { name, is_error, .. } => {
+        UiRunEvent::ToolCallCompleted { name, is_error, output, .. } => {
             assert_eq!("local__search", name);
             assert!(is_error);
+            assert_eq!("search results...", output);
         }
         other => panic!("Expected ToolCallCompleted, got: {other:?}"),
     }

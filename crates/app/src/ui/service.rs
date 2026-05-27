@@ -6,6 +6,7 @@
 use crate::ui::dto::{
     CreateSessionRequest, UiMessageRole, UiSessionSummary, UiSessionView,
 };
+use crate::ui::replay::{self, UiTimelineItem};
 use crate::ui::run_bridge;
 use crate::ui::run_dto::{UiRunState, UiRunStatus};
 use openwand_core::mode::InteractionMode;
@@ -43,11 +44,15 @@ pub struct RunHandle {
 /// The UI session service. Wraps the store registry and coordinates runs.
 pub struct UiSessionService {
     registry: Arc<dyn SessionRegistryStore>,
+    trace: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>>,
 }
 
 impl UiSessionService {
-    pub fn new(registry: Arc<dyn SessionRegistryStore>) -> Self {
-        Self { registry }
+    pub fn new(
+        registry: Arc<dyn SessionRegistryStore>,
+        trace: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>>,
+    ) -> Self {
+        Self { registry, trace }
     }
 
     /// List all non-archived sessions, most recently updated first.
@@ -107,18 +112,27 @@ impl UiSessionService {
 
     /// Open a session for viewing. Returns the full view including messages.
     ///
-    /// For 02b-2, messages are loaded from the registry's last known state.
-    /// Full trace replay is deferred to 02b-4.
-    pub fn open_session(&self, session_id: &str) -> Result<UiSessionView, UiServiceError> {
+    /// Open a session for viewing. Rebuilds the timeline from trace.
+    pub async fn open_session(&self, session_id: &str) -> Result<UiSessionView, UiServiceError> {
         let record = self
             .registry
             .get_session(session_id)
             .map_err(UiServiceError::Store)?
             .ok_or_else(|| UiServiceError::NotFound(session_id.to_string()))?;
 
-        // For 02b-2/3, messages come from runner's Loro state when available.
-        // Without a runner, return empty.
-        let messages = Vec::new();
+        // Replay timeline from trace
+        let timeline = replay::replay_timeline(self.trace.as_ref(), session_id)
+            .await
+            .unwrap_or_default();
+
+        // Convert timeline items to UI messages
+        let messages: Vec<crate::ui::dto::UiMessage> = timeline
+            .iter()
+            .filter_map(|item| match item {
+                UiTimelineItem::Message(msg) => Some(msg.clone()),
+                _ => None,
+            })
+            .collect();
 
         Ok(UiSessionView {
             summary: UiSessionSummary {

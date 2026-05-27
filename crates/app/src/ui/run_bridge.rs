@@ -81,18 +81,15 @@ fn translate_event(event: &AgentEvent) -> Option<UiRunEvent> {
         AgentEvent::ToolCallCompleted {
             tool_call_id,
             tool_name,
+            result_preview,
             is_error,
             ..
-        } => {
-            // AgentEvent::ToolCallCompleted doesn't carry output text.
-            // The UI shows the tool name + success/error status.
-            Some(UiRunEvent::ToolCallCompleted {
-                id: tool_call_id.0.clone(),
-                name: tool_name.clone(),
-                output: String::new(),
-                is_error: *is_error,
-            })
-        }
+        } => Some(UiRunEvent::ToolCallCompleted {
+            id: tool_call_id.0.clone(),
+            name: tool_name.clone(),
+            output: result_preview.clone(),
+            is_error: *is_error,
+        }),
         AgentEvent::PhaseEntered { phase, step, .. } => Some(UiRunEvent::PhaseChanged {
             phase: phase.clone(),
             step: *step,

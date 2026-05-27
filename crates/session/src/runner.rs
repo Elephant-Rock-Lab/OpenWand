@@ -133,6 +133,9 @@ impl SessionRunner {
 
         // Phase: RunStart
         self.emit_phase(Phase::RunStart, 0).await;
+        let _ = self.agent_event_tx.send(AgentEvent::RunStarted {
+            session_id: self.session_id.clone(),
+        });
         self.record_user_message(&user_text).await?;
 
         let mut step = 0u64;
@@ -197,6 +200,11 @@ impl SessionRunner {
         }
 
         self.emit_phase(Phase::RunEnd, step).await;
+
+        let _ = self.agent_event_tx.send(AgentEvent::RunCompleted {
+            session_id: self.session_id.clone(),
+            stop_reason: format!("{:?}", stop_reason),
+        });
 
         Ok(RunSummary {
             stop_reason,
@@ -430,6 +438,13 @@ impl SessionRunner {
     ) -> Result<Vec<crate::tool::ToolResult>, SessionError> {
         let mut results = Vec::new();
         for call in calls {
+            // Emit ToolCallStarted
+            let _ = self.agent_event_tx.send(AgentEvent::ToolCallStarted {
+                session_id: self.session_id.clone(),
+                tool_name: call.name.clone(),
+                tool_call_id: call.id.clone(),
+            });
+
             let tools_call: openwand_tools::executor::ToolCall = call.into();
             let context = build_tool_context(
                 self.session_id.clone(),
@@ -438,7 +453,26 @@ impl SessionRunner {
             );
 
             let result = self.tools.execute(&tools_call, &context).await;
-            results.push(crate::tool::ToolResult::from(result));
+            let tool_result = crate::tool::ToolResult::from(result);
+
+            // Emit ToolCallCompleted with result preview
+            let preview = {
+                let text = &tool_result.output;
+                if text.len() > 200 {
+                    format!("{}...", &text[..200])
+                } else {
+                    text.clone()
+                }
+            };
+            let _ = self.agent_event_tx.send(AgentEvent::ToolCallCompleted {
+                session_id: self.session_id.clone(),
+                tool_name: call.name.clone(),
+                tool_call_id: call.id.clone(),
+                result_preview: preview,
+                is_error: tool_result.is_error,
+            });
+
+            results.push(tool_result);
         }
         Ok(results)
     }

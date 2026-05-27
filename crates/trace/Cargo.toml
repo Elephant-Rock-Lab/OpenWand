@@ -1,0 +1,22 @@
+[package]
+name = "openwand-trace"
+version.workspace = true
+edition.workspace = true
+description = "OpenWand generic trace substrate — append-only, typed, hash-chained"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+ulid = { version = "1", features = ["serde"] }
+blake3 = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+# No dependency on openwand-core — this crate is generic over <E>
+
+[features]
+default = []
+testing = []

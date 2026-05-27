@@ -1,0 +1,31 @@
+[package]
+name = "openwand-store"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openwand-core = { path = "../core" }
+openwand-trace = { path = "../trace" }
+
+async-trait = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+openwand-trace = { path = "../trace", features = ["testing"] }
+
+[features]
+default = []
+testing = ["openwand-trace/testing"]
+sqlite = ["rusqlite"]
+sqlite-testing = ["sqlite"]
+
+[dependencies.rusqlite]
+version = "0.32"
+features = ["bundled"]
+optional = true

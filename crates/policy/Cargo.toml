@@ -1,0 +1,19 @@
+[package]
+name = "openwand-policy"
+version.workspace = true
+edition.workspace = true
+description = "OpenWand deterministic policy engine — trust gate for all tool actions"
+
+[dependencies]
+openwand-core = { path = "../core" }
+async-trait = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# No dependency on openwand-tools, openwand-session, openwand-trace,
+# openwand-memory, openwand-llm, openwand-store, loro, rig, rmcp.
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

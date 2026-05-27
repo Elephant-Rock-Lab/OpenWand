@@ -1,0 +1,29 @@
+[package]
+name = "openwand-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "openwand"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+dioxus = { version = "0.7", features = ["desktop"] }
+openwand-core = { workspace = true }
+openwand-session = { workspace = true }
+openwand-memory = { workspace = true }
+openwand-tools = { workspace = true }
+openwand-mcp-pool = { workspace = true }
+openwand-policy = { workspace = true }
+openwand-llm = { workspace = true }
+openwand-skills = { workspace = true }
+openwand-goals = { workspace = true }
+openwand-content = { workspace = true }

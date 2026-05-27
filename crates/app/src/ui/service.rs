@@ -4,26 +4,43 @@
 //! This is the composition boundary where store types become UI types.
 
 use crate::ui::dto::{
-    CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView,
+    CreateSessionRequest, UiMessageRole, UiSessionSummary, UiSessionView,
 };
+use crate::ui::run_bridge;
+use crate::ui::run_dto::{UiRunState, UiRunStatus};
+use openwand_core::mode::InteractionMode;
 use openwand_core::SessionId;
+use openwand_llm::LlmTarget;
 use openwand_store::{
     NewSessionRecord, SessionListFilter, SessionRegistryStore, SessionRegistryUpdate,
 };
+use openwand_session::config::RunConfig;
+use openwand_session::runner::SessionRunner;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Error type for UI session operations.
 #[derive(Debug, thiserror::Error)]
 pub enum UiServiceError {
     #[error("Session not found: {0}")]
     NotFound(String),
+    #[error("Run already active for session: {0}")]
+    RunAlreadyActive(String),
     #[error("Store error: {0}")]
     Store(#[from] openwand_store::StoreError),
+    #[error("Session error: {0}")]
+    Session(#[from] openwand_session::SessionError),
     #[error("Internal: {0}")]
     Internal(String),
 }
 
-/// The UI session service. Wraps the store registry and adds UI logic.
+/// Handle to an active run. UI polls the shared state.
+pub struct RunHandle {
+    pub state: Arc<std::sync::Mutex<UiRunState>>,
+    pub cancellation: CancellationToken,
+}
+
+/// The UI session service. Wraps the store registry and coordinates runs.
 pub struct UiSessionService {
     registry: Arc<dyn SessionRegistryStore>,
 }
@@ -99,18 +116,8 @@ impl UiSessionService {
             .map_err(UiServiceError::Store)?
             .ok_or_else(|| UiServiceError::NotFound(session_id.to_string()))?;
 
-        // Update last_opened_at
-        let now = chrono::Utc::now().timestamp();
-        let update = SessionRegistryUpdate {
-            session_id: session_id.to_string(),
-            // We'd like to update last_opened_at but our current schema doesn't
-            // have it in the update struct. For now, just touch updated_at.
-            ..Default::default()
-        };
-        let _ = self.registry.update_session(update);
-
-        // For 02b-2, we return an empty message list.
-        // Full trace→message replay belongs in 02b-4.
+        // For 02b-2/3, messages come from runner's Loro state when available.
+        // Without a runner, return empty.
         let messages = Vec::new();
 
         Ok(UiSessionView {
@@ -129,6 +136,66 @@ impl UiSessionService {
             provider: record.provider,
             base_url: record.base_url,
             working_directory: record.working_directory,
+        })
+    }
+
+    /// Start a live run for a session. Returns a RunHandle for polling state.
+    ///
+    /// This creates a SessionRunner, wires the event bridge, and spawns the
+    /// run_turn in a background task. The UI polls `handle.state` for updates.
+    pub async fn start_run(
+        &self,
+        session_id: &str,
+        user_text: String,
+        llm_target: LlmTarget,
+        runner: Arc<SessionRunner>,
+    ) -> Result<RunHandle, UiServiceError> {
+        // Check run lock via try_run — if runner has an active run, it fails
+        let cancellation = CancellationToken::new();
+
+        // Set up shared state
+        let state = Arc::new(std::sync::Mutex::new(UiRunState::new_running()));
+
+        // Subscribe to runner events
+        let rx = runner.subscribe();
+
+        // Start bridge
+        run_bridge::start_bridge(rx, Arc::clone(&state), cancellation.clone());
+
+        // Build run config
+        let config = RunConfig {
+            max_steps: 25,
+            mode: InteractionMode::Direct,
+            working_directory: ".".into(),
+            system_prompt: None,
+            llm_target: Some(llm_target),
+        };
+
+        // Spawn the run in background
+        let runner = Arc::clone(&runner);
+        let session_id_owned = session_id.to_string();
+        let state_clone = Arc::clone(&state);
+        tokio::spawn(async move {
+            match runner.run_turn(user_text, config).await {
+                Ok(_summary) => {
+                    let mut s = state_clone.lock().unwrap();
+                    if s.status == UiRunStatus::Running {
+                        s.status = UiRunStatus::Completed;
+                    }
+                }
+                Err(e) => {
+                    let mut s = state_clone.lock().unwrap();
+                    s.status = UiRunStatus::Failed;
+                    s.error = Some(e.to_string());
+                }
+            }
+            // Update registry
+            // TODO: update last_message_preview from registry
+        });
+
+        Ok(RunHandle {
+            state,
+            cancellation,
         })
     }
 }

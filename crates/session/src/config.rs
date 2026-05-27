@@ -8,6 +8,9 @@ pub struct RunConfig {
     pub mode: InteractionMode,
     pub working_directory: String,
     pub system_prompt: Option<String>,
+    /// LLM target — provider, model, base_url, api_key.
+    /// Session runner passes this to the LLM client.
+    pub llm_target: Option<openwand_llm::LlmTarget>,
 }
 
 impl Default for RunConfig {
@@ -17,6 +20,7 @@ impl Default for RunConfig {
             mode: InteractionMode::Conversational,
             working_directory: ".".into(),
             system_prompt: None,
+            llm_target: None,
         }
     }
 }

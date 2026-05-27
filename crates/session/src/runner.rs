@@ -292,14 +292,14 @@ impl SessionRunner {
             tool_defs.iter().map(|t| tool_def_to_llm_tool(t)).collect();
 
         Ok(LlmRequest {
-            target: LlmTarget {
+            target: config.llm_target.clone().unwrap_or(LlmTarget {
                 provider: openwand_llm::LlmProvider::Custom {
                     name: "mock".into(),
                 },
                 model: "mock".into(),
                 base_url: None,
                 api_key: None,
-            },
+            }),
             messages: llm_messages,
             system_prompt: config.system_prompt.clone().unwrap_or_default(),
             tools: llm_tools,

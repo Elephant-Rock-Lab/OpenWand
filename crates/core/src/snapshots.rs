@@ -57,6 +57,41 @@ pub struct PromptAssemblySnapshot {
     pub working_directory: String,
 }
 
+/// Maximum size of approval context arguments in canonical JSON bytes.
+/// Arguments exceeding this cap are blocked fail-closed before suspension.
+pub const MAX_APPROVAL_CONTEXT_ARG_BYTES: usize = 1_048_576; // 1 MiB
+
+/// Full context snapshot for a suspended tool approval.
+///
+/// Embedded in `ToolEvent::Suspended` to enable crash recovery.
+/// After restart, the approval UI and tool execution can be reconstructed
+/// from this snapshot alone, without requiring any in-memory state.
+///
+/// Arguments are inline only in Wave 03d, capped at `MAX_APPROVAL_CONTEXT_ARG_BYTES`.
+/// Blob-backed argument storage is a future enhancement.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApprovalContextSnapshot {
+    pub approval_request_id: crate::ApprovalRequestId,
+    pub gate_id: crate::GateId,
+    pub step: u64,
+    pub tool_call_id: crate::ToolCallId,
+    pub tool_name: String,
+    /// Full re-executable arguments. Required for restart recovery.
+    pub arguments: serde_json::Value,
+    /// Hash of canonicalized arguments for UI verification and audit.
+    pub args_hash: String,
+    pub declared_effect: crate::ToolEffect,
+    pub risk_level: crate::RiskLevelSnapshot,
+    pub confirmation_level: crate::ConfirmationLevel,
+    pub reason_code: String,
+    pub policy_summary: String,
+    pub requested_action_summary: String,
+    pub rollback_plan: Option<String>,
+    /// Optional future-proof metadata, not used for authority.
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
 /// Serializable error summary for trace events.
 /// Only used when an error needs to be persisted in a trace entry.
 /// Not a replacement for crate-specific error types.
@@ -147,6 +182,37 @@ mod tests {
             recoverable: true,
         };
         roundtrip(&snap);
+    }
+
+    #[test]
+    fn approval_context_snapshot_roundtrip() {
+        let snap = ApprovalContextSnapshot {
+            approval_request_id: crate::ApprovalRequestId::new(),
+            gate_id: crate::GateId::new(),
+            step: 1,
+            tool_call_id: crate::ToolCallId::new(),
+            tool_name: "local__file_write".into(),
+            arguments: serde_json::json!({"path": "test.txt", "content": "hello"}),
+            args_hash: "sha256:abc123".into(),
+            declared_effect: crate::ToolEffect::Write,
+            risk_level: crate::RiskLevelSnapshot::Medium,
+            confirmation_level: crate::ConfirmationLevel::Approve,
+            reason_code: "write-requires-approve".into(),
+            policy_summary: "Write tool requires approval".into(),
+            requested_action_summary: "Write to test.txt".into(),
+            rollback_plan: Some("Delete test.txt".into()),
+            metadata: serde_json::Value::Null,
+        };
+        roundtrip(&snap);
+    }
+
+    #[test]
+    fn approval_context_snapshot_backward_compat() {
+        // Old serialized ApprovalContextSnapshot without metadata field
+        // should deserialize with metadata = Value::Null via #[serde(default)]
+        let json = r#"{"approval_request_id":"ar_1","gate_id":"g_1","step":1,"tool_call_id":"tc_1","tool_name":"t","arguments":{},"args_hash":"h","declared_effect":"Write","risk_level":"Medium","confirmation_level":"Approve","reason_code":"r","policy_summary":"s","requested_action_summary":"a","rollback_plan":null}"#;
+        let snap: ApprovalContextSnapshot = serde_json::from_str(json).unwrap();
+        assert!(snap.metadata.is_null());
     }
 
     #[test]

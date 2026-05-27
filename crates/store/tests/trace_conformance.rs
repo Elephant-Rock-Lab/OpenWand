@@ -422,6 +422,8 @@ async fn stored_event_deref_exposes_core_methods() {
     let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
         tool_call_id: ToolCallId::new(),
         tool_name: "rm_rf".into(),
+        approval_request_id: None,
+        reason: None,
     });
     let stored = StoredEvent::from(event);
 

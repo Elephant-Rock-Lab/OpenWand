@@ -18,6 +18,7 @@ pub mod error;
 pub mod loro_state;
 pub mod message;
 pub mod mutation;
+pub mod persistence;
 pub mod phase;
 pub mod projector;
 pub mod runner;

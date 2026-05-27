@@ -153,6 +153,106 @@ impl LoroSessionState {
             _ => Ok(false),
         }
     }
+
+    // ---- Approval state projection ----
+
+    /// Set waiting_approval state in Loro from a recovered approval context.
+    /// The UI can reconstruct the approval prompt from this data.
+    pub fn set_waiting_approval(
+        &self,
+        context: &openwand_core::snapshots::ApprovalContextSnapshot,
+        reason: &str,
+    ) -> Result<(), String> {
+        let root = self.doc.get_map("session");
+
+        // Store as a nested map under "waiting_approval"
+        let map = root
+            .insert_container("waiting_approval", LoroMap::new())
+            .map_err(|e| e.to_string())?;
+
+        map.insert("approval_request_id", context.approval_request_id.as_str())
+            .map_err(|e| e.to_string())?;
+        map.insert("tool_call_id", context.tool_call_id.as_str())
+            .map_err(|e| e.to_string())?;
+        map.insert("tool_name", context.tool_name.as_str())
+            .map_err(|e| e.to_string())?;
+        map.insert("reason", reason)
+            .map_err(|e| e.to_string())?;
+
+        // Store the full context as JSON string for UI reconstruction
+        let context_json = serde_json::to_string(&context)
+            .map_err(|e| e.to_string())?;
+        map.insert("context_json", context_json.as_str())
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
+    /// Clear waiting_approval state (after approval or rejection).
+    pub fn clear_waiting_approval(&self) -> Result<(), String> {
+        let root = self.doc.get_map("session");
+        root.delete("waiting_approval").map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get the current waiting approval as a UI model, if any.
+    pub fn get_waiting_approval(
+        &self,
+    ) -> Result<Option<crate::approval_recovery::ApprovalUiModel>, String> {
+        let root = self.doc.get_map("session");
+        let deep = root.get_deep_value();
+
+        let wa = match deep.get_by_key("waiting_approval") {
+            Some(loro::LoroValue::Map(m)) => m,
+            _ => return Ok(None),
+        };
+
+        let context_json_str = match wa.get("context_json") {
+            Some(loro::LoroValue::String(s)) => s.as_str(),
+            _ => return Ok(None),
+        };
+
+        let context: openwand_core::snapshots::ApprovalContextSnapshot =
+            serde_json::from_str(context_json_str).map_err(|e| e.to_string())?;
+
+        Ok(Some(crate::approval_recovery::ApprovalUiModel::from_context(&context)))
+    }
+
+    /// Set recovery-blocked state. Session is loadable but read-only for execution.
+    pub fn set_recovery_blocked(&self, reason: &str, count: usize) -> Result<(), String> {
+        let root = self.doc.get_map("session");
+
+        let map = root
+            .insert_container("recovery_blocked", LoroMap::new())
+            .map_err(|e| e.to_string())?;
+
+        map.insert("reason", reason)
+            .map_err(|e| e.to_string())?;
+        map.insert("count", count as i64)
+            .map_err(|e| e.to_string())?;
+
+        // Clear any waiting approval since we're blocked
+        let _ = self.clear_waiting_approval();
+
+        Ok(())
+    }
+
+    /// Check if session is recovery-blocked.
+    pub fn is_recovery_blocked(&self) -> Result<bool, String> {
+        let root = self.doc.get_map("session");
+        let deep = root.get_deep_value();
+        match deep.get_by_key("recovery_blocked") {
+            Some(loro::LoroValue::Map(_)) => Ok(true),
+            _ => Ok(false),
+        }
+    }
+
+    /// Clear recovery-blocked state.
+    pub fn clear_recovery_blocked(&self) -> Result<(), String> {
+        let root = self.doc.get_map("session");
+        root.delete("recovery_blocked").map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 fn extract_str(value: &loro::LoroValue) -> Option<&str> {

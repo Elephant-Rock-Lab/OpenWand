@@ -26,3 +26,13 @@ pub struct UiMemoryPanel {
     pub active_count: usize,
     pub records: Vec<UiMemoryRecord>,
 }
+
+impl UiMemoryPanel {
+    pub fn empty() -> Self {
+        Self {
+            total_records: 0,
+            active_count: 0,
+            records: vec![],
+        }
+    }
+}

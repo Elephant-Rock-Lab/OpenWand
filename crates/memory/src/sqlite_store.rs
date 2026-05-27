@@ -463,13 +463,35 @@ impl MemoryStore for SqliteMemoryStore {
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare list: {e}")))?;
 
-        let records = stmt
+        let records: Vec<MemoryRecord> = stmt
             .query_map([], |row| Ok(Self::row_to_record(row)))
             .map_err(|e| MemoryError::QueryFailed(format!("list: {e}")))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| MemoryError::QueryFailed(format!("collect: {e}")))?;
 
-        Ok(records)
+        // Populate source episode/trace IDs for each record
+        let mut populated = Vec::new();
+        for mut record in records {
+            let mut src_stmt = conn
+                .prepare(
+                    "SELECT episode_id, source_trace_id FROM memory_record_source WHERE record_id = ?1",
+                )
+                .map_err(|e| MemoryError::QueryFailed(format!("prepare sources: {e}")))?;
+
+            let sources: Vec<(String, String)> = src_stmt
+                .query_map(rusqlite::params![record.record_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+                .map_err(|e| MemoryError::QueryFailed(format!("sources: {e}")))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| MemoryError::QueryFailed(format!("collect sources: {e}")))?;
+
+            record.source_episode_ids = sources.iter().map(|(ep, _)| ep.clone()).collect();
+            record.source_trace_ids = sources.iter().map(|(_, tr)| tr.clone()).collect();
+            populated.push(record);
+        }
+
+        Ok(populated)
     }
 }
 
@@ -530,5 +552,15 @@ impl SqliteMemoryStore {
                 .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
             superseded_by: row.get(7).ok().flatten(),
         }
+    }
+}
+
+#[async_trait]
+impl crate::store::MemoryReadStore for SqliteMemoryStore {
+    async fn search(
+        &self,
+        query: MemoryQuery,
+    ) -> Result<RetrievalContext, MemoryError> {
+        self.search_records(query).await
     }
 }

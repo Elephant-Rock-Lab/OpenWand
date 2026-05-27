@@ -1,14 +1,15 @@
 //! OpenWand — Conjure results from intent.
 //!
-//! Wave 02a: CLI smoke test binary.
-//! Composes all crates and runs one real LLM turn through the spine.
+//! Wave 02g: CLI binary with real memory wiring.
 
 use anyhow::Result;
 use clap::Parser;
+use openwand_app::memory_coordinator::MemoryCoordinator;
 use openwand_core::SessionId;
 use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
 use openwand_llm::LlmClient;
-use openwand_memory::{MemoryError, MemoryQuery, MemoryReadStore, RetrievalContext};
+use openwand_memory::testing::KeywordExtractor;
+use openwand_memory::{MemoryExtractor, MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_policy::{BuiltinPolicyEngine, PolicyEngine};
 use openwand_session::config::RunConfig;
 use openwand_session::message::MessageContent;
@@ -18,7 +19,6 @@ use openwand_store::StoredEvent;
 use openwand_tools::composite::CompositeToolExecutor;
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::TraceStore;
-use async_trait::async_trait;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
@@ -44,14 +44,41 @@ struct Args {
     message: Option<String>,
 }
 
-/// Stub memory store for smoke test — returns empty context.
-struct StubMemoryStore;
-
-#[async_trait]
-impl MemoryReadStore for StubMemoryStore {
-    async fn search(&self, _query: MemoryQuery) -> std::result::Result<RetrievalContext, MemoryError> {
-        Ok(RetrievalContext::empty())
-    }
+fn build_smoke_policy() -> BuiltinPolicyEngine {
+    BuiltinPolicyEngine::new(vec![
+        openwand_policy::PolicyRule {
+            id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
+            name: "Allow read-effect tools (smoke)".into(),
+            enabled: true,
+            priority: 0,
+            class: openwand_policy::RuleClass::BuiltinDefault,
+            matcher: openwand_policy::ToolMatcher::ToolEffect {
+                effect: openwand_core::tool_vocab::ToolEffect::Read,
+            },
+            effect: openwand_policy::PolicyEffect::Allow {
+                risk: openwand_core::risk::RiskLevelSnapshot::Low,
+                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
+            },
+            reason_code: "smoke_allow_read".into(),
+            summary: "Allow read-effect tool calls for smoke testing.".into(),
+        },
+        openwand_policy::PolicyRule {
+            id: openwand_policy::PolicyRuleId("smoke-allow-search".into()),
+            name: "Allow search-effect tools (smoke)".into(),
+            enabled: true,
+            priority: 0,
+            class: openwand_policy::RuleClass::BuiltinDefault,
+            matcher: openwand_policy::ToolMatcher::ToolEffect {
+                effect: openwand_core::tool_vocab::ToolEffect::Search,
+            },
+            effect: openwand_policy::PolicyEffect::Allow {
+                risk: openwand_core::risk::RiskLevelSnapshot::Low,
+                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
+            },
+            reason_code: "smoke_allow_search".into(),
+            summary: "Allow search-effect tool calls for smoke testing.".into(),
+        },
+    ])
 }
 
 #[tokio::main]
@@ -60,58 +87,24 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    // 1. Open SQLite store
+    // 1. Open SQLite store (trace + registry)
     let store = SqliteStore::open(SqliteStoreConfig::file(&args.db)).await?;
     let trace: Arc<dyn TraceStore<StoredEvent>> = Arc::new(store);
 
-    // 2. Create LLM client
+    // 2. Open SQLite memory store (same file, own migrations)
+    let memory_store = SqliteMemoryStore::open(std::path::Path::new(&args.db))?;
+    let memory_read: Arc<dyn MemoryReadStore> = Arc::new(memory_store);
+
+    // 3. Create LLM client
     let llm: Arc<dyn LlmClient> = Arc::new(OpenAiCompatibleClient::new());
 
-    // 3. Create tools executor (local tools only, no MCP)
+    // 4. Create tools executor (local tools only)
     let tools: Arc<dyn ToolExecutor> = Arc::new(
         CompositeToolExecutor::local_only(openwand_tools::local::batch1_local_tools())
     );
 
-    // 4. Create policy engine (smoke-test profile: Read + Search only)
-    let allow_read_rule = openwand_policy::PolicyRule {
-        id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
-        name: "Allow read-effect tools (smoke)".into(),
-        enabled: true,
-        priority: 0,
-        class: openwand_policy::RuleClass::BuiltinDefault,
-        matcher: openwand_policy::ToolMatcher::ToolEffect {
-            effect: openwand_core::tool_vocab::ToolEffect::Read,
-        },
-        effect: openwand_policy::PolicyEffect::Allow {
-            risk: openwand_core::risk::RiskLevelSnapshot::Low,
-            confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-        },
-        reason_code: "smoke_allow_read".into(),
-        summary: "Allow read-effect tool calls for smoke testing.".into(),
-    };
-    let allow_search_rule = openwand_policy::PolicyRule {
-        id: openwand_policy::PolicyRuleId("smoke-allow-search".into()),
-        name: "Allow search-effect tools (smoke)".into(),
-        enabled: true,
-        priority: 0,
-        class: openwand_policy::RuleClass::BuiltinDefault,
-        matcher: openwand_policy::ToolMatcher::ToolEffect {
-            effect: openwand_core::tool_vocab::ToolEffect::Search,
-        },
-        effect: openwand_policy::PolicyEffect::Allow {
-            risk: openwand_core::risk::RiskLevelSnapshot::Low,
-            confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-        },
-        reason_code: "smoke_allow_search".into(),
-        summary: "Allow search-effect tool calls for smoke testing.".into(),
-    };
-    let policy: Arc<dyn PolicyEngine> = Arc::new(BuiltinPolicyEngine::new(vec![
-        allow_read_rule,
-        allow_search_rule,
-    ]));
-
-    // 5. Create memory store (stub)
-    let memory: Arc<dyn MemoryReadStore> = Arc::new(StubMemoryStore);
+    // 5. Create policy engine (Read + Search only)
+    let policy: Arc<dyn PolicyEngine> = Arc::new(build_smoke_policy());
 
     // 6. Get user message
     let message = args.message.unwrap_or_else(|| {
@@ -125,18 +118,26 @@ async fn main() -> Result<()> {
     println!("Provider: {}", args.base_url);
     println!("Model:    {}", args.model);
     println!("Database: {}", args.db);
+    println!("Memory:   SQLite (same file)");
     println!();
     println!("User: {message}");
     println!("────────────────────────────────────────────");
 
     // 7. Create session runner
+    let session_id = SessionId::new();
+
+    // Need a second trace store connection for the coordinator
+    let trace_for_coordinator: Arc<dyn TraceStore<StoredEvent>> = Arc::new(
+        SqliteStore::open(SqliteStoreConfig::file(&args.db)).await?
+    );
+
     let runner = SessionRunner::new(
-        SessionId::new(),
+        session_id.clone(),
         trace,
         llm,
         tools,
         policy,
-        memory,
+        memory_read.clone(),
         std::env::current_dir()?.to_string_lossy().to_string(),
     );
 
@@ -151,7 +152,7 @@ async fn main() -> Result<()> {
         base_url: Some(args.base_url.clone()),
         api_key: args.api_key.clone(),
     });
-    let result = runner.run_turn(message, run_config).await?;
+    let result = runner.run_turn(message.clone(), run_config).await?;
 
     println!("────────────────────────────────────────────");
     println!("✓ Turn complete");
@@ -160,7 +161,29 @@ async fn main() -> Result<()> {
     println!("  Tools called:  {}", result.tools_executed);
     println!("  Recoverable:   {}", result.recoverable);
 
-    // 9. Show Loro projection
+    // 9. Run memory projection after the turn
+    let memory_for_coordinator: Arc<dyn MemoryStore> = {
+        // Re-open memory store for write access through the store trait
+        Arc::new(SqliteMemoryStore::open(std::path::Path::new(&args.db))?)
+    };
+    let extractor: Arc<dyn MemoryExtractor> = Arc::new(KeywordExtractor);
+    let coordinator = MemoryCoordinator::new(
+        memory_for_coordinator,
+        extractor,
+        trace_for_coordinator,
+    );
+
+    let projection = coordinator.project_after_run(&session_id).await;
+    println!();
+    println!("Memory projection:");
+    println!("  Episodes projected:  {}", projection.episodes_projected);
+    println!("  Candidates extracted: {}", projection.candidates_extracted);
+    println!("  Records accepted:    {}", projection.records_accepted);
+    if !projection.errors.is_empty() {
+        println!("  Errors: {:?}", projection.errors);
+    }
+
+    // 10. Show Loro projection
     let messages = runner.loro_state().messages().map_err(|e| anyhow::anyhow!("{e}"))?;
     println!();
     println!("Messages ({} total):", messages.len());
@@ -182,7 +205,7 @@ async fn main() -> Result<()> {
         println!("  {role}: {content_preview}");
     }
 
-    // 10. Show stale status
+    // 11. Show stale status
     let stale = runner.loro_state().projection_is_stale().map_err(|e| anyhow::anyhow!("{e}"))?;
     println!();
     if stale {

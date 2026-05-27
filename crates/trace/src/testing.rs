@@ -65,6 +65,13 @@ impl<E> InMemoryTraceStore<E> {
     fn stream_key(stream_id: &TraceStreamId) -> String {
         format!("{:?}:{}", stream_id.scope, stream_id.id)
     }
+
+    /// Return event_kind strings for all stored entries.
+    /// Lightweight inspection for test assertions.
+    pub async fn event_kinds(&self) -> Vec<String> {
+        let state = self.inner.read().await;
+        state.entries.iter().map(|e| e.event_kind.clone()).collect()
+    }
 }
 
 impl<E> Default for InMemoryTraceStore<E> {

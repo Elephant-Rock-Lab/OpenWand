@@ -17,6 +17,9 @@ pub enum SessionError {
     #[error("a run is already active for this session")]
     RunAlreadyActive,
 
+    #[error("no pending approval to resume")]
+    NoPendingApproval,
+
     #[error("session cancelled")]
     Cancelled,
 

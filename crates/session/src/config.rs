@@ -40,4 +40,8 @@ pub enum RunStopReason {
     MaxStepsReached,
     ToolBlocked,
     Cancelled,
+    /// Runner paused waiting for user approval of a gated tool.
+    AwaitingApproval,
+    /// Tool was denied by user; not executed.
+    ToolDenied,
 }

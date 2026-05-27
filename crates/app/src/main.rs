@@ -11,9 +11,9 @@ use openwand_llm::LlmClient;
 use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{MemoryExtractor, MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_policy::{BuiltinPolicyEngine, PolicyEngine};
-use openwand_session::config::RunConfig;
+use openwand_session::config::{RunConfig, RunStopReason, RunSummary};
 use openwand_session::message::MessageContent;
-use openwand_session::runner::SessionRunner;
+use openwand_session::runner::{ApprovalDecision, SessionRunner};
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::StoredEvent;
 use openwand_tools::composite::CompositeToolExecutor;
@@ -158,9 +158,9 @@ async fn main() -> Result<()> {
         std::env::current_dir()?.to_string_lossy().to_string(),
     );
 
-    // 8. Run the turn
+    // 8. Configure run
     let mut run_config = RunConfig::default();
-    run_config.mode = openwand_core::mode::InteractionMode::Direct;
+    run_config.mode = openwand_core::mode::InteractionMode::Conversational;
     run_config.llm_target = Some(openwand_llm::LlmTarget {
         provider: openwand_llm::LlmProvider::Custom {
             name: "lm-studio".into(),
@@ -169,7 +169,44 @@ async fn main() -> Result<()> {
         base_url: Some(args.base_url.clone()),
         api_key: args.api_key.clone(),
     });
-    let result = runner.run_turn(message.clone(), run_config).await?;
+    let result = runner.run_turn(message.clone(), run_config.clone()).await?;
+
+    // 8b. Handle approval flow
+    let result = if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
+        println!("────────────────────────────────────────────");
+        if let Some(pending) = runner.pending_approval().await {
+            println!("⚠ Tool '{}' requires your approval.", pending.tool_call.name);
+            println!("  Reason: {}", pending.gate_evaluation.summary);
+            println!("  Approve? [y/N] ");
+
+            // Read user input
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap_or_default();
+            let approved = input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes";
+
+            let decision = if approved {
+                ApprovalDecision::Approved
+            } else {
+                ApprovalDecision::Rejected
+            };
+
+            let approval_result = runner.resume_with_approval(decision, run_config).await?;
+            println!("  → {}", if approved { "Approved" } else { "Rejected" });
+            if let Some(tool_result) = &approval_result.tool_result {
+                println!("  Tool result: {}", tool_result.output);
+            }
+        }
+
+        // Return a synthetic result
+        RunSummary {
+            stop_reason: RunStopReason::Natural,
+            steps_completed: result.steps_completed,
+            tools_executed: result.tools_executed + 1,
+            recoverable: true,
+        }
+    } else {
+        result
+    };
 
     println!("────────────────────────────────────────────");
     println!("✓ Turn complete");

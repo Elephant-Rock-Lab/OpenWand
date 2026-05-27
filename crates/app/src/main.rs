@@ -107,7 +107,16 @@ async fn main() -> Result<()> {
     );
 
     // 8. Run the turn
-    let result = runner.run_turn(message, RunConfig::default()).await?;
+    let mut run_config = RunConfig::default();
+    run_config.llm_target = Some(openwand_llm::LlmTarget {
+        provider: openwand_llm::LlmProvider::Custom {
+            name: "lm-studio".into(),
+        },
+        model: args.model.clone(),
+        base_url: Some(args.base_url.clone()),
+        api_key: args.api_key.clone(),
+    });
+    let result = runner.run_turn(message, run_config).await?;
 
     println!("────────────────────────────────────────────");
     println!("✓ Turn complete");

@@ -64,6 +64,12 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
             crate::backends::sqlite::schema::MIGRATION_0001_CHECKSUM,
             crate::backends::sqlite::schema::MIGRATION_0001_SQL,
         ),
+        (
+            2,
+            "0002_session_registry",
+            crate::backends::sqlite::schema::MIGRATION_0002_CHECKSUM,
+            crate::backends::sqlite::schema::MIGRATION_0002_SQL,
+        ),
     ];
 
     for &(version, name, checksum, sql) in migrations {
@@ -96,7 +102,7 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
 
 /// Verify that all required tables exist.
 pub fn verify_schema(conn: &Connection) -> Result<bool, String> {
-    let required = ["trace_entry", "trace_relation", "trace_blob", "openwand_migration"];
+    let required = ["trace_entry", "trace_relation", "trace_blob", "session_registry", "openwand_migration"];
     for table in &required {
         let exists: bool = conn
             .query_row(

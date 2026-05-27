@@ -10,6 +10,10 @@
 pub mod backends;
 pub mod envelope;
 pub mod error;
+pub mod registry;
+pub mod registry_store;
 
 pub use envelope::StoredEvent;
 pub use error::StoreError;
+pub use registry::{NewSessionRecord, SessionListFilter, SessionRecord, SessionRegistryUpdate, SessionSummary};
+pub use registry_store::SessionRegistryStore;

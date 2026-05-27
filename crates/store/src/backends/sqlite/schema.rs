@@ -6,6 +6,9 @@
 /// Computed as SHA-256 of the raw SQL text.
 pub const MIGRATION_0001_CHECKSUM: &str = "sha256:1aed65b7d58cd04ae290eb047bf39cea35428b8acd30f6bf5f6be5d1b9286715";
 
+/// Checksum for session_registry migration.
+pub const MIGRATION_0002_CHECKSUM: &str = "sha256:pending";
+
 /// Migration 0001: trace tables.
 pub const MIGRATION_0001_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS trace_entry (
@@ -71,4 +74,41 @@ CREATE TABLE IF NOT EXISTS trace_blob (
     compression   TEXT,
     created_at    INTEGER NOT NULL
 );
+"#;
+
+/// Migration 0002: session registry (navigation metadata, not authority).
+pub const MIGRATION_0002_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS session_registry (
+    session_id              TEXT PRIMARY KEY,
+    title                   TEXT,
+    status                  TEXT NOT NULL DEFAULT 'active',
+
+    created_at              INTEGER NOT NULL,
+    updated_at              INTEGER NOT NULL,
+    last_opened_at          INTEGER,
+
+    provider                TEXT,
+    model                   TEXT,
+    base_url                TEXT,
+    working_directory       TEXT,
+
+    interaction_mode        TEXT NOT NULL DEFAULT 'conversational',
+    current_phase           TEXT,
+    current_step            INTEGER NOT NULL DEFAULT 0,
+
+    last_message_preview    TEXT,
+    last_trace_id           TEXT,
+    last_global_sequence    INTEGER,
+
+    snapshot_key            TEXT,
+    projection_stale        INTEGER NOT NULL DEFAULT 0,
+
+    metadata_json           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_registry_updated
+    ON session_registry(updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_session_registry_status
+    ON session_registry(status);
 "#;

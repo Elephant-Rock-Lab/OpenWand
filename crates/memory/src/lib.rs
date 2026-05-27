@@ -13,6 +13,11 @@ pub mod retrieval;
 pub mod store;
 pub mod types;
 
+#[cfg(feature = "sqlite")]
+pub mod sqlite_schema;
+#[cfg(feature = "sqlite")]
+pub mod sqlite_store;
+
 #[cfg(feature = "testing")]
 pub mod testing;
 
@@ -24,3 +29,6 @@ pub use query::*;
 pub use retrieval::*;
 pub use store::*;
 pub use types::*;
+
+#[cfg(feature = "sqlite")]
+pub use sqlite_store::SqliteMemoryStore;

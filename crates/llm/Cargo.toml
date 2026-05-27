@@ -13,9 +13,8 @@ thiserror = { workspace = true }
 futures = "0.3"
 chrono = { workspace = true, features = ["serde"] }
 tracing = { workspace = true }
-
-# No rig-core yet — 01b proves the OpenWand contract first.
-# rig-core adapter comes later for manual smoke tests.
+reqwest = { version = "0.12", features = ["json", "stream"], optional = true }
+tokio = { workspace = true, optional = true }
 
 # No dependency on openwand-session, openwand-trace, openwand-memory,
 # openwand-policy, openwand-tools, openwand-mcp-pool, openwand-store,
@@ -24,6 +23,7 @@ tracing = { workspace = true }
 [features]
 default = []
 testing = []
+openai-compatible = ["reqwest", "tokio"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

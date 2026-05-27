@@ -43,7 +43,7 @@ impl SqliteStoreConfig {
 
 /// SQLite-backed trace store.
 pub struct SqliteStore {
-    writer: SqliteWriter,
+    pub(crate) writer: SqliteWriter,
 }
 
 impl SqliteStore {

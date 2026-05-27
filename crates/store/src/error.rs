@@ -16,6 +16,12 @@ pub enum StoreError {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    #[error("Read error: {message}")]
+    Read { message: String },
+
+    #[error("Write error: {message}")]
+    Write { message: String },
+
     #[error("Writer channel closed")]
     WriterClosed,
 }

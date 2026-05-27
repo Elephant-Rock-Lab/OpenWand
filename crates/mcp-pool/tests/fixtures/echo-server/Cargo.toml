@@ -1,0 +1,16 @@
+[package]
+name = "openwand-echo-mcp-server"
+version = "0.1.0"
+edition = "2021"
+description = "Test fixture: minimal stdio MCP echo server for CI"
+
+[dependencies]
+rmcp = { version = "=1.7.0", default-features = false, features = [
+  "server",
+  "schemars",
+  "macros",
+  "transport-worker",
+] }
+serde = { version = "1", features = ["derive"] }
+schemars = "1"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "io-std"] }

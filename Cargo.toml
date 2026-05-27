@@ -14,6 +14,7 @@ members = [
     "crates/goals",
     "crates/content",
     "crates/app",
+    "crates/mcp-pool/tests/fixtures/echo-server",
 ]
 
 [workspace.package]

@@ -700,15 +700,21 @@ impl SessionRunner {
 
     async fn assemble_llm_request(&self, config: &RunConfig) -> Result<LlmRequest, SessionError> {
         let last_user_text = self.loro_state.last_user_message_text().unwrap_or_default();
-        let memory_context = if !last_user_text.is_empty() {
-            self.memory
-                .search(MemoryQuery::new(&last_user_text))
-                .await
-                .unwrap_or_else(|_| openwand_memory::RetrievalContext::empty())
+
+        // 02k: Use pre-assembled memory prompt if available, fall back to raw search.
+        let memory_block = if let Some(ref inputs) = config.memory_prompt_inputs {
+            inputs.to_prompt_block()
         } else {
-            openwand_memory::RetrievalContext::empty()
+            let memory_context = if !last_user_text.is_empty() {
+                self.memory
+                    .search(MemoryQuery::new(&last_user_text))
+                    .await
+                    .unwrap_or_else(|_| openwand_memory::RetrievalContext::empty())
+            } else {
+                openwand_memory::RetrievalContext::empty()
+            };
+            memory_context.to_context_block()
         };
-        let memory_block = memory_context.to_context_block();
 
         let messages = self.loro_state.messages().map_err(SessionError::Internal)?;
         let llm_messages: Vec<openwand_llm::LlmMessage> = messages
@@ -737,7 +743,13 @@ impl SessionRunner {
                     "You are a helpful assistant with access to tools. When the user asks you to perform an action that can be fulfilled by one of your tools, call the tool instead of explaining how to do it manually.".to_string()
                 };
                 if let Some(ref block) = memory_block {
-                    base.push_str(&format!("\n\n## Retrieved Memory Context\n\n{}\n\nUse this context when relevant to the user's request.", block));
+                    if config.memory_prompt_inputs.is_some() {
+                        // 02k: provenance-tagged context from repo-consistency filtering
+                        base.push_str(&format!("\n\n{}\n\nUse verified memory as authoritative context. Treat memory history as superseded. Do not resolve memory conflicts without asking.", block));
+                    } else {
+                        // Legacy: raw retrieval context
+                        base.push_str(&format!("\n\n## Retrieved Memory Context\n\n{}\n\nUse this context when relevant to the user's request.", block));
+                    }
                 }
                 base
             }),

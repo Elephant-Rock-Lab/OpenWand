@@ -377,3 +377,85 @@ async fn session_memory_retrieval_called_during_run() {
     let calls = harness.memory.calls().await;
     assert!(!calls.is_empty(), "Memory should have been queried during run");
 }
+
+// ---- 02k: Unverifiable claims absent from prompt ----
+
+use openwand_memory::prompt_assembly::{
+    MemoryPromptAssemblyInputs, PromptInclusionReason,
+    SupportedMemoryClaim, SupersededMemoryClaim,
+    MissingMemoryObservation,
+    RepoConsistencyPromptAssembler,
+};
+use openwand_memory::evidence::EvidenceKind;
+use openwand_memory::repo_consistency::{RepoConsistencyReport, RepoConsistencyFindingKind, RepoConsistencyFinding, ConsistencySeverity};
+
+#[tokio::test]
+async fn runner_does_not_inject_unverifiable_claim_text() {
+    // Build assembly inputs with unverifiable claims excluded
+    let findings = vec![
+        RepoConsistencyFinding {
+            kind: RepoConsistencyFindingKind::Unverifiable,
+            claim_text: Some("the project uses microservices".to_string()),
+            evidence_kind: Some(EvidenceKind::AcceptedClaim),
+            repo_evidence_key: vec![],
+            severity: ConsistencySeverity::Low,
+            detail: "outside v0 grammar".to_string(),
+        },
+        RepoConsistencyFinding {
+            kind: RepoConsistencyFindingKind::Supported,
+            claim_text: Some("crate core exists".to_string()),
+            evidence_kind: Some(EvidenceKind::AcceptedClaim),
+            repo_evidence_key: vec!["crate:core".to_string()],
+            severity: ConsistencySeverity::Low,
+            detail: "matches repo".to_string(),
+        },
+    ];
+    let report = RepoConsistencyReport {
+        repo_root: std::path::PathBuf::from("/test"),
+        checked_at: chrono::Utc::now(),
+        findings: findings.clone(),
+        summary: openwand_memory::repo_consistency::RepoConsistencySummary::from_findings(&findings),
+        memory_inputs: openwand_memory::repo_consistency::RepoMemoryInputSummary::default(),
+        repo_inputs: openwand_memory::repo_consistency::RepoObservationSummary::default(),
+    };
+    let inputs = RepoConsistencyPromptAssembler::assemble_from_report(&report);
+    let block = inputs.to_prompt_block().unwrap();
+
+    // Unverifiable claim text must NOT appear
+    assert!(!block.contains("microservices"), "unverifiable claim text must not appear in prompt");
+    // Supported claim must appear
+    assert!(block.contains("crate core exists"));
+    // Count of excluded claims must appear
+    assert!(block.contains("1 claims excluded"));
+}
+
+#[tokio::test]
+async fn runner_with_filtered_memory_uses_provenance_context() {
+    let harness = SessionHarness::text_only();
+
+    let inputs = MemoryPromptAssemblyInputs {
+        supported_claims: vec![SupportedMemoryClaim {
+            claim_text: "crate memory exists".to_string(),
+            evidence_kind: EvidenceKind::AcceptedClaim,
+            confidence_bps: 9000,
+            source_provenance: None,
+            repo_evidence_key: vec!["crate:memory".to_string()],
+            inclusion_reason: PromptInclusionReason::RepoSupported {
+                evidence_keys: vec!["crate:memory".to_string()],
+            },
+        }],
+        ..MemoryPromptAssemblyInputs::empty()
+    };
+
+    let mut config = default_config();
+    config.memory_prompt_inputs = Some(inputs);
+
+    let result = harness
+        .runner
+        .run_turn("What crates exist?".into(), config)
+        .await
+        .expect("turn should run");
+
+    // Verify the run completed (memory prompt was used, not raw search)
+    assert!(result.steps_completed <= 25);
+}

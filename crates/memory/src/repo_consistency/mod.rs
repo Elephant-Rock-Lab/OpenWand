@@ -5,12 +5,14 @@
 
 mod claim_match;
 mod classify;
+mod detect_missing;
 mod memory_input;
 mod observe;
 mod report;
 
 pub use claim_match::*;
 pub use classify::*;
+pub use detect_missing::*;
 pub use memory_input::*;
 pub use observe::*;
 pub use report::*;

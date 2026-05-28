@@ -211,6 +211,86 @@ impl MemoryPromptAssemblyInputs {
             && self.missing_memory_gaps.is_empty()
             && self.unverifiable_claims_excluded == 0
     }
+
+    /// Format as a provenance-tagged prompt block.
+    /// Returns None if there is nothing to inject.
+    ///
+    /// Invariant: every prompt line can name:
+    /// 1. why it was included (inclusion provenance)
+    /// 2. whether it is current truth, historical context, conflict context, or a gap
+    pub fn to_prompt_block(&self) -> Option<String> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let mut sections = Vec::new();
+
+        // ## Verified Memory (only if non-empty)
+        if !self.supported_claims.is_empty() {
+            let mut lines = vec!["## Verified Memory".to_string()];
+            for claim in &self.supported_claims {
+                let keys = match &claim.inclusion_reason {
+                    PromptInclusionReason::RepoSupported { evidence_keys } => {
+                        if evidence_keys.is_empty() {
+                            "(not verified by repo)".to_string()
+                        } else {
+                            evidence_keys.join(", ")
+                        }
+                    }
+                    _ => "unknown".to_string(),
+                };
+                lines.push(format!("- {} [verified: {}]", claim.claim_text, keys));
+            }
+            sections.push(lines.join("\n"));
+        }
+
+        // ## Memory History (only if non-empty)
+        if !self.relevant_superseded_history.is_empty() {
+            let mut lines = vec!["## Memory History".to_string()];
+            lines.push("(These are superseded claims — NOT current truth)".to_string());
+            for claim in &self.relevant_superseded_history {
+                lines.push(format!("- {} [historical, superseded]", claim.claim_text));
+            }
+            sections.push(lines.join("\n"));
+        }
+
+        // ## Memory Conflicts (only if non-empty)
+        if !self.conflicts_for_user_or_model.is_empty() {
+            let mut lines = vec!["## Memory Conflicts".to_string()];
+            lines.push("(These claims conflict — do not treat any as authoritative)".to_string());
+            for group in &self.conflicts_for_user_or_model {
+                for claim in &group.claims {
+                    lines.push(format!("- {} [conflict: {}]", claim.claim_text, 
+                        if group.group_id.is_empty() { "unresolved" } else { &group.group_id }));
+                }
+            }
+            sections.push(lines.join("\n"));
+        }
+
+        // ## Context Gaps (only if non-empty)
+        if !self.missing_memory_gaps.is_empty() {
+            let mut lines = vec!["## Context Gaps".to_string()];
+            lines.push("(Repo observations with no memory claim — may need attention)".to_string());
+            for gap in &self.missing_memory_gaps {
+                lines.push(format!("- {} [TODO: {}]", gap.repo_evidence_key, gap.detail));
+            }
+            sections.push(lines.join("\n"));
+        }
+
+        // Unverifiable count (if any)
+        if self.unverifiable_claims_excluded > 0 {
+            sections.push(format!(
+                "({} claims excluded: outside verification scope)",
+                self.unverifiable_claims_excluded
+            ));
+        }
+
+        if sections.is_empty() {
+            None
+        } else {
+            Some(sections.join("\n\n"))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -399,5 +479,146 @@ mod tests {
             inputs.supported_claims[0].inclusion_reason,
             PromptInclusionReason::RepoSupported { ref evidence_keys } if evidence_keys.is_empty()
         ));
+    }
+
+    // --- Prompt formatting tests ---
+
+    #[test]
+    fn empty_inputs_returns_none_prompt_block() {
+        let inputs = MemoryPromptAssemblyInputs::empty();
+        assert!(inputs.to_prompt_block().is_none());
+    }
+
+    #[test]
+    fn supported_claim_appears_in_verified_section() {
+        let inputs = MemoryPromptAssemblyInputs {
+            supported_claims: vec![SupportedMemoryClaim {
+                claim_text: "crate core exists".to_string(),
+                evidence_kind: EvidenceKind::AcceptedClaim,
+                confidence_bps: 9000,
+                source_provenance: None,
+                repo_evidence_key: vec!["crate:core".to_string()],
+                inclusion_reason: PromptInclusionReason::RepoSupported {
+                    evidence_keys: vec!["crate:core".to_string()],
+                },
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("## Verified Memory"));
+        assert!(block.contains("crate core exists"));
+        assert!(block.contains("[verified: crate:core]"));
+    }
+
+    #[test]
+    fn superseded_claim_appears_under_history_header() {
+        let inputs = MemoryPromptAssemblyInputs {
+            relevant_superseded_history: vec![SupersededMemoryClaim {
+                claim_text: "old fact".to_string(),
+                source_provenance: None,
+                inclusion_reason: PromptInclusionReason::SupersededHistory,
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("## Memory History"));
+        assert!(block.contains("old fact"));
+        assert!(block.contains("NOT current truth"));
+    }
+
+    #[test]
+    fn conflict_appears_under_conflicts_header() {
+        let inputs = MemoryPromptAssemblyInputs {
+            conflicts_for_user_or_model: vec![MemoryConflictGroup {
+                claims: vec![ConflictPromptClaim {
+                    claim_text: "prefer tabs".to_string(),
+                    source_provenance: None,
+                }],
+                group_id: "cg1".to_string(),
+                inclusion_reason: PromptInclusionReason::ConflictReview,
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("## Memory Conflicts"));
+        assert!(block.contains("prefer tabs"));
+        assert!(block.contains("do not treat any as authoritative"));
+    }
+
+    #[test]
+    fn missing_gap_appears_as_todo_not_fact() {
+        let inputs = MemoryPromptAssemblyInputs {
+            missing_memory_gaps: vec![MissingMemoryObservation {
+                repo_evidence_key: "crate:tools".to_string(),
+                detail: "no claim for tools crate".to_string(),
+                severity: ConsistencySeverity::Medium,
+                inclusion_reason: PromptInclusionReason::MissingMemoryGap,
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("## Context Gaps"));
+        assert!(block.contains("crate:tools"));
+        assert!(block.contains("[TODO:"));
+    }
+
+    #[test]
+    fn unverifiable_count_appears_without_claim_text() {
+        let inputs = MemoryPromptAssemblyInputs {
+            unverifiable_claims_excluded: 3,
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("3 claims excluded: outside verification scope"));
+        // No section headers since no actual content
+        assert!(!block.contains("## Verified Memory"));
+        assert!(!block.contains("## Memory History"));
+    }
+
+    #[test]
+    fn no_empty_sections_in_output() {
+        let inputs = MemoryPromptAssemblyInputs {
+            supported_claims: vec![SupportedMemoryClaim {
+                claim_text: "test".to_string(),
+                evidence_kind: EvidenceKind::AcceptedClaim,
+                confidence_bps: 0,
+                source_provenance: None,
+                repo_evidence_key: vec!["k".to_string()],
+                inclusion_reason: PromptInclusionReason::RepoSupported {
+                    evidence_keys: vec!["k".to_string()],
+                },
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("## Verified Memory"));
+        assert!(!block.contains("## Memory History"));
+        assert!(!block.contains("## Memory Conflicts"));
+        assert!(!block.contains("## Context Gaps"));
+    }
+
+    #[test]
+    fn provenance_visible_in_output() {
+        let inputs = MemoryPromptAssemblyInputs {
+            supported_claims: vec![SupportedMemoryClaim {
+                claim_text: "crate memory exists".to_string(),
+                evidence_kind: EvidenceKind::AcceptedClaim,
+                confidence_bps: 8500,
+                source_provenance: Some(ProvenanceSnapshot::default()),
+                repo_evidence_key: vec!["crate:memory".to_string()],
+                inclusion_reason: PromptInclusionReason::RepoSupported {
+                    evidence_keys: vec!["crate:memory".to_string()],
+                },
+            }],
+            relevant_superseded_history: vec![SupersededMemoryClaim {
+                claim_text: "old claim".to_string(),
+                source_provenance: Some(ProvenanceSnapshot::default()),
+                inclusion_reason: PromptInclusionReason::SupersededHistory,
+            }],
+            ..MemoryPromptAssemblyInputs::empty()
+        };
+        let block = inputs.to_prompt_block().unwrap();
+        assert!(block.contains("[verified: crate:memory]"));
+        assert!(block.contains("[historical, superseded]"));
     }
 }

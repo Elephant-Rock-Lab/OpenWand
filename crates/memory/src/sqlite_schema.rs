@@ -56,3 +56,53 @@ CREATE TABLE IF NOT EXISTS memory_projection_checkpoint (
     updated_at       INTEGER NOT NULL
 );
 "#;
+
+/// Checksum for memory migration 0002.
+pub const MEMORY_MIGRATION_0002_CHECKSUM: &str = "sha256:pending";
+
+/// Migration 0002: ranking and provenance enrichment (additive only).
+pub const MEMORY_MIGRATION_0002_SQL: &str = r#"
+ALTER TABLE memory_record ADD COLUMN scope_kind TEXT;
+ALTER TABLE memory_record ADD COLUMN scope_payload TEXT;
+ALTER TABLE memory_record ADD COLUMN provenance_kind TEXT;
+ALTER TABLE memory_record ADD COLUMN evidence_bps INTEGER;
+ALTER TABLE memory_record ADD COLUMN repo TEXT;
+ALTER TABLE memory_record ADD COLUMN branch_col TEXT;
+"#;
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+
+    #[test]
+    fn migration_0002_sql_is_additive_only() {
+        // Every statement should be ALTER TABLE ADD COLUMN (no DROP, no CREATE)
+        for line in MEMORY_MIGRATION_0002_SQL.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            assert!(
+                trimmed.starts_with("ALTER TABLE"),
+                "Expected ALTER TABLE ADD COLUMN, got: {}",
+                trimmed
+            );
+            assert!(
+                trimmed.contains("ADD COLUMN"),
+                "Expected ADD COLUMN, got: {}",
+                trimmed
+            );
+        }
+    }
+
+    #[test]
+    fn migration_0002_adds_expected_columns() {
+        let sql = MEMORY_MIGRATION_0002_SQL;
+        assert!(sql.contains("scope_kind"));
+        assert!(sql.contains("scope_payload"));
+        assert!(sql.contains("provenance_kind"));
+        assert!(sql.contains("evidence_bps"));
+        assert!(sql.contains("repo"));
+        assert!(sql.contains("branch_col"));
+    }
+}

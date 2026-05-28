@@ -5,7 +5,10 @@
 
 use crate::extractor::MemoryExtractor;
 use crate::memory_store::MemoryStore;
-use crate::sqlite_schema::{MEMORY_MIGRATION_0001_CHECKSUM, MEMORY_MIGRATION_0001_SQL};
+use crate::sqlite_schema::{
+    MEMORY_MIGRATION_0001_CHECKSUM, MEMORY_MIGRATION_0001_SQL,
+    MEMORY_MIGRATION_0002_CHECKSUM, MEMORY_MIGRATION_0002_SQL,
+};
 use crate::types::{CandidateMemory, MemoryEpisode, MemoryKind, MemoryRecord};
 use crate::{MemoryError, MemoryQuery, RetrievalContext};
 use async_trait::async_trait;
@@ -72,12 +75,20 @@ impl SqliteMemoryStore {
             )
             .unwrap_or(0);
 
-        let migrations: &[(i64, &str, &str, &str)] = &[(
-            1,
-            "0001_memory",
-            MEMORY_MIGRATION_0001_CHECKSUM,
-            MEMORY_MIGRATION_0001_SQL,
-        )];
+        let migrations: &[(i64, &str, &str, &str)] = &[
+            (
+                1,
+                "0001_memory",
+                MEMORY_MIGRATION_0001_CHECKSUM,
+                MEMORY_MIGRATION_0001_SQL,
+            ),
+            (
+                2,
+                "0002_ranking_provenance",
+                MEMORY_MIGRATION_0002_CHECKSUM,
+                MEMORY_MIGRATION_0002_SQL,
+            ),
+        ];
 
         for &(version, name, checksum, sql) in migrations {
             if version <= current_version {

@@ -11,6 +11,7 @@ pub mod evidence;
 pub mod extractor;
 pub mod in_memory;
 pub mod memory_store;
+pub mod prompt_assembly;
 pub mod provenance;
 pub mod query;
 pub mod ranking;

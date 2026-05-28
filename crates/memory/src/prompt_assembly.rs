@@ -621,4 +621,34 @@ mod tests {
         assert!(block.contains("[verified: crate:memory]"));
         assert!(block.contains("[historical, superseded]"));
     }
+
+    #[test]
+    fn stateless_assembler_public_api() {
+        let findings = vec![make_finding(RepoConsistencyFindingKind::Supported, "crate core exists")];
+        let report = RepoConsistencyReport {
+            repo_root: std::path::PathBuf::from("/test"),
+            checked_at: chrono::Utc::now(),
+            findings: findings.clone(),
+            summary: crate::repo_consistency::RepoConsistencySummary::from_findings(&findings),
+            memory_inputs: crate::repo_consistency::RepoMemoryInputSummary::default(),
+            repo_inputs: crate::repo_consistency::RepoObservationSummary::default(),
+        };
+        let inputs = RepoConsistencyPromptAssembler::assemble_from_report(&report);
+        assert_eq!(1, inputs.supported_claims.len());
+        assert_eq!("crate core exists", inputs.supported_claims[0].claim_text);
+    }
+
+    #[test]
+    fn stateless_assembler_empty_report() {
+        let report = RepoConsistencyReport {
+            repo_root: std::path::PathBuf::from("/test"),
+            checked_at: chrono::Utc::now(),
+            findings: vec![],
+            summary: crate::repo_consistency::RepoConsistencySummary::from_findings(&[]),
+            memory_inputs: crate::repo_consistency::RepoMemoryInputSummary::default(),
+            repo_inputs: crate::repo_consistency::RepoObservationSummary::default(),
+        };
+        let inputs = RepoConsistencyPromptAssembler::assemble_from_report(&report);
+        assert!(inputs.is_empty());
+    }
 }

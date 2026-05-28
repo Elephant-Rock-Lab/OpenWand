@@ -14,6 +14,7 @@ pub mod memory_store;
 pub mod provenance;
 pub mod query;
 pub mod ranking;
+pub mod repo_consistency;
 pub mod retrieval;
 pub mod store;
 pub mod supersession;

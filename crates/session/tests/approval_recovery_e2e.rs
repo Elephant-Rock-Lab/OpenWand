@@ -3,6 +3,7 @@
 //! Tests crash-recoverable approval governance using real SQLite trace store.
 //! Pattern: create session → suspend → drop runner → reopen → rebuild → resolve.
 
+use openwand_core::events::{OpenWandTraceEvent, ToolEvent};
 use openwand_core::mode::InteractionMode;
 use openwand_core::SessionId;
 use openwand_llm::LlmClient;
@@ -18,6 +19,7 @@ use openwand_session::testing::mock_tools::MockToolExecutor;
 use openwand_session::ApprovalDecision;
 use openwand_store::StoredEvent;
 use openwand_trace::TraceStore;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -31,8 +33,10 @@ fn conversational_config() -> RunConfig {
 fn temp_sqlite_path() -> std::path::PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let thread_id = std::thread::current().id();
-    let dir = std::env::temp_dir().join(format!("openwand-03d-{n:?}-{thread_id:?}"));
+    let tid = std::thread::current().id();
+    let dir = std::env::temp_dir().join(format!("openwand-03d-{n:?}-{tid:?}"));
+    // Clean up any leftover from previous run
+    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir.join("trace.db")
 }

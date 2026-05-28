@@ -203,6 +203,47 @@ impl SqliteMemoryStore {
         }
     }
 
+    /// List all records including superseded, for ranked search.
+    async fn list_all_records_for_search(&self) -> Result<Vec<MemoryRecord>, MemoryError> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id, conflict_group_id
+                 FROM memory_record
+                 WHERE status IN ('active', 'superseded')
+                 ORDER BY created_at DESC",
+            )
+            .map_err(|e| MemoryError::QueryFailed(format!("prepare list all: {e}")))?;
+
+        let records = stmt
+            .query_map([], |row| Ok(Self::row_to_record(row)))
+            .map_err(|e| MemoryError::QueryFailed(format!("query all: {e}")))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| MemoryError::QueryFailed(format!("collect: {e}")))?;
+
+        // Attach sources
+        let mut result = Vec::with_capacity(records.len());
+        for mut record in records {
+            let sources: Vec<(String, String)> = {
+                let mut src_stmt = conn.prepare(
+                    "SELECT episode_id, source_trace_id FROM memory_record_source WHERE record_id = ?1",
+                ).map_err(|e| MemoryError::QueryFailed(format!("prepare sources: {e}")))?;
+                let rows = src_stmt.query_map(rusqlite::params![record.record_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                }).map_err(|e| MemoryError::QueryFailed(format!("query sources: {e}")))?;
+                rows.collect::<Result<Vec<_>, _>>().map_err(|e| MemoryError::QueryFailed(format!("collect sources: {e}")))?
+            };
+
+            record.source_episode_ids = sources.iter().map(|(ep, _)| ep.clone()).collect();
+            record.source_trace_ids = sources.iter().map(|(_, tr)| tr.clone()).collect();
+            result.push(record);
+        }
+
+        Ok(result)
+    }
+
     /// Test-only: get a reference to the underlying connection.
     /// DO NOT use in production code.
     #[cfg(feature = "sqlite-testing")]
@@ -515,7 +556,12 @@ impl MemoryStore for SqliteMemoryStore {
         use crate::retrieval::{RankedMemoryHit, RankedRetrievalContext};
         use crate::supersession::{should_exclude_superseded, supersession_penalty};
 
-        let records = self.list_active_records().await?;
+        let records = if mode == crate::supersession::RetrievalMode::CurrentState {
+            self.list_active_records().await?
+        } else {
+            // For Default/ChangeHistory/ConflictSearch, include superseded records
+            self.list_all_records_for_search().await?
+        };
         let query_tokens = crate::query::tokenize(&query.text);
 
         let mut hits: Vec<RankedMemoryHit> = records

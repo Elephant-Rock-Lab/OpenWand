@@ -241,26 +241,55 @@ impl SessionRunner {
 
                 // In Conversational/AutoRouting: suspend for approval
                 // Only one pending tool at a time (batch 1 simplification)
-                let pending = gated.pending_confirmation.into_iter().next().unwrap();
+                let mut pending_iter = gated.pending_confirmation.into_iter();
+                let pending = pending_iter.next().unwrap();
+                let remaining_pending: Vec<PendingTool> = pending_iter.collect();
 
                 // Record tool.suspended in trace BEFORE pausing
-                self.record_tool_suspended(&pending, step).await?;
+                // Returns the approval_request_id if suspension succeeded
+                let suspended_arid = self.record_tool_suspended(&pending, step).await?;
 
-                // Store pending approval
-                *self.pending_approval.lock().await = Some(pending.clone());
+                // If oversized args caused blocking instead of suspension, skip
+                if let Some(arid) = suspended_arid {
+                    // Emit tool.deferred for remaining confirmation-requiring tools
+                    for deferred in &remaining_pending {
+                        self.record_tool_deferred(
+                            &deferred.tool_call,
+                            &arid,
+                            &pending.tool_call.id,
+                        )
+                        .await?;
+                    }
 
-                // Emit approval requested event
-                let _ = self.agent_event_tx.send(AgentEvent::ApprovalRequested {
-                    session_id: self.session_id.clone(),
-                    tool_name: pending.tool_call.name.clone(),
-                    tool_call_id: pending.tool_call.id.clone(),
-                    reason: format!(
-                        "Tool '{}' requires your approval before execution.",
-                        pending.tool_call.name
-                    ),
-                });
+                    // Emit tool.deferred for allowed tools (batch is frozen on suspension)
+                    for allowed in &gated.allowed {
+                        self.record_tool_deferred(
+                            allowed,
+                            &arid,
+                            &pending.tool_call.id,
+                        )
+                        .await?;
+                    }
 
-                stop_reason = RunStopReason::AwaitingApproval;
+                    // Store pending approval
+                    *self.pending_approval.lock().await = Some(pending.clone());
+
+                    // Emit approval requested event
+                    let _ = self.agent_event_tx.send(AgentEvent::ApprovalRequested {
+                        session_id: self.session_id.clone(),
+                        tool_name: pending.tool_call.name.clone(),
+                        tool_call_id: pending.tool_call.id.clone(),
+                        reason: format!(
+                            "Tool '{}' requires your approval before execution.",
+                            pending.tool_call.name
+                        ),
+                    });
+
+                    stop_reason = RunStopReason::AwaitingApproval;
+                } else {
+                    // Oversized: tool was blocked, not suspended
+                    stop_reason = RunStopReason::ToolBlocked;
+                }
                 break;
             }
 
@@ -384,8 +413,6 @@ impl SessionRunner {
         config: RunConfig,
         tool_call_id: ToolCallId,
     ) -> Result<ApprovalResult, SessionError> {
-        use crate::approval_recovery::{classify_approval_state, ApprovalTraceState};
-
         // Build recovery index from trace (source of truth)
         let index = self.approval_recovery_index().await?;
 
@@ -433,7 +460,24 @@ impl SessionRunner {
                     )
                     .await?;
 
-                // 2. Execute tool using persisted arguments from context
+                // 2. Record tool.called BEFORE execution
+                let called_event = OpenWandTraceEvent::Tool(ToolEvent::Called {
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    args_hash: pending.context.args_hash.clone(),
+                    invoker: openwand_core::tool_vocab::ToolInvoker::Llm,
+                });
+                self.mutation
+                    .apply(
+                        Actor::System { component: "tool".into() },
+                        called_event,
+                        vec![],
+                        None,
+                        self.stream_id.clone(),
+                    )
+                    .await?;
+
+                // 3. Execute tool using persisted arguments from context
                 let tools_call = openwand_tools::executor::ToolCall {
                     id: tool_call_id.clone(),
                     name: tool_name.clone(),
@@ -447,7 +491,33 @@ impl SessionRunner {
                 let result = self.tools.execute(&tools_call, &context).await;
                 let tool_result = crate::tool::ToolResult::from(result);
 
-                // 3. Record in Loro state
+                // 4. Record tool.completed or tool.failed AFTER execution
+                let terminal_event = if tool_result.is_error {
+                    OpenWandTraceEvent::Tool(ToolEvent::Failed {
+                        tool_call_id: tool_call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        error: tool_result.output.clone(),
+                    })
+                } else {
+                    OpenWandTraceEvent::Tool(ToolEvent::Completed {
+                        tool_call_id: tool_call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        status: openwand_core::tool_vocab::ToolResultStatus::Success,
+                        result_summary: tool_result.output.chars().take(200).collect(),
+                        duration_ms: tool_result.duration_ms,
+                    })
+                };
+                self.mutation
+                    .apply(
+                        Actor::System { component: "tool".into() },
+                        terminal_event,
+                        vec![],
+                        None,
+                        self.stream_id.clone(),
+                    )
+                    .await?;
+
+                // 5. Record in Loro state
                 self.loro_state
                     .append_tool_result(&tool_result, None::<&str>)
                     .map_err(SessionError::Internal)?;
@@ -877,7 +947,7 @@ impl SessionRunner {
     }
 
     /// Record tool.suspended in trace (pending approval).
-    async fn record_tool_suspended(&self, pending: &PendingTool, step: u64) -> Result<(), SessionError> {
+    async fn record_tool_suspended(&self, pending: &PendingTool, step: u64) -> Result<Option<ApprovalRequestId>, SessionError> {
         use crate::approval_recovery::{approval_args_hash, validate_approval_context_size};
 
         // Validate argument size before suspending
@@ -933,7 +1003,7 @@ impl SessionRunner {
                 .append_tool_result(&blocked_result, None::<&str>)
                 .map_err(SessionError::Internal)?;
 
-            return Ok(());
+            return Ok(None);
         }
 
         let args_hash = approval_args_hash(&pending.tool_call.arguments)
@@ -963,6 +1033,37 @@ impl SessionRunner {
             tool_name: pending.tool_call.name.clone(),
             reason: "awaiting_user_approval".into(),
             approval_context: Some(approval_context),
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "gate".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(Some(approval_request_id))
+    }
+
+    /// Record tool.deferred for a tool call that was deferred because another tool suspended the batch.
+    async fn record_tool_deferred(
+        &self,
+        call: &ToolCall,
+        blocking_arid: &ApprovalRequestId,
+        blocking_tool_call_id: &ToolCallId,
+    ) -> Result<(), SessionError> {
+        use crate::approval_recovery::approval_args_hash;
+
+        let args_hash = approval_args_hash(&call.arguments).ok();
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Deferred {
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            reason: "deferred: another approval pending".into(),
+            blocked_by_tool_call_id: Some(blocking_tool_call_id.clone()),
+            blocked_by_approval_request_id: Some(blocking_arid.clone()),
+            original_order_index: None, // not tracked in current GatedTools
+            args_hash,
         });
         self.mutation
             .apply(

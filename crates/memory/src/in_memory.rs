@@ -97,14 +97,20 @@ impl MemoryStore for InMemoryMemoryStore {
 
         let mut records = self.records.lock().unwrap();
 
-        // Check for duplicate claim — attach source instead of creating new
-        let claim_lower = candidate.claim.to_lowercase();
+        // Check for duplicate using normalized_text_hash — attach source instead of creating new
+        let claim_hash = compute_normalized_hash(&candidate.claim);
         for record in records.values_mut() {
-            if record.claim.to_lowercase() == claim_lower && record.is_active() {
-                // Attach new source episodes
+            if record.normalized_text_hash == claim_hash && record.is_active() {
+                // Attach new source episodes and their trace IDs
+                let episodes = self.episodes.lock().unwrap();
                 for ep_id in &candidate.source_episode_ids {
                     if !record.source_episode_ids.contains(ep_id) {
                         record.source_episode_ids.push(ep_id.clone());
+                        if let Some(ep) = episodes.get(ep_id) {
+                            if !record.source_trace_ids.contains(&ep.source_trace_id) {
+                                record.source_trace_ids.push(ep.source_trace_id.clone());
+                            }
+                        }
                     }
                 }
                 return Ok(Some(record.clone()));
@@ -118,8 +124,6 @@ impl MemoryStore for InMemoryMemoryStore {
             crate::types::CandidateKind::Decision => MemoryKind::Decision,
             crate::types::CandidateKind::Preference => MemoryKind::Preference,
         };
-
-        let claim_hash = compute_normalized_hash(&candidate.claim);
 
         let record = MemoryRecord {
             record_id: record_id.clone(),

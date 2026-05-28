@@ -183,6 +183,7 @@ impl UiSessionService {
             working_directory: ".".into(),
             system_prompt: None,
             llm_target: Some(llm_target),
+            memory_prompt_inputs: None,
         };
 
         // Spawn the run in background

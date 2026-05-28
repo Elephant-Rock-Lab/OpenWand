@@ -68,6 +68,9 @@ pub struct MemoryRecord {
     /// BLAKE3 hash of normalized claim text.
     #[serde(default)]
     pub normalized_text_hash: String,
+    /// ID of the record this one supersedes (set on successor).
+    #[serde(default)]
+    pub supersedes_record_id: Option<String>,
 }
 
 /// The kind of accepted memory.
@@ -88,5 +91,16 @@ impl MemoryRecord {
             return valid_until > Utc::now();
         }
         true
+    }
+
+    /// Derived evidence kind for retrieval.
+    /// Superseded records get SupersededClaim regardless of stored kind.
+    /// Original evidence_kind is preserved in the stored field.
+    pub fn derived_evidence_kind(&self) -> EvidenceKind {
+        if self.superseded_by.is_some() {
+            EvidenceKind::SupersededClaim
+        } else {
+            self.evidence_kind
+        }
     }
 }

@@ -145,6 +145,7 @@ impl MemoryStore for InMemoryMemoryStore {
             superseded_by: None,
             evidence_kind: EvidenceKind::AcceptedClaim,
             normalized_text_hash: claim_hash,
+            supersedes_record_id: None,
         };
 
         records.insert(record_id, record.clone());
@@ -176,6 +177,7 @@ impl MemoryStore for InMemoryMemoryStore {
             superseded_by: None,
             evidence_kind: old_record.evidence_kind,
             normalized_text_hash: claim_hash,
+            supersedes_record_id: Some(old_record_id.to_string()),
         };
 
         old_record.superseded_by = Some(new_record_id.clone());

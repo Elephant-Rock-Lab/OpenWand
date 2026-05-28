@@ -3,6 +3,7 @@
 //! Uses the same SQLite file as the trace store but runs its own migrations.
 //! WAL mode allows concurrent access from separate connections.
 
+use crate::evidence::EvidenceKind;
 use crate::extractor::MemoryExtractor;
 use crate::memory_store::MemoryStore;
 use crate::sqlite_schema::{
@@ -341,8 +342,8 @@ impl MemoryStore for SqliteMemoryStore {
         let now = Utc::now();
 
         conn.execute(
-            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7)",
+            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 record_id,
                 Self::kind_to_str(kind),
@@ -351,6 +352,7 @@ impl MemoryStore for SqliteMemoryStore {
                 now.timestamp(),
                 now.timestamp(),
                 now.timestamp(),
+                "AcceptedClaim",
             ],
         )
         .map_err(|e| MemoryError::Internal(format!("insert record: {e}")))?;
@@ -393,10 +395,11 @@ impl MemoryStore for SqliteMemoryStore {
         let new_record_id = format!("mem_{}", ulid::Ulid::new());
         let now = Utc::now();
 
-        // Create new record
+        // Create new record — preserve original evidence_kind
+        let evidence_kind_str = format!("{:?}", old_record.evidence_kind);
         conn.execute(
-            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7)",
+            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 new_record_id,
                 Self::kind_to_str(old_record.kind),
@@ -405,6 +408,7 @@ impl MemoryStore for SqliteMemoryStore {
                 now.timestamp(),
                 now.timestamp(),
                 now.timestamp(),
+                evidence_kind_str,
             ],
         )
         .map_err(|e| MemoryError::Internal(format!("insert superseding record: {e}")))?;
@@ -437,7 +441,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -503,7 +507,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -547,7 +551,7 @@ impl SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
                  FROM memory_record WHERE record_id = ?1",
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare read: {e}")))?;
@@ -586,6 +590,21 @@ impl SqliteMemoryStore {
         let valid_from_ts: Option<i64> = row.get(5).ok();
         let valid_until_ts: Option<i64> = row.get(6).ok();
         let created_at_ts: i64 = row.get(8).unwrap_or(0);
+        let evidence_kind_str: Option<String> = row.get(11).ok().flatten();
+
+        let evidence_kind = evidence_kind_str
+            .as_deref()
+            .and_then(|s| match s {
+                "AcceptedClaim" => Some(EvidenceKind::AcceptedClaim),
+                "UserStatedClaim" => Some(EvidenceKind::UserStatedClaim),
+                "DeterministicEvidence" => Some(EvidenceKind::DeterministicEvidence),
+                "RawObservation" => Some(EvidenceKind::RawObservation),
+                "LlmExtractedCandidate" => Some(EvidenceKind::LlmExtractedCandidate),
+                "SupersededClaim" => Some(EvidenceKind::SupersededClaim),
+                "ConflictingClaim" => Some(EvidenceKind::ConflictingClaim),
+                _ => None,
+            })
+            .unwrap_or(EvidenceKind::AcceptedClaim);
 
         MemoryRecord {
             record_id: row.get(0).unwrap_or_default(),
@@ -598,6 +617,7 @@ impl SqliteMemoryStore {
             valid_until: valid_until_ts
                 .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
             superseded_by: row.get(7).ok().flatten(),
+            evidence_kind,
         }
     }
 }

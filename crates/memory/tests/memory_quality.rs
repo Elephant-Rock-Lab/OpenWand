@@ -139,7 +139,7 @@ mod migration_0003 {
         let record = store.accept_candidate(candidate).await.unwrap();
         assert!(record.is_some());
 
-        // Verify evidence_kind is NULL (legacy default — will be interpreted as AcceptedClaim)
+        // Verify evidence_kind is populated by accept_candidate
         let conn = store.conn_for_test();
         let evidence_kind: Option<String> = conn
             .query_row(
@@ -148,7 +148,7 @@ mod migration_0003 {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(evidence_kind.is_none(), "legacy records should have NULL evidence_kind");
+        assert_eq!(Some("AcceptedClaim".to_string()), evidence_kind, "new records should have AcceptedClaim evidence_kind");
     }
 
     #[test]

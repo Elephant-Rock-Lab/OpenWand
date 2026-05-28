@@ -5,6 +5,7 @@
 //! Trace provenance authorizes.
 
 pub mod error;
+pub mod evidence;
 pub mod extractor;
 pub mod in_memory;
 pub mod memory_store;

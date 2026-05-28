@@ -125,10 +125,16 @@ pub fn match_claim(
 ) -> bool {
     match pattern {
         RepoClaimPattern::CrateExists { crate_name } => {
-            crate_names.iter().any(|n| n.eq_ignore_ascii_case(crate_name))
+            crate_names.iter().any(|n| {
+                n.eq_ignore_ascii_case(crate_name)
+                    || n.ends_with(&format!("-{}", crate_name))
+            })
         }
         RepoClaimPattern::WorkspaceContainsCrate { crate_name } => {
-            crate_names.iter().any(|n| n.eq_ignore_ascii_case(crate_name))
+            crate_names.iter().any(|n| {
+                n.eq_ignore_ascii_case(crate_name)
+                    || n.ends_with(&format!("-{}", crate_name))
+            })
         }
         RepoClaimPattern::FileExists { path } => {
             let normalized = path.replace('\\', "/");

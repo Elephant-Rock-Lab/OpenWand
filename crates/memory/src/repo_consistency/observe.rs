@@ -241,62 +241,63 @@ fn list_files_recursive(fs: &dyn RepoReadFs, dir: &Path, repo_root: &Path) -> Ve
 }
 
 #[cfg(test)]
+pub struct StubRepoReadFs {
+    files: std::collections::HashMap<String, String>,
+    dirs: std::collections::HashMap<String, Vec<PathBuf>>,
+}
+
+#[cfg(test)]
+impl StubRepoReadFs {
+    pub fn new() -> Self {
+        Self {
+            files: std::collections::HashMap::new(),
+            dirs: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn add_file(&mut self, path: &str, content: &str) {
+        self.files.insert(path.to_string(), content.to_string());
+        if let Some(parent) = Path::new(path).parent() {
+            let parent_str = parent.to_string_lossy().to_string();
+            self.dirs.entry(parent_str).or_default().push(PathBuf::from(path));
+        }
+    }
+
+    pub fn add_dir(&mut self, path: &str, children: Vec<&str>) {
+        self.dirs.insert(
+            path.to_string(),
+            children.into_iter().map(PathBuf::from).collect(),
+        );
+    }
+}
+
+#[cfg(test)]
+impl RepoReadFs for StubRepoReadFs {
+    fn read_to_string(&self, path: &Path) -> Result<String, RepoObserveError> {
+        let key = path.to_string_lossy().replace('\\', "/");
+        self.files
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| RepoObserveError::NotFound(path.to_path_buf()))
+    }
+
+    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, RepoObserveError> {
+        let key = path.to_string_lossy().replace('\\', "/");
+        self.dirs
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| RepoObserveError::NotFound(path.to_path_buf()))
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        let key = path.to_string_lossy().replace('\\', "/");
+        self.files.contains_key(&key) || self.dirs.contains_key(&key)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Stub filesystem for testing.
-    pub struct StubRepoReadFs {
-        files: std::collections::HashMap<String, String>,
-        dirs: std::collections::HashMap<String, Vec<PathBuf>>,
-    }
-
-    impl StubRepoReadFs {
-        pub fn new() -> Self {
-            Self {
-                files: std::collections::HashMap::new(),
-                dirs: std::collections::HashMap::new(),
-            }
-        }
-
-        pub fn add_file(&mut self, path: &str, content: &str) {
-            self.files.insert(path.to_string(), content.to_string());
-            // Auto-register parent dir
-            if let Some(parent) = Path::new(path).parent() {
-                let parent_str = parent.to_string_lossy().to_string();
-                self.dirs.entry(parent_str).or_default().push(PathBuf::from(path));
-            }
-        }
-
-        pub fn add_dir(&mut self, path: &str, children: Vec<&str>) {
-            self.dirs.insert(
-                path.to_string(),
-                children.into_iter().map(PathBuf::from).collect(),
-            );
-        }
-    }
-
-    impl RepoReadFs for StubRepoReadFs {
-        fn read_to_string(&self, path: &Path) -> Result<String, RepoObserveError> {
-            let key = path.to_string_lossy().replace('\\', "/");
-            self.files
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| RepoObserveError::NotFound(path.to_path_buf()))
-        }
-
-        fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, RepoObserveError> {
-            let key = path.to_string_lossy().replace('\\', "/");
-            self.dirs
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| RepoObserveError::NotFound(path.to_path_buf()))
-        }
-
-        fn exists(&self, path: &Path) -> bool {
-            let key = path.to_string_lossy().replace('\\', "/");
-            self.files.contains_key(&key) || self.dirs.contains_key(&key)
-        }
-    }
 
     fn workspace_fs() -> StubRepoReadFs {
         let mut fs = StubRepoReadFs::new();

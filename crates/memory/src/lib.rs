@@ -15,6 +15,7 @@ pub mod query;
 pub mod ranking;
 pub mod retrieval;
 pub mod store;
+pub mod supersession;
 pub mod types;
 
 #[cfg(feature = "sqlite")]

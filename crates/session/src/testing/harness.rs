@@ -25,6 +25,38 @@ pub struct SessionHarness {
 }
 
 impl SessionHarness {
+    /// Build a harness with a custom trace store wrapping.
+    /// Used for fault-injection tests.
+    pub fn with_failing_trace(
+        base: Self,
+        fail_on: impl Into<String>,
+    ) -> Self {
+        let failing_trace = Arc::new(
+            crate::testing::failing_trace::FailOnEventKind::new(
+                base.trace.clone() as Arc<dyn TraceStore<StoredEvent>>,
+                fail_on,
+            )
+        );
+        let session_id = SessionId::new();
+        let runner = SessionRunner::new(
+            session_id,
+            failing_trace.clone() as Arc<dyn TraceStore<StoredEvent>>,
+            base.llm.clone() as Arc<dyn LlmClient>,
+            base.tools.clone() as Arc<dyn ToolExecutor>,
+            base.policy.clone() as Arc<dyn PolicyEngine>,
+            base.memory.clone() as Arc<dyn MemoryReadStore>,
+            ".".into(),
+        );
+        Self {
+            runner,
+            trace: base.trace,
+            llm: base.llm,
+            policy: base.policy,
+            tools: base.tools,
+            memory: base.memory,
+        }
+    }
+
     fn build(
         trace: Arc<InMemoryTraceStore<StoredEvent>>,
         llm: Arc<MockLlmClient>,

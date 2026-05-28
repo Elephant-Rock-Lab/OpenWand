@@ -98,10 +98,10 @@ Session crate never imports `openwand-store` — stays over `TraceStore<StoredEv
 
 ## Remaining gaps (honest)
 
-1. **`tool.called` / `tool.completed` / `tool.failed` not emitted by runner** — The vocabulary exists but the runner doesn't emit them during normal execution. This means uncertain execution detection is currently academic (no runner produces `tool.called`). Future wave should add tool lifecycle events.
-2. **Crash after approved + called but before terminal** — Detected by scanner as "uncertain" and blocked, but no recovery mechanism.
-3. **Rich UI reconstruction** — Only approval state. Full session view reconstruction from trace is a separate milestone.
-4. **Idempotency keys** — The resolver checks trace state for pending, but doesn't use deterministic idempotency keys for the resolution events themselves. Duplicate resolution is prevented by the "no pending found" guard, not by key collision.
+1. **Crash after approved + called but before terminal** — Detected by scanner as "uncertain" and blocked, but no recovery mechanism. Now actually reachable through normal runner execution since `tool.called`/`tool.completed`/`tool.failed` are emitted.
+2. **Rich UI reconstruction** — Only approval state. Full session view reconstruction from trace is a separate milestone.
+3. **Idempotency keys** — The resolver checks trace state for pending, but doesn't use deterministic idempotency keys for the resolution events themselves. Duplicate resolution is prevented by the "no pending found" guard, not by key collision.
+4. **Two public APIs** — `resume_with_approval` (live) and `resolve_recovered_approval` (recovered) are separate entry points sharing `resolve_approval_internal`. Not truly "one path" as the plan stated — two entry points, one internal implementation.
 
 ## Tests: 345 total, 0 failures
 

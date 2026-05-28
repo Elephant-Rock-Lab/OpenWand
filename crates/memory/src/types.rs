@@ -7,6 +7,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::evidence::EvidenceKind;
+
 /// An immutable memory episode projected from trace events.
 /// Episodes are the input to memory extraction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -59,6 +61,10 @@ pub struct MemoryRecord {
     pub created_at: DateTime<Utc>,
     pub valid_until: Option<DateTime<Utc>>,
     pub superseded_by: Option<String>,
+    /// What kind of evidence this record represents.
+    /// Defaults to AcceptedClaim for legacy records.
+    #[serde(default)]
+    pub evidence_kind: EvidenceKind,
 }
 
 /// The kind of accepted memory.

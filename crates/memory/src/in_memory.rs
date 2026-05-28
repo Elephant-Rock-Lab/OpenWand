@@ -1,5 +1,6 @@
 //! In-memory memory store for testing and simple use cases.
 
+use crate::evidence::EvidenceKind;
 use crate::extractor::MemoryExtractor;
 use crate::memory_store::MemoryStore;
 use crate::types::{CandidateMemory, MemoryEpisode, MemoryKind, MemoryRecord};
@@ -135,6 +136,7 @@ impl MemoryStore for InMemoryMemoryStore {
             created_at: Utc::now(),
             valid_until: None,
             superseded_by: None,
+            evidence_kind: EvidenceKind::AcceptedClaim,
         };
 
         records.insert(record_id, record.clone());
@@ -163,6 +165,7 @@ impl MemoryStore for InMemoryMemoryStore {
             created_at: Utc::now(),
             valid_until: None,
             superseded_by: None,
+            evidence_kind: old_record.evidence_kind,
         };
 
         old_record.superseded_by = Some(new_record_id.clone());

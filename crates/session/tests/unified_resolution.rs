@@ -16,6 +16,7 @@ use openwand_session::testing::mock_memory::MockMemoryReadStore;
 use openwand_session::testing::mock_policy::MockPolicyEngine;
 use openwand_session::testing::mock_tools::MockToolExecutor;
 use openwand_session::ApprovalDecision;
+use openwand_session::runner::{ApprovalResolution, ApprovalSource};
 use openwand_policy::PolicyEngine;
 use openwand_store::StoredEvent;
 use openwand_tools::executor::ToolExecutor;
@@ -266,4 +267,126 @@ async fn approval_trace_contains_approval_request_id() {
     // After approval, the index should show no pending
     let index_after = harness.runner.approval_recovery_index().await.unwrap();
     assert!(index_after.pending.is_empty(), "Should have no pending after approval");
+}
+
+#[tokio::test]
+async fn resolve_approval_duplicate_is_idempotent() {
+    let harness = SessionHarness::write_tool_requires_confirmation();
+
+    // Suspend
+    harness
+        .runner
+        .run_turn("Write a file".into(), conversational_config())
+        .await
+        .unwrap();
+
+    // Get the arid from the index
+    let index = harness.runner.approval_recovery_index().await.unwrap();
+    let arid = index.pending[0].context.approval_request_id.clone();
+    let tc_id = index.pending[0].context.tool_call_id.clone();
+
+    // First approval
+    let result = harness
+        .runner
+        .resolve_approval(ApprovalDecision::for_approval(arid.clone(), ApprovalResolution::Approve), conversational_config())
+        .await
+        .unwrap();
+
+    // Verify first approval properties
+    assert!(matches!(result.resolution, ApprovalResolution::Approve));
+    assert_eq!(arid, result.approval_request_id);
+    assert_eq!(tc_id, result.tool_call_id);
+    assert!(result.tool_result.is_some());
+
+    let trace_count_after_first = harness.trace.event_kinds().await.len();
+    let exec_count_after_first = harness.tools.execution_count().await;
+    assert_eq!(1, exec_count_after_first, "Tool should execute exactly once");
+
+    // Second approval with same arid — should be idempotent
+    let result2 = harness
+        .runner
+        .resolve_approval(ApprovalDecision::for_approval(arid.clone(), ApprovalResolution::Approve), conversational_config())
+        .await
+        .unwrap();
+
+    // Idempotent result
+    assert!(matches!(result2.resolution, ApprovalResolution::Approve));
+    assert_eq!(arid, result2.approval_request_id);
+    assert_eq!(tc_id, result2.tool_call_id);
+    assert!(result2.tool_result.is_none(), "Idempotent return has no tool_result");
+    assert_eq!(ApprovalSource::Recovered, result2.source);
+
+    // No new trace events
+    let trace_count_after_second = harness.trace.event_kinds().await.len();
+    assert_eq!(
+        trace_count_after_first, trace_count_after_second,
+        "Duplicate approval must not append trace events"
+    );
+
+    // No second execution
+    let exec_count_after_second = harness.tools.execution_count().await;
+    assert_eq!(
+        exec_count_after_first, exec_count_after_second,
+        "Duplicate approval must not execute tool again"
+    );
+}
+
+#[tokio::test]
+async fn stale_cache_returns_stale_cache_source() {
+    let harness = SessionHarness::write_tool_requires_confirmation();
+
+    // Suspend
+    harness
+        .runner
+        .run_turn("Write a file".into(), conversational_config())
+        .await
+        .unwrap();
+
+    // Get the real arid from the index
+    let index = harness.runner.approval_recovery_index().await.unwrap();
+    let real_arid = index.pending[0].context.approval_request_id.clone();
+
+    // Resolve with the real arid — cache should match (Live)
+    let result = harness
+        .runner
+        .resolve_approval(ApprovalDecision::for_approval(real_arid.clone(), ApprovalResolution::Approve), conversational_config())
+        .await
+        .unwrap();
+    assert_eq!(ApprovalSource::Live, result.source, "First resolve should be Live (cache matches)");
+    assert_eq!(1, harness.tools.execution_count().await);
+}
+
+#[tokio::test]
+async fn pending_approval_view_exposes_approval_request_id() {
+    let harness = SessionHarness::write_tool_requires_confirmation();
+
+    // Before suspension, no pending
+    assert!(harness.runner.pending_approval().await.is_none());
+
+    // Suspend
+    harness
+        .runner
+        .run_turn("Write a file".into(), conversational_config())
+        .await
+        .unwrap();
+
+    // Get the view
+    let view = harness.runner.pending_approval().await;
+    assert!(view.is_some());
+    let view = view.unwrap();
+
+    // Must expose the arid
+    assert!(!view.approval_request_id.as_str().is_empty(), "arid must be non-empty");
+
+    // Must expose display fields
+    assert_eq!("local__file_write", view.tool_name);
+    assert!(!view.tool_call_id.as_str().is_empty());
+
+    // Verify arid matches what the recovery index sees
+    let index = harness.runner.approval_recovery_index().await.unwrap();
+    assert_eq!(
+        index.pending[0].context.approval_request_id,
+        view.approval_request_id,
+        "View arid must match trace arid"
+    );
 }

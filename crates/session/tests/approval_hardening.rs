@@ -155,7 +155,7 @@ async fn multi_tool_batch_only_first_suspends() {
     assert!(pending.is_some(), "Should have a pending approval");
     let pending = pending.unwrap();
     assert_eq!(
-        "local__write_A", pending.tool_call.name,
+        "local__write_A", pending.tool_name,
         "First confirmation-requiring tool should be pending"
     );
 
@@ -255,7 +255,7 @@ async fn multi_tool_batch_deferred_tools_not_in_pending() {
     let pending = harness.runner.pending_approval().await.unwrap();
 
     // Only one pending tool, and it's write_A (not write_B or read_C)
-    assert_eq!("local__write_A", pending.tool_call.name);
+    assert_eq!("local__write_A", pending.tool_name);
 
     // There is no mechanism to resume write_B — it's genuinely deferred
     // After approving A, pending is cleared

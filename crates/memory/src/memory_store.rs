@@ -3,6 +3,9 @@
 //! The write store is the authority for accepted memories.
 //! Acceptance requires deterministic rules, not just LLM output.
 
+use crate::evidence::EvidenceKind;
+use crate::retrieval::RankedRetrievalContext;
+use crate::supersession::RetrievalMode;
 use crate::types::{CandidateMemory, MemoryEpisode, MemoryKind, MemoryRecord};
 use crate::{MemoryError, MemoryQuery, RetrievalContext};
 use async_trait::async_trait;
@@ -46,6 +49,13 @@ pub trait MemoryStore: Send + Sync {
 
     /// Search active memory records by keyword.
     async fn search_records(&self, query: MemoryQuery) -> Result<RetrievalContext, MemoryError>;
+
+    /// Search with ranked retrieval and evidence-aware mode.
+    async fn search_ranked(
+        &self,
+        query: MemoryQuery,
+        mode: RetrievalMode,
+    ) -> Result<RankedRetrievalContext, MemoryError>;
 
     /// Get all active records (for debugging/testing).
     async fn list_active_records(&self) -> Result<Vec<MemoryRecord>, MemoryError>;

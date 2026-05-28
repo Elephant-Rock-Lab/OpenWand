@@ -31,6 +31,7 @@ pub mod testing;
 
 pub use error::*;
 pub use extractor::*;
+pub use prompt_assembly::*;
 pub use in_memory::*;
 pub use memory_store::*;
 pub use query::*;

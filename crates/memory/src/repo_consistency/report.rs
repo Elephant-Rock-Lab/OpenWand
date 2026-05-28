@@ -137,12 +137,32 @@ pub struct RepoMemoryInputSummary {
     pub conflict_groups_count: usize,
 }
 
+impl Default for RepoMemoryInputSummary {
+    fn default() -> Self {
+        Self {
+            current_claims_count: 0,
+            superseded_count: 0,
+            conflict_groups_count: 0,
+        }
+    }
+}
+
 /// Summary of repo observations used for the check.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RepoObservationSummary {
     pub crates_count: usize,
     pub dependencies_count: usize,
     pub docs_count: usize,
+}
+
+impl Default for RepoObservationSummary {
+    fn default() -> Self {
+        Self {
+            crates_count: 0,
+            dependencies_count: 0,
+            docs_count: 0,
+        }
+    }
 }
 
 /// The consistency checker — generic over memory store and filesystem.

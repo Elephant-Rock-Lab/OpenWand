@@ -70,6 +70,17 @@ ALTER TABLE memory_record ADD COLUMN repo TEXT;
 ALTER TABLE memory_record ADD COLUMN branch_col TEXT;
 "#;
 
+/// Checksum for memory migration 0003.
+pub const MEMORY_MIGRATION_0003_CHECKSUM: &str = "sha256:pending";
+
+/// Migration 0003: evidence semantics (additive only).
+pub const MEMORY_MIGRATION_0003_SQL: &str = r#"
+ALTER TABLE memory_record ADD COLUMN evidence_kind TEXT;
+ALTER TABLE memory_record ADD COLUMN normalized_text_hash TEXT;
+ALTER TABLE memory_record ADD COLUMN conflict_group_id TEXT;
+ALTER TABLE memory_record ADD COLUMN supersedes_record_id TEXT;
+"#;
+
 #[cfg(test)]
 mod schema_tests {
     use super::*;
@@ -104,5 +115,34 @@ mod schema_tests {
         assert!(sql.contains("evidence_bps"));
         assert!(sql.contains("repo"));
         assert!(sql.contains("branch_col"));
+    }
+
+    #[test]
+    fn migration_0003_sql_is_additive_only() {
+        for line in MEMORY_MIGRATION_0003_SQL.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            assert!(
+                trimmed.starts_with("ALTER TABLE"),
+                "Expected ALTER TABLE ADD COLUMN, got: {}",
+                trimmed
+            );
+            assert!(
+                trimmed.contains("ADD COLUMN"),
+                "Expected ADD COLUMN, got: {}",
+                trimmed
+            );
+        }
+    }
+
+    #[test]
+    fn migration_0003_adds_expected_columns() {
+        let sql = MEMORY_MIGRATION_0003_SQL;
+        assert!(sql.contains("evidence_kind"));
+        assert!(sql.contains("normalized_text_hash"));
+        assert!(sql.contains("conflict_group_id"));
+        assert!(sql.contains("supersedes_record_id"));
     }
 }

@@ -293,19 +293,19 @@ impl MemoryStore for SqliteMemoryStore {
 
         let conn = self.conn.lock().unwrap();
 
-        // Check for duplicate active claim
-        let claim_lower = candidate.claim.to_lowercase();
-        let existing: Option<(String, String)> = conn
+        // Check for duplicate using normalized_text_hash
+        let claim_hash = compute_normalized_hash(&candidate.claim);
+        let existing: Option<String> = conn
             .query_row(
-                "SELECT record_id, kind FROM memory_record
-                 WHERE LOWER(claim) = ?1 AND status = 'active'
+                "SELECT record_id FROM memory_record
+                 WHERE normalized_text_hash = ?1 AND evidence_kind = 'AcceptedClaim' AND status = 'active'
                  LIMIT 1",
-                rusqlite::params![claim_lower],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                rusqlite::params![claim_hash],
+                |row| row.get(0),
             )
             .ok();
 
-        if let Some((existing_id, _kind)) = existing {
+        if let Some(existing_id) = existing {
             // Attach new source episodes
             for ep_id in &candidate.source_episode_ids {
                 // Look up source_trace_id from episode
@@ -341,7 +341,6 @@ impl MemoryStore for SqliteMemoryStore {
             crate::types::CandidateKind::Preference => MemoryKind::Preference,
         };
         let now = Utc::now();
-        let claim_hash = compute_normalized_hash(&candidate.claim);
 
         conn.execute(
             "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind, normalized_text_hash)

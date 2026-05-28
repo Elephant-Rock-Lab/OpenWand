@@ -82,6 +82,7 @@ async fn different_scope_same_hash_no_false_dedup() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn dedup_index_covers_scope_columns() {
     // Verify the migration SQL includes the dedup index with scope
     let sql = openwand_memory::sqlite_schema::MEMORY_MIGRATION_0003_SQL;

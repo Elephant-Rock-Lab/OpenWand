@@ -1,5 +1,6 @@
 //! In-memory memory store for testing and simple use cases.
 
+use crate::dedup::compute_normalized_hash;
 use crate::evidence::EvidenceKind;
 use crate::extractor::MemoryExtractor;
 use crate::memory_store::MemoryStore;
@@ -118,6 +119,8 @@ impl MemoryStore for InMemoryMemoryStore {
             crate::types::CandidateKind::Preference => MemoryKind::Preference,
         };
 
+        let claim_hash = compute_normalized_hash(&candidate.claim);
+
         let record = MemoryRecord {
             record_id: record_id.clone(),
             claim: candidate.claim,
@@ -137,6 +140,7 @@ impl MemoryStore for InMemoryMemoryStore {
             valid_until: None,
             superseded_by: None,
             evidence_kind: EvidenceKind::AcceptedClaim,
+            normalized_text_hash: claim_hash,
         };
 
         records.insert(record_id, record.clone());
@@ -155,6 +159,7 @@ impl MemoryStore for InMemoryMemoryStore {
             .ok_or_else(|| MemoryError::Internal(format!("Record not found: {old_record_id}")))?;
 
         let new_record_id = format!("mem_{}", ulid::Ulid::new());
+        let claim_hash = compute_normalized_hash(&new_claim);
         let new_record = MemoryRecord {
             record_id: new_record_id.clone(),
             claim: new_claim,
@@ -166,6 +171,7 @@ impl MemoryStore for InMemoryMemoryStore {
             valid_until: None,
             superseded_by: None,
             evidence_kind: old_record.evidence_kind,
+            normalized_text_hash: claim_hash,
         };
 
         old_record.superseded_by = Some(new_record_id.clone());

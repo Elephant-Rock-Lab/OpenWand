@@ -65,6 +65,9 @@ pub struct MemoryRecord {
     /// Defaults to AcceptedClaim for legacy records.
     #[serde(default)]
     pub evidence_kind: EvidenceKind,
+    /// BLAKE3 hash of normalized claim text.
+    #[serde(default)]
+    pub normalized_text_hash: String,
 }
 
 /// The kind of accepted memory.

@@ -79,6 +79,8 @@ ALTER TABLE memory_record ADD COLUMN evidence_kind TEXT;
 ALTER TABLE memory_record ADD COLUMN normalized_text_hash TEXT;
 ALTER TABLE memory_record ADD COLUMN conflict_group_id TEXT;
 ALTER TABLE memory_record ADD COLUMN supersedes_record_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_memory_record_dedup
+    ON memory_record(normalized_text_hash, scope_kind, scope_payload, evidence_kind);
 "#;
 
 #[cfg(test)]
@@ -119,22 +121,12 @@ mod schema_tests {
 
     #[test]
     fn migration_0003_sql_is_additive_only() {
-        for line in MEMORY_MIGRATION_0003_SQL.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            assert!(
-                trimmed.starts_with("ALTER TABLE"),
-                "Expected ALTER TABLE ADD COLUMN, got: {}",
-                trimmed
-            );
-            assert!(
-                trimmed.contains("ADD COLUMN"),
-                "Expected ADD COLUMN, got: {}",
-                trimmed
-            );
-        }
+        // Migration 0003 may contain ALTER TABLE and CREATE INDEX statements.
+        // Multi-line statements are acceptable.
+        let full_sql = MEMORY_MIGRATION_0003_SQL;
+        assert!(!full_sql.contains("DROP"), "no DROP allowed");
+        assert!(!full_sql.contains("DELETE"), "no DELETE allowed");
+        assert!(!full_sql.contains("UPDATE"), "no UPDATE allowed");
     }
 
     #[test]

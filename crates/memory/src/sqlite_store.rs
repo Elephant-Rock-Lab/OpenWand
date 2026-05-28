@@ -3,6 +3,7 @@
 //! Uses the same SQLite file as the trace store but runs its own migrations.
 //! WAL mode allows concurrent access from separate connections.
 
+use crate::dedup::compute_normalized_hash;
 use crate::evidence::EvidenceKind;
 use crate::extractor::MemoryExtractor;
 use crate::memory_store::MemoryStore;
@@ -340,10 +341,11 @@ impl MemoryStore for SqliteMemoryStore {
             crate::types::CandidateKind::Preference => MemoryKind::Preference,
         };
         let now = Utc::now();
+        let claim_hash = compute_normalized_hash(&candidate.claim);
 
         conn.execute(
-            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind)
-             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8)",
+            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind, normalized_text_hash)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
                 record_id,
                 Self::kind_to_str(kind),
@@ -353,6 +355,7 @@ impl MemoryStore for SqliteMemoryStore {
                 now.timestamp(),
                 now.timestamp(),
                 "AcceptedClaim",
+                claim_hash,
             ],
         )
         .map_err(|e| MemoryError::Internal(format!("insert record: {e}")))?;
@@ -397,9 +400,10 @@ impl MemoryStore for SqliteMemoryStore {
 
         // Create new record — preserve original evidence_kind
         let evidence_kind_str = format!("{:?}", old_record.evidence_kind);
+        let claim_hash = compute_normalized_hash(&new_claim);
         conn.execute(
-            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind)
-             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8)",
+            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind, normalized_text_hash)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
                 new_record_id,
                 Self::kind_to_str(old_record.kind),
@@ -409,6 +413,7 @@ impl MemoryStore for SqliteMemoryStore {
                 now.timestamp(),
                 now.timestamp(),
                 evidence_kind_str,
+                claim_hash,
             ],
         )
         .map_err(|e| MemoryError::Internal(format!("insert superseding record: {e}")))?;
@@ -441,7 +446,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -507,7 +512,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -551,7 +556,7 @@ impl SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
                  FROM memory_record WHERE record_id = ?1",
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare read: {e}")))?;
@@ -618,6 +623,7 @@ impl SqliteMemoryStore {
                 .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
             superseded_by: row.get(7).ok().flatten(),
             evidence_kind,
+            normalized_text_hash: row.get(12).ok().flatten().unwrap_or_default(),
         }
     }
 }

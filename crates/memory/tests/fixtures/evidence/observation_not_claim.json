@@ -1,0 +1,27 @@
+{
+  "name": "observation_not_claim",
+  "records": [
+    {
+      "id": "mem_obs_1",
+      "text": "git status shows 3 modified files",
+      "evidence_kind": "RawObservation",
+      "scope": "Global",
+      "confidence_bps": 7000
+    },
+    {
+      "id": "mem_claim_1",
+      "text": "project uses Rust",
+      "evidence_kind": "AcceptedClaim",
+      "scope": "Global",
+      "confidence_bps": 9000
+    }
+  ],
+  "query": "what is the current project state?",
+  "mode": "CurrentState",
+  "expected_order": ["mem_claim_1", "mem_obs_1"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_obs_1": "RawObservation",
+    "mem_claim_1": "AcceptedClaim"
+  }
+}

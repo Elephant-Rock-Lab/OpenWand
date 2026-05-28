@@ -1,0 +1,29 @@
+{
+  "name": "supersession_chain",
+  "records": [
+    {
+      "id": "mem_old",
+      "text": "project uses Python 3.10",
+      "evidence_kind": "SupersededClaim",
+      "scope": "Global",
+      "confidence_bps": 7000,
+      "superseded_by": "mem_new"
+    },
+    {
+      "id": "mem_new",
+      "text": "project uses Python 3.12",
+      "evidence_kind": "AcceptedClaim",
+      "scope": "Global",
+      "confidence_bps": 9000,
+      "supersedes": "mem_old"
+    }
+  ],
+  "query": "what python version",
+  "mode": "Default",
+  "expected_order": ["mem_new", "mem_old"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_old": "SupersededClaim",
+    "mem_new": "AcceptedClaim"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "conflicting_claims",
+  "records": [
+    {
+      "id": "mem_left",
+      "text": "prefer tabs for indentation",
+      "evidence_kind": "ConflictingClaim",
+      "scope": "Global",
+      "confidence_bps": 9000,
+      "conflict_group_id": "cg_indent"
+    },
+    {
+      "id": "mem_right",
+      "text": "prefer spaces for indentation",
+      "evidence_kind": "ConflictingClaim",
+      "scope": "Global",
+      "confidence_bps": 9000,
+      "conflict_group_id": "cg_indent"
+    }
+  ],
+  "query": "indentation style",
+  "mode": "ConflictSearch",
+  "expected_order": ["mem_left", "mem_right"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_left": "ConflictingClaim",
+    "mem_right": "ConflictingClaim"
+  }
+}

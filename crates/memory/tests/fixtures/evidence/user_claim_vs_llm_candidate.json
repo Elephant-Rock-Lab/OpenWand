@@ -1,0 +1,27 @@
+{
+  "name": "user_claim_vs_llm_candidate",
+  "records": [
+    {
+      "id": "mem_user",
+      "text": "I prefer dark theme",
+      "evidence_kind": "UserStatedClaim",
+      "scope": "Global",
+      "confidence_bps": 10000
+    },
+    {
+      "id": "mem_llm",
+      "text": "user might prefer dark theme",
+      "evidence_kind": "LlmExtractedCandidate",
+      "scope": "Global",
+      "confidence_bps": 5000
+    }
+  ],
+  "query": "theme preference",
+  "mode": "Default",
+  "expected_order": ["mem_user", "mem_llm"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_user": "UserStatedClaim",
+    "mem_llm": "LlmExtractedCandidate"
+  }
+}

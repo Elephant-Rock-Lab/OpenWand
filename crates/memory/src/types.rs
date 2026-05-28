@@ -71,6 +71,9 @@ pub struct MemoryRecord {
     /// ID of the record this one supersedes (set on successor).
     #[serde(default)]
     pub supersedes_record_id: Option<String>,
+    /// Conflict group ID — records sharing this ID are in conflict.
+    #[serde(default)]
+    pub conflict_group_id: Option<String>,
 }
 
 /// The kind of accepted memory.

@@ -159,13 +159,95 @@ pub fn batch1_rules() -> Vec<PolicyRule> {
         },
 
         PolicyRule {
+            id: PolicyRuleId("allow_git_status_observation".into()),
+            name: "Allow git status observation".into(),
+            enabled: true,
+            priority: 100,
+            class: RuleClass::BuiltinDefault,
+            matcher: ToolMatcher::ToolName {
+                exact: "local__git_status".into(),
+            },
+            effect: PolicyEffect::Allow {
+                risk: RiskLevelSnapshot::Low,
+                confirmation: ConfirmationLevel::Auto,
+            },
+            reason_code: "git_observation".into(),
+            summary: "Git status observation allowed.".into(),
+        },
+
+        PolicyRule {
+            id: PolicyRuleId("allow_git_diff_observation".into()),
+            name: "Allow git diff observation".into(),
+            enabled: true,
+            priority: 100,
+            class: RuleClass::BuiltinDefault,
+            matcher: ToolMatcher::ToolName {
+                exact: "local__git_diff".into(),
+            },
+            effect: PolicyEffect::Allow {
+                risk: RiskLevelSnapshot::Medium,
+                confirmation: ConfirmationLevel::Auto,
+            },
+            reason_code: "git_observation".into(),
+            summary: "Git diff observation allowed.".into(),
+        },
+
+        PolicyRule {
+            id: PolicyRuleId("allow_git_log_observation".into()),
+            name: "Allow git log observation".into(),
+            enabled: true,
+            priority: 100,
+            class: RuleClass::BuiltinDefault,
+            matcher: ToolMatcher::ToolName {
+                exact: "local__git_log".into(),
+            },
+            effect: PolicyEffect::Allow {
+                risk: RiskLevelSnapshot::Low,
+                confirmation: ConfirmationLevel::Auto,
+            },
+            reason_code: "git_observation".into(),
+            summary: "Git log observation allowed.".into(),
+        },
+
+        PolicyRule {
+            id: PolicyRuleId("allow_git_branch_observation".into()),
+            name: "Allow git branch observation".into(),
+            enabled: true,
+            priority: 100,
+            class: RuleClass::BuiltinDefault,
+            matcher: ToolMatcher::ToolName {
+                exact: "local__git_branch".into(),
+            },
+            effect: PolicyEffect::Allow {
+                risk: RiskLevelSnapshot::Low,
+                confirmation: ConfirmationLevel::Auto,
+            },
+            reason_code: "git_observation".into(),
+            summary: "Git branch observation allowed.".into(),
+        },
+
+        PolicyRule {
             id: PolicyRuleId("confirm_git".into()),
             name: "Git requires escalation".into(),
             enabled: true,
             priority: 90,
             class: RuleClass::BuiltinDefault,
-            matcher: ToolMatcher::ToolEffect {
-                effect: ToolEffect::Git,
+            matcher: ToolMatcher::All {
+                matchers: vec![
+                    ToolMatcher::ToolEffect {
+                        effect: ToolEffect::Git,
+                    },
+                    ToolMatcher::Not {
+                        matcher: Box::new(ToolMatcher::AnyOf {
+                            matchers: vec![
+                                ToolMatcher::ToolName { exact: "local__git_status".into() },
+                                ToolMatcher::ToolName { exact: "local__git_diff".into() },
+                                ToolMatcher::ToolName { exact: "local__git_log".into() },
+                                ToolMatcher::ToolName { exact: "local__git_branch".into() },
+                            ],
+                        }),
+                    },
+                ],
             },
             effect: PolicyEffect::Allow {
                 risk: RiskLevelSnapshot::High,

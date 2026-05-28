@@ -506,6 +506,85 @@ impl MemoryStore for SqliteMemoryStore {
         })
     }
 
+    async fn search_ranked(
+        &self,
+        query: MemoryQuery,
+        mode: crate::supersession::RetrievalMode,
+    ) -> Result<crate::retrieval::RankedRetrievalContext, MemoryError> {
+        use crate::ranking::{compute_final_score, evidence_bps_from_kind, RankingWeights, MemoryRankScore};
+        use crate::retrieval::{RankedMemoryHit, RankedRetrievalContext};
+        use crate::supersession::{should_exclude_superseded, supersession_penalty};
+
+        let records = self.list_active_records().await?;
+        let query_tokens = crate::query::tokenize(&query.text);
+
+        let mut hits: Vec<RankedMemoryHit> = records
+            .iter()
+            .filter(|r| {
+                if should_exclude_superseded(r.superseded_by.is_some(), mode) {
+                    return false;
+                }
+                true
+            })
+            .filter_map(|r| {
+                let record_tokens = crate::query::tokenize(&r.claim);
+                let overlap = query_tokens
+                    .iter()
+                    .filter(|qt| record_tokens.iter().any(|rt| rt == *qt))
+                    .count() as u16;
+                if overlap == 0 {
+                    return None;
+                }
+
+                let relevance_bps = if query_tokens.is_empty() {
+                    0
+                } else {
+                    (overlap as u32 * 10000 / query_tokens.len() as u32).min(10000) as u16
+                };
+
+                let derived_kind = r.derived_evidence_kind();
+                let evidence_bps_raw = evidence_bps_from_kind(&derived_kind);
+                let penalty = supersession_penalty(r.superseded_by.is_some(), mode);
+                let evidence_bps = if evidence_bps_raw > penalty { evidence_bps_raw - penalty } else { 0 };
+
+                let score = MemoryRankScore {
+                    relevance_bps,
+                    provenance_bps: 7000,
+                    scope_bps: 7000,
+                    recency_bps: 7000,
+                    confidence_bps: (r.confidence * 10000.0) as u16,
+                    evidence_bps,
+                    final_bps: 0,
+                };
+
+                let weights = RankingWeights::default();
+                let final_bps = compute_final_score(&score, &weights);
+
+                Some(RankedMemoryHit {
+                    id: r.record_id.clone(),
+                    text: r.claim.clone(),
+                    score: MemoryRankScore { final_bps, ..score },
+                    evidence_kind: derived_kind,
+                    source_episode_ids: r.source_episode_ids.clone(),
+                    source_trace_ids: r.source_trace_ids.clone(),
+                    scope: crate::provenance::MemoryScope::Global,
+                    provenance: crate::provenance::ProvenanceSnapshot::default(),
+                    confidence_bps: (r.confidence * 10000.0) as u16,
+                    reason: format!("relevance={}, evidence={:?}", relevance_bps, derived_kind),
+                })
+            })
+            .collect();
+
+        hits.sort_by(|a, b| b.score.final_bps.cmp(&a.score.final_bps));
+
+        let total_hits = hits.len();
+        Ok(RankedRetrievalContext {
+            hits,
+            query_text: query.text,
+            total_hits,
+        })
+    }
+
     async fn list_active_records(&self) -> Result<Vec<MemoryRecord>, MemoryError> {
         let conn = self.conn.lock().unwrap();
 

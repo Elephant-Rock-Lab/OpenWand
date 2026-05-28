@@ -401,8 +401,8 @@ impl MemoryStore for SqliteMemoryStore {
         let evidence_kind_str = format!("{:?}", old_record.evidence_kind);
         let claim_hash = compute_normalized_hash(&new_claim);
         conn.execute(
-            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind, normalized_text_hash)
-             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO memory_record (record_id, kind, claim, confidence_bps, status, valid_from, created_at, updated_at, evidence_kind, normalized_text_hash, supersedes_record_id)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 new_record_id,
                 Self::kind_to_str(old_record.kind),
@@ -413,6 +413,7 @@ impl MemoryStore for SqliteMemoryStore {
                 now.timestamp(),
                 evidence_kind_str,
                 claim_hash,
+                old_record_id,
             ],
         )
         .map_err(|e| MemoryError::Internal(format!("insert superseding record: {e}")))?;
@@ -445,7 +446,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -511,7 +512,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -555,7 +556,7 @@ impl SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
                  FROM memory_record WHERE record_id = ?1",
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare read: {e}")))?;
@@ -595,8 +596,9 @@ impl SqliteMemoryStore {
         let valid_until_ts: Option<i64> = row.get(6).ok();
         let created_at_ts: i64 = row.get(8).unwrap_or(0);
         let evidence_kind_str: Option<String> = row.get(11).ok().flatten();
+        let superseded_by: Option<String> = row.get(7).ok().flatten();
 
-        let evidence_kind = evidence_kind_str
+        let stored_kind = evidence_kind_str
             .as_deref()
             .and_then(|s| match s {
                 "AcceptedClaim" => Some(EvidenceKind::AcceptedClaim),
@@ -610,6 +612,14 @@ impl SqliteMemoryStore {
             })
             .unwrap_or(EvidenceKind::AcceptedClaim);
 
+        // Derive lifecycle label: superseded records get SupersededClaim at retrieval
+        // Original evidence_kind is preserved in the stored column
+        let evidence_kind = if superseded_by.is_some() {
+            EvidenceKind::SupersededClaim
+        } else {
+            stored_kind
+        };
+
         MemoryRecord {
             record_id: row.get(0).unwrap_or_default(),
             claim: row.get(2).unwrap_or_default(),
@@ -620,9 +630,10 @@ impl SqliteMemoryStore {
             created_at: chrono::DateTime::from_timestamp(created_at_ts, 0).unwrap_or_default(),
             valid_until: valid_until_ts
                 .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
-            superseded_by: row.get(7).ok().flatten(),
+            superseded_by,
             evidence_kind,
             normalized_text_hash: row.get(12).ok().flatten().unwrap_or_default(),
+            supersedes_record_id: row.get(13).ok().flatten(),
         }
     }
 }

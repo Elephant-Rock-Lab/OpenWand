@@ -18,7 +18,7 @@ const CONFIDENCE_THRESHOLD: f64 = 0.7;
 /// In-memory implementation of MemoryStore.
 pub struct InMemoryMemoryStore {
     episodes: Mutex<HashMap<String, MemoryEpisode>>,
-    records: Mutex<HashMap<String, MemoryRecord>>,
+    pub records: Mutex<HashMap<String, MemoryRecord>>,
 }
 
 impl InMemoryMemoryStore {
@@ -147,6 +147,7 @@ impl MemoryStore for InMemoryMemoryStore {
             evidence_kind: EvidenceKind::AcceptedClaim,
             normalized_text_hash: claim_hash,
             supersedes_record_id: None,
+            conflict_group_id: None,
         };
 
         records.insert(record_id, record.clone());
@@ -179,6 +180,7 @@ impl MemoryStore for InMemoryMemoryStore {
             evidence_kind: old_record.evidence_kind,
             normalized_text_hash: claim_hash,
             supersedes_record_id: Some(old_record_id.to_string()),
+            conflict_group_id: None,
         };
 
         old_record.superseded_by = Some(new_record_id.clone());

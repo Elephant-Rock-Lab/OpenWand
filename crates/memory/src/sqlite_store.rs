@@ -446,7 +446,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id, conflict_group_id
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -591,7 +591,7 @@ impl MemoryStore for SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id, conflict_group_id
                  FROM memory_record
                  WHERE status = 'active'
                  ORDER BY created_at DESC",
@@ -635,7 +635,7 @@ impl SqliteMemoryStore {
         let mut stmt = conn
             .prepare(
                 "SELECT record_id, kind, claim, confidence_bps, status, valid_from, valid_until,
-                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id
+                        superseded_by, created_at, updated_at, scope_kind, evidence_kind, normalized_text_hash, supersedes_record_id, conflict_group_id
                  FROM memory_record WHERE record_id = ?1",
             )
             .map_err(|e| MemoryError::QueryFailed(format!("prepare read: {e}")))?;
@@ -713,6 +713,7 @@ impl SqliteMemoryStore {
             evidence_kind,
             normalized_text_hash: row.get(12).ok().flatten().unwrap_or_default(),
             supersedes_record_id: row.get(13).ok().flatten(),
+            conflict_group_id: row.get(14).ok().flatten(),
         }
     }
 }

@@ -4,6 +4,7 @@
 //! Memory extraction proposes; deterministic policy accepts.
 //! Trace provenance authorizes.
 
+pub mod conflict;
 pub mod dedup;
 pub mod error;
 pub mod evidence;

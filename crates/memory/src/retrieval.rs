@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::evidence::EvidenceKind;
 use crate::provenance::{MemoryScope, ProvenanceSnapshot};
 use crate::ranking::MemoryRankScore;
 
@@ -64,6 +65,8 @@ pub struct RankedMemoryHit {
     pub id: String,
     pub text: String,
     pub score: MemoryRankScore,
+    /// What kind of evidence this hit represents.
+    pub evidence_kind: EvidenceKind,
     pub source_episode_ids: Vec<String>,
     pub source_trace_ids: Vec<String>,
     pub scope: MemoryScope,
@@ -123,6 +126,7 @@ impl RankedRetrievalContext {
 #[cfg(test)]
 mod ranked_tests {
     use super::*;
+    use crate::evidence::EvidenceKind;
     use crate::provenance::{MemoryScope, ProvenanceKind, ProvenanceSnapshot};
     use crate::ranking::MemoryRankScore;
 
@@ -139,6 +143,7 @@ mod ranked_tests {
                 evidence_bps: 0,
                 final_bps,
             },
+            evidence_kind: EvidenceKind::AcceptedClaim,
             source_episode_ids: vec!["ep_1".to_string()],
             source_trace_ids: vec!["tr_1".to_string()],
             scope: MemoryScope::Global,

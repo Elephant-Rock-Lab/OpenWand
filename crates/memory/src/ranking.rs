@@ -66,6 +66,12 @@ pub fn compute_final_score(score: &MemoryRankScore, weights: &RankingWeights) ->
     raw.min(10000) as u16
 }
 
+/// Derive evidence_bps component from EvidenceKind.
+/// Maps directly to the authority ranking of the evidence kind.
+pub fn evidence_bps_from_kind(kind: &crate::evidence::EvidenceKind) -> u16 {
+    kind.authority_bps()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

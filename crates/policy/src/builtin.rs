@@ -134,7 +134,7 @@ pub fn batch1_rules() -> Vec<PolicyRule> {
                 effect: ToolEffect::Execute,
             },
             effect: PolicyEffect::Allow {
-                risk: RiskLevelSnapshot::High,
+                risk: RiskLevelSnapshot::Critical,
                 confirmation: ConfirmationLevel::Escalate,
             },
             reason_code: "execute_tool".into(),

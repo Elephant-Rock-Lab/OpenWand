@@ -961,3 +961,353 @@ mod tests {
         assert_eq!("nested content", content);
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Shell Exec — governed command execution (Wave 04a)
+// ---------------------------------------------------------------------------
+
+/// Maximum bytes to capture from stdout/stderr before capping.
+const SHELL_OUTPUT_CAP_BYTES: usize = 200 * 1024; // 200 KiB
+
+/// Default command timeout in milliseconds.
+const SHELL_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+
+/// Maximum allowed timeout in milliseconds.
+const SHELL_MAX_TIMEOUT_MS: u64 = 300_000;
+
+fn shell_exec_descriptor() -> ToolDef {
+    ToolDef {
+        name: canonical_local_tool_name("shell_exec"),
+        display_name: Some("Execute Command".into()),
+        description: "Execute a bare program name with arguments. No shell interpolation, pipes, or redirects. Requires escalation-level approval.".into(),
+        parameters_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "program": {
+                    "type": "string",
+                    "description": "Bare executable name. No path separators allowed."
+                },
+                "args": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Arguments to pass to the program."
+                },
+                "working_directory": {
+                    "type": "string",
+                    "description": "Override working directory. Must be within session working directory."
+                },
+                "timeout_ms": {
+                    "type": "integer",
+                    "description": "Maximum execution time in milliseconds. Default 30000, max 300000."
+                }
+            },
+            "required": ["program"]
+        }),
+        output_schema: None,
+        source: ToolSource::Local,
+        declared_effect: ToolEffect::Execute,
+        risk_hints: vec!["Spawns external process".into()],
+        tags: vec!["local".into(), "shell".into(), "execute".into()],
+        annotations: Some(ToolAnnotations {
+            read_only_hint: Some(false),
+            destructive_hint: Some(true),
+            idempotent_hint: Some(false),
+            open_world_hint: Some(true),
+        }),
+    }
+}
+
+/// Validate that a program name is a bare executable (no path components).
+fn validate_program_name(program: &str) -> Result<(), String> {
+    if program.is_empty() {
+        return Err("program name must not be empty".into());
+    }
+    if program.contains('/') || program.contains('\\') {
+        return Err(format!(
+            "program must be a bare name, not a path: {:?}",
+            program
+        ));
+    }
+    if program.starts_with('.') || program.starts_with('-') {
+        return Err(format!(
+            "program must not start with '.' or '-': {:?}",
+            program
+        ));
+    }
+    Ok(())
+}
+
+/// Resolve and validate the working directory for command execution.
+/// If `override_dir` is Some, it must resolve within `session_wd`.
+/// Returns the resolved canonical path.
+fn resolve_exec_working_dir(
+    override_dir: Option<&str>,
+    session_wd: &str,
+) -> Result<std::path::PathBuf, String> {
+    let session_path = std::path::Path::new(session_wd);
+    let canonical_session = session_path
+        .canonicalize()
+        .map_err(|e| format!("Cannot canonicalize session working directory: {e}"))?;
+
+    let target = match override_dir {
+        Some(dir) => {
+            let override_path = std::path::Path::new(dir);
+            if override_path.is_absolute() {
+                return Err(format!("working_directory must be relative: {dir}"));
+            }
+            for component in override_path.components() {
+                if component == std::path::Component::ParentDir {
+                    return Err(format!(
+                        "working_directory must not contain '..': {dir}"
+                    ));
+                }
+            }
+            session_path.join(override_path)
+        }
+        None => session_path.to_path_buf(),
+    };
+
+    let canonical_target = target
+        .canonicalize()
+        .map_err(|e| format!("working_directory does not exist: {e}"))?;
+
+    if !canonical_target.starts_with(&canonical_session) {
+        return Err("working_directory must be within session working directory".into());
+    }
+
+    Ok(canonical_target)
+}
+
+/// Cap byte output to SHELL_OUTPUT_CAP_BYTES, replacing non-UTF8 with lossy conversion.
+fn cap_byte_output(raw: &[u8]) -> String {
+    if raw.len() <= SHELL_OUTPUT_CAP_BYTES {
+        String::from_utf8_lossy(raw).into_owned()
+    } else {
+        let truncated = &raw[..SHELL_OUTPUT_CAP_BYTES];
+        let omitted = raw.len() - SHELL_OUTPUT_CAP_BYTES;
+        format!(
+            "{}\n\n[openwand: output capped at {} bytes, {} bytes omitted]",
+            String::from_utf8_lossy(truncated),
+            SHELL_OUTPUT_CAP_BYTES,
+            omitted
+        )
+    }
+}
+
+async fn shell_exec_handler(args: serde_json::Value, ctx: ToolCallContext) -> ToolResult {
+    let start = std::time::Instant::now();
+    let call_id = extract_call_id(&args);
+    let tool_name = canonical_local_tool_name("shell_exec");
+
+    // 1. Parse arguments
+    let program = match args.get("program").and_then(|v| v.as_str()) {
+        Some(p) => p.to_string(),
+        None => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                "missing required field: program".into(),
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    };
+
+    let cmd_args: Vec<String> = args
+        .get("args")
+        .and_then(|a| a.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let timeout_ms = args
+        .get("timeout_ms")
+        .and_then(|v| v.as_u64())
+        .map(|t| if t == 0 { SHELL_DEFAULT_TIMEOUT_MS } else { t.min(SHELL_MAX_TIMEOUT_MS) })
+        .unwrap_or(SHELL_DEFAULT_TIMEOUT_MS);
+
+    let override_dir = args
+        .get("working_directory")
+        .and_then(|v| v.as_str());
+
+    // 2. Validate program name
+    if let Err(e) = validate_program_name(&program) {
+        return ToolResult::error(
+            call_id,
+            tool_name,
+            e,
+            start.elapsed().as_millis() as u64,
+        );
+    }
+
+    // 3. Resolve working directory
+    let work_dir = match resolve_exec_working_dir(override_dir, &ctx.working_directory) {
+        Ok(d) => d,
+        Err(e) => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                e,
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    };
+
+    // 4. Spawn process with timeout
+    let mut cmd = tokio::process::Command::new(&program);
+    cmd.args(&cmd_args)
+        .current_dir(&work_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .stdin(std::process::Stdio::null());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                format!("Failed to spawn '{}': {}", program, e),
+                start.elapsed().as_millis() as u64,
+            );
+        }
+    };
+
+    // 5. Wait with timeout and cancellation
+    // Wrap child in Option so we can take ownership inside select branches
+    let mut child_opt = Some(child);
+    let timeout = tokio::time::Duration::from_millis(timeout_ms);
+    tokio::select! {
+        output = async { child_opt.take().unwrap().wait_with_output().await } => {
+            match output {
+                Ok(out) => {
+                    let stdout = cap_byte_output(&out.stdout);
+                    let stderr = cap_byte_output(&out.stderr);
+                    let exit_code = out.status.code().unwrap_or(-1);
+                    let combined = if stderr.is_empty() {
+                        format!("{}\nexit code: {}", stdout, exit_code)
+                    } else {
+                        format!("{}\n--- stderr ---\n{}\nexit code: {}", stdout, stderr, exit_code)
+                    };
+                    if out.status.success() {
+                        ToolResult::success(
+                            call_id,
+                            tool_name,
+                            combined,
+                            start.elapsed().as_millis() as u64,
+                        )
+                    } else {
+                        ToolResult::error(
+                            call_id,
+                            tool_name,
+                            combined,
+                            start.elapsed().as_millis() as u64,
+                        )
+                    }
+                }
+                Err(e) => ToolResult::error(
+                    call_id,
+                    tool_name,
+                    format!("Failed to wait for '{}': {}", program, e),
+                    start.elapsed().as_millis() as u64,
+                ),
+            }
+        }
+        _ = tokio::time::sleep(timeout) => {
+            // Timeout — kill the child
+            if let Some(mut c) = child_opt.take() {
+                let _ = c.kill().await;
+                let _ = c.wait().await;
+            }
+            ToolResult::error(
+                call_id,
+                tool_name,
+                format!("Command '{}' timed out after {}ms", program, timeout_ms),
+                start.elapsed().as_millis() as u64,
+            )
+        }
+        _ = ctx.cancellation.cancelled() => {
+            // Cancellation — kill the child
+            if let Some(mut c) = child_opt.take() {
+                let _ = c.kill().await;
+                let _ = c.wait().await;
+            }
+            ToolResult::error(
+                call_id,
+                tool_name,
+                format!("Command '{}' cancelled", program),
+                start.elapsed().as_millis() as u64,
+            )
+        }
+    }
+}
+
+/// Create the full set of local tools including shell execution.
+pub fn local_tools_with_shell_exec() -> BuiltinToolProvider {
+    let mut provider = batch2_local_tools();
+    provider.register_fn(shell_exec_descriptor(), shell_exec_handler);
+    provider
+}
+
+// ---------------------------------------------------------------------------
+// Shell exec tests (tools crate level)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod shell_exec_tests {
+    use super::*;
+
+    #[test]
+    fn program_validation_accepts_bare_names() {
+        assert!(validate_program_name("git").is_ok());
+        assert!(validate_program_name("cargo").is_ok());
+        assert!(validate_program_name("node").is_ok());
+        assert!(validate_program_name("python3").is_ok());
+        assert!(validate_program_name("echo").is_ok());
+    }
+
+    #[test]
+    fn program_validation_rejects_absolute_paths() {
+        assert!(validate_program_name("/usr/bin/rm").is_err());
+        assert!(validate_program_name("C:\\Windows\\cmd.exe").is_err());
+    }
+
+    #[test]
+    fn program_validation_rejects_relative_paths() {
+        assert!(validate_program_name("./script.sh").is_err());
+        assert!(validate_program_name("../evil").is_err());
+    }
+
+    #[test]
+    fn program_validation_rejects_dot_and_dash_prefix() {
+        assert!(validate_program_name(".hidden").is_err());
+        assert!(validate_program_name("--flag").is_err());
+    }
+
+    #[test]
+    fn program_validation_rejects_empty() {
+        assert!(validate_program_name("").is_err());
+    }
+
+    #[test]
+    fn output_capping_truncates_large_output() {
+        let big: Vec<u8> = b"x".to_vec().repeat(SHELL_OUTPUT_CAP_BYTES + 10_000);
+        let result = cap_byte_output(&big);
+        assert!(result.contains("[openwand: output capped"));
+        assert!(result.len() < big.len());
+    }
+
+    #[test]
+    fn timeout_clamps_to_maximum() {
+        let timeout: u64 = 999_999;
+        let clamped = if timeout == 0 {
+            SHELL_DEFAULT_TIMEOUT_MS
+        } else {
+            timeout.min(SHELL_MAX_TIMEOUT_MS)
+        };
+        assert_eq!(SHELL_MAX_TIMEOUT_MS, clamped);
+    }
+}

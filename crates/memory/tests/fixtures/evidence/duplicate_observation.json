@@ -1,0 +1,27 @@
+{
+  "name": "duplicate_observation",
+  "records": [
+    {
+      "id": "mem_dup_1",
+      "text": "build passed with 0 errors",
+      "evidence_kind": "DeterministicEvidence",
+      "scope": "Global",
+      "confidence_bps": 8000
+    },
+    {
+      "id": "mem_dup_2",
+      "text": "build passed with 0 errors",
+      "evidence_kind": "DeterministicEvidence",
+      "scope": "Global",
+      "confidence_bps": 8000
+    }
+  ],
+  "query": "build status",
+  "mode": "Default",
+  "expected_order": ["mem_dup_1", "mem_dup_2"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_dup_1": "DeterministicEvidence",
+    "mem_dup_2": "DeterministicEvidence"
+  }
+}

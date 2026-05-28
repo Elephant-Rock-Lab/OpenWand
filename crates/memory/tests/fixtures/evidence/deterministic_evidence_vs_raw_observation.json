@@ -1,0 +1,27 @@
+{
+  "name": "deterministic_evidence_vs_raw_observation",
+  "records": [
+    {
+      "id": "mem_det",
+      "text": "git branch shows main as current",
+      "evidence_kind": "DeterministicEvidence",
+      "scope": "Global",
+      "confidence_bps": 8000
+    },
+    {
+      "id": "mem_raw",
+      "text": "shell output: ls -la shows 42 files",
+      "evidence_kind": "RawObservation",
+      "scope": "Global",
+      "confidence_bps": 6000
+    }
+  ],
+  "query": "current state",
+  "mode": "CurrentState",
+  "expected_order": ["mem_det", "mem_raw"],
+  "expected_excluded": [],
+  "expected_evidence_kinds": {
+    "mem_det": "DeterministicEvidence",
+    "mem_raw": "RawObservation"
+  }
+}

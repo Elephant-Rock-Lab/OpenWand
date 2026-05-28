@@ -8,6 +8,7 @@ use crate::memory_store::MemoryStore;
 use crate::sqlite_schema::{
     MEMORY_MIGRATION_0001_CHECKSUM, MEMORY_MIGRATION_0001_SQL,
     MEMORY_MIGRATION_0002_CHECKSUM, MEMORY_MIGRATION_0002_SQL,
+    MEMORY_MIGRATION_0003_CHECKSUM, MEMORY_MIGRATION_0003_SQL,
 };
 use crate::types::{CandidateMemory, MemoryEpisode, MemoryKind, MemoryRecord};
 use crate::{MemoryError, MemoryQuery, RetrievalContext};
@@ -87,6 +88,12 @@ impl SqliteMemoryStore {
                 "0002_ranking_provenance",
                 MEMORY_MIGRATION_0002_CHECKSUM,
                 MEMORY_MIGRATION_0002_SQL,
+            ),
+            (
+                3,
+                "0003_evidence_semantics",
+                MEMORY_MIGRATION_0003_CHECKSUM,
+                MEMORY_MIGRATION_0003_SQL,
             ),
         ];
 
@@ -192,6 +199,13 @@ impl SqliteMemoryStore {
             "preference" => MemoryKind::Preference,
             _ => MemoryKind::Fact,
         }
+    }
+
+    /// Test-only: get a reference to the underlying connection.
+    /// DO NOT use in production code.
+    #[cfg(feature = "sqlite-testing")]
+    pub fn conn_for_test(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap()
     }
 }
 

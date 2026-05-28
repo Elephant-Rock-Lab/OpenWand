@@ -1,6 +1,6 @@
 use crate::loro_state::LoroSessionState;
 use crate::tool::ToolResult;
-use openwand_core::events::OpenWandTraceEvent;
+use openwand_core::events::{OpenWandTraceEvent, ToolEvent};
 use openwand_trace::TraceId;
 
 /// Projector: applies trace events to Loro document.
@@ -56,34 +56,31 @@ fn extract_text_from_event(event: &OpenWandTraceEvent) -> Option<String> {
 }
 
 fn extract_tool_result_from_event(event: &OpenWandTraceEvent) -> Option<ToolResult> {
-    let json = serde_json::to_value(event).ok()?;
-    let payload = json.get("payload")?;
-
-    Some(ToolResult {
-        tool_call_id: openwand_core::ToolCallId(
-            payload
-                .get("tool_call_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(),
-        ),
-        tool_name: payload
-            .get("tool_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string(),
-        output: payload
-            .get("output")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        is_error: payload
-            .get("is_error")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        duration_ms: payload
-            .get("duration_ms")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-    })
+    match event {
+        OpenWandTraceEvent::Tool(ToolEvent::Completed {
+            tool_call_id,
+            tool_name,
+            result_summary,
+            duration_ms,
+            ..
+        }) => Some(ToolResult {
+            tool_call_id: tool_call_id.clone(),
+            tool_name: tool_name.clone(),
+            output: result_summary.clone(),
+            is_error: false,
+            duration_ms: *duration_ms,
+        }),
+        OpenWandTraceEvent::Tool(ToolEvent::Failed {
+            tool_call_id,
+            tool_name,
+            error,
+        }) => Some(ToolResult {
+            tool_call_id: tool_call_id.clone(),
+            tool_name: tool_name.clone(),
+            output: error.clone(),
+            is_error: true,
+            duration_ms: 0,
+        }),
+        _ => None,
+    }
 }

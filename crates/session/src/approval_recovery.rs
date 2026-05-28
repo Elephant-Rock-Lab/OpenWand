@@ -12,6 +12,7 @@ use openwand_core::ids::ApprovalRequestId;
 use openwand_core::snapshots::ApprovalContextSnapshot;
 use openwand_core::ToolCallId;
 use openwand_core::events::ToolEvent;
+use openwand_core::events::GateEvent;
 use openwand_core::events::OpenWandTraceEvent;
 use openwand_store::StoredEvent;
 use openwand_trace::entry::TraceEntry;
@@ -490,4 +491,180 @@ mod tests {
         assert_eq!(ui.tool_name, "local__file_write");
         assert_eq!(ui.args_hash, "sha256:abc");
     }
+}
+
+// ---- Lifecycle Scanner ----
+
+/// Validation mode for the lifecycle scanner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LifecycleValidationMode {
+    /// Allow gate.evaluated → tool.suspended with no terminal (pending approval).
+    AllowOpenPendingApprovals,
+    /// Every gate.evaluated must have a closed lifecycle.
+    RequireClosedLifecycle,
+}
+
+/// A lifecycle violation detected by the scanner.
+#[derive(Debug, Clone)]
+pub struct ToolLifecycleViolation {
+    pub tool_call_id: ToolCallId,
+    pub reason: String,
+    pub observed_kinds: Vec<String>,
+}
+
+/// Validate tool lifecycle closure over a slice of trace entries.
+///
+/// Checks that every tool call that reached policy evaluation has a
+/// complete and correctly ordered lifecycle chain.
+pub fn validate_tool_lifecycle(
+    entries: &[TraceEntry<StoredEvent>],
+    mode: LifecycleValidationMode,
+) -> Vec<ToolLifecycleViolation> {
+    use std::collections::{HashMap, HashSet};
+
+    #[derive(Default)]
+    struct ToolState {
+        kinds: Vec<String>,
+        has_gate_evaluated: bool,
+        has_suspended: bool,
+        has_resumed: bool,
+        has_called: bool,
+        has_denied: bool,
+        has_completed: bool,
+        has_failed: bool,
+    }
+
+    let mut tools: HashMap<ToolCallId, ToolState> = HashMap::new();
+
+    // Collect all gate.evaluated tool_call_ids
+    for entry in entries {
+        if let OpenWandTraceEvent::Gate(GateEvent::Evaluated { gate_id, .. }) = &entry.event.deref() {
+            let tc_id = ToolCallId(gate_id.clone());
+            let state = tools.entry(tc_id.clone()).or_default();
+            state.has_gate_evaluated = true;
+            state.kinds.push("gate.evaluated".into());
+        }
+    }
+
+    // Collect all tool lifecycle events
+    for entry in entries {
+        if let OpenWandTraceEvent::Tool(te) = &entry.event.deref() {
+            match te {
+                ToolEvent::Suspended { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_suspended = true;
+                    state.kinds.push("tool.suspended".into());
+                }
+                ToolEvent::Resumed { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_resumed = true;
+                    state.kinds.push("tool.resumed".into());
+                }
+                ToolEvent::Denied { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_denied = true;
+                    state.kinds.push("tool.denied".into());
+                }
+                ToolEvent::Deferred { tool_call_id, .. } => {
+                    // Deferred events don't participate in the execution lifecycle
+                }
+                ToolEvent::Called { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_called = true;
+                    state.kinds.push("tool.called".into());
+                }
+                ToolEvent::Completed { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_completed = true;
+                    state.kinds.push("tool.completed".into());
+                }
+                ToolEvent::Failed { tool_call_id, .. } => {
+                    let state = tools.entry(tool_call_id.clone()).or_default();
+                    state.has_failed = true;
+                    state.kinds.push("tool.failed".into());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut violations = Vec::new();
+
+    for (tc_id, state) in &tools {
+        // Only validate tools that reached policy evaluation
+        if !state.has_gate_evaluated {
+            continue;
+        }
+
+        // Ordering checks
+        if state.has_suspended && !state.has_gate_evaluated {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.suspended without gate.evaluated".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_resumed && !state.has_suspended {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.resumed without tool.suspended".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_called && state.has_suspended && !state.has_resumed {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.called after suspension but before tool.resumed".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_denied && state.has_called {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.denied and tool.called both present".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_completed && !state.has_called {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.completed without tool.called".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_failed && !state.has_called {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "tool.failed without tool.called".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        if state.has_completed && state.has_failed {
+            violations.push(ToolLifecycleViolation {
+                tool_call_id: tc_id.clone(),
+                reason: "both tool.completed and tool.failed present".into(),
+                observed_kinds: state.kinds.clone(),
+            });
+        }
+
+        // Closure check
+        if mode == LifecycleValidationMode::RequireClosedLifecycle {
+            let has_terminal = state.has_completed || state.has_failed || state.has_denied;
+            if !has_terminal {
+                violations.push(ToolLifecycleViolation {
+                    tool_call_id: tc_id.clone(),
+                    reason: "no terminal event (tool.completed/tool.failed/tool.denied)".into(),
+                    observed_kinds: state.kinds.clone(),
+                });
+            }
+        }
+    }
+
+    violations
 }

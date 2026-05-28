@@ -388,7 +388,9 @@ impl SessionRunner {
 
             // AfterToolExecute
             self.emit_phase(Phase::AfterToolExecute, step).await;
-            self.record_tool_results(&results).await?;
+            // Note: Loro tool results are now appended by the projector
+            // when it processes tool.completed/tool.failed lifecycle events.
+            // No separate record_tool_results call needed.
             tools_executed += results.len() as u64;
 
             self.emit_phase(Phase::StepEnd, step).await;
@@ -505,22 +507,13 @@ impl SessionRunner {
                     )
                     .await?;
 
-                // 2. Record tool.called BEFORE execution
-                let called_event = OpenWandTraceEvent::Tool(ToolEvent::Called {
-                    tool_call_id: tool_call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    args_hash: target.context.args_hash.clone(),
-                    invoker: openwand_core::tool_vocab::ToolInvoker::Llm,
-                });
-                self.mutation
-                    .apply(
-                        Actor::System { component: "tool".into() },
-                        called_event,
-                        vec![],
-                        None,
-                        self.stream_id.clone(),
-                    )
-                    .await?;
+                // 2. Record tool.called — execution boundary
+                self.record_tool_called(
+                    &tool_call_id,
+                    &tool_name,
+                    target.context.args_hash.clone(),
+                )
+                .await?;
 
                 // 3. Execute tool using persisted arguments from context
                 let tools_call = openwand_tools::executor::ToolCall {
@@ -536,36 +529,27 @@ impl SessionRunner {
                 let result = self.tools.execute(&tools_call, &context).await;
                 let tool_result = crate::tool::ToolResult::from(result);
 
-                // 4. Record tool.completed or tool.failed AFTER execution
-                let terminal_event = if tool_result.is_error {
-                    OpenWandTraceEvent::Tool(ToolEvent::Failed {
-                        tool_call_id: tool_call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        error: tool_result.output.clone(),
-                    })
-                } else {
-                    OpenWandTraceEvent::Tool(ToolEvent::Completed {
-                        tool_call_id: tool_call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        status: openwand_core::tool_vocab::ToolResultStatus::Success,
-                        result_summary: tool_result.output.chars().take(200).collect(),
-                        duration_ms: tool_result.duration_ms,
-                    })
-                };
-                self.mutation
-                    .apply(
-                        Actor::System { component: "tool".into() },
-                        terminal_event,
-                        vec![],
-                        None,
-                        self.stream_id.clone(),
+                // 4. Record terminal event — mandatory after execution
+                if tool_result.is_error {
+                    self.record_tool_failed(
+                        &tool_call_id,
+                        &tool_name,
+                        tool_result.output.clone(),
                     )
                     .await?;
+                } else {
+                    self.record_tool_completed(
+                        &tool_call_id,
+                        &tool_name,
+                        tool_result.output.chars().take(200).collect(),
+                        tool_result.duration_ms,
+                    )
+                    .await?;
+                }
 
-                // 5. Record in Loro state
-                self.loro_state
-                    .append_tool_result(&tool_result, None::<&str>)
-                    .map_err(SessionError::Internal)?;
+                // 5. Loro tool result is projected by the projector
+                //    from the tool.completed/tool.failed event above.
+                //    No separate append needed.
 
                 // 6. Clear waiting approval in Loro
                 self.loro_state
@@ -886,6 +870,8 @@ impl SessionRunner {
         calls: &[ToolCall],
         config: &RunConfig,
     ) -> Result<Vec<crate::tool::ToolResult>, SessionError> {
+        use crate::approval_recovery::approval_args_hash;
+
         let mut results = Vec::new();
         for call in calls {
             let _ = self.agent_event_tx.send(AgentEvent::ToolCallStarted {
@@ -894,15 +880,39 @@ impl SessionRunner {
                 tool_call_id: call.id.clone(),
             });
 
+            // 1. Record tool.called — the execution boundary.
+            //    If trace append fails, execution must not proceed.
+            let args_hash = approval_args_hash(&call.arguments).unwrap_or_else(|_| "hash_error".into());
+            self.record_tool_called(&call.id, &call.name, args_hash).await?;
+
+            // 2. Execute the tool
             let tools_call: openwand_tools::executor::ToolCall = call.into();
             let context = build_tool_context(
                 self.session_id.clone(),
                 config.working_directory.clone(),
                 self.cancellation.clone(),
             );
-
             let result = self.tools.execute(&tools_call, &context).await;
             let tool_result = crate::tool::ToolResult::from(result);
+
+            // 3. Record terminal event — mandatory after execution.
+            //    If trace append fails, run errors visibly.
+            if tool_result.is_error {
+                self.record_tool_failed(
+                    &call.id,
+                    &call.name,
+                    tool_result.output.clone(),
+                )
+                .await?;
+            } else {
+                self.record_tool_completed(
+                    &call.id,
+                    &call.name,
+                    tool_result.output.chars().take(200).collect(),
+                    tool_result.duration_ms,
+                )
+                .await?;
+            }
 
             let preview = {
                 let text = &tool_result.output;
@@ -1145,6 +1155,89 @@ impl SessionRunner {
                 )
                 .await?;
         }
+        Ok(())
+    }
+
+    // ---- Tool lifecycle recording ----
+    //
+    // All tool lifecycle trace writes go through these methods.
+    // No inline ToolEvent::Called / Completed / Failed construction elsewhere.
+    // tool.called is the execution boundary: no ToolExecutor::execute unless
+    // tool.called has been durably appended.
+
+    /// Record tool.called — the execution boundary.
+    /// Returns the TraceId for causal linking to the terminal event.
+    async fn record_tool_called(
+        &self,
+        tool_call_id: &ToolCallId,
+        tool_name: &str,
+        args_hash: String,
+    ) -> Result<openwand_trace::TraceId, SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Called {
+            tool_call_id: tool_call_id.clone(),
+            tool_name: tool_name.into(),
+            args_hash,
+            invoker: openwand_core::tool_vocab::ToolInvoker::Llm,
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "tool".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await
+    }
+
+    /// Record tool.completed after successful execution.
+    async fn record_tool_completed(
+        &self,
+        tool_call_id: &ToolCallId,
+        tool_name: &str,
+        result_summary: String,
+        duration_ms: u64,
+    ) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Completed {
+            tool_call_id: tool_call_id.clone(),
+            tool_name: tool_name.into(),
+            status: openwand_core::tool_vocab::ToolResultStatus::Success,
+            result_summary,
+            duration_ms,
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "tool".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Record tool.failed after execution failure.
+    async fn record_tool_failed(
+        &self,
+        tool_call_id: &ToolCallId,
+        tool_name: &str,
+        error: String,
+    ) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Tool(ToolEvent::Failed {
+            tool_call_id: tool_call_id.clone(),
+            tool_name: tool_name.into(),
+            error,
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "tool".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
         Ok(())
     }
 

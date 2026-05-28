@@ -1241,18 +1241,6 @@ impl SessionRunner {
         Ok(())
     }
 
-    async fn record_tool_results(
-        &self,
-        results: &[crate::tool::ToolResult],
-    ) -> Result<(), SessionError> {
-        for result in results {
-            self.loro_state
-                .append_tool_result(result, None::<&str>)
-                .map_err(SessionError::Internal)?;
-        }
-        Ok(())
-    }
-
     /// Find tool.suspended events that have no matching tool.resumed or tool.denied.
     /// These represent crash-interrupted approvals that could be recovered.
     /// Build the full recovery index from trace.

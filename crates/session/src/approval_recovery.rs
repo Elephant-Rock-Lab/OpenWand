@@ -78,6 +78,22 @@ pub struct PendingApprovalRecovery {
     pub reason: String,
 }
 
+/// A resolved approval found in trace — tool.resumed or tool.denied with an approval_request_id.
+#[derive(Debug, Clone)]
+pub struct ResolvedApprovalRecovery {
+    pub approval_request_id: ApprovalRequestId,
+    pub tool_call_id: ToolCallId,
+    pub tool_name: String,
+    pub kind: ResolvedApprovalKind,
+}
+
+/// How the approval was resolved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedApprovalKind {
+    Approved, // tool.resumed found
+    Denied,   // tool.denied found
+}
+
 /// A deferred tool call recovered from trace.
 #[derive(Debug, Clone)]
 pub struct DeferredToolCallRecovery {
@@ -118,6 +134,7 @@ pub enum ApprovalRecoveryConflict {
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalRecoveryIndex {
     pub pending: Vec<PendingApprovalRecovery>,
+    pub resolved: Vec<ResolvedApprovalRecovery>,
     pub deferred: Vec<DeferredToolCallRecovery>,
     pub uncertain: Vec<UncertainToolExecution>,
     pub conflicts: Vec<ApprovalRecoveryConflict>,
@@ -152,6 +169,7 @@ pub fn build_recovery_index(entries: &[TraceEntry<StoredEvent>]) -> ApprovalReco
     let mut called: HashSet<ToolCallId> = HashSet::new();
     let mut terminal: HashSet<ToolCallId> = HashSet::new();
     let mut conflicts: Vec<ApprovalRecoveryConflict> = Vec::new();
+    let mut resolved: Vec<ResolvedApprovalRecovery> = Vec::new();
 
     // Track resumed/denied by approval_request_id for conflict detection
     let mut resumed_by_arid: HashSet<ApprovalRequestId> = HashSet::new();
@@ -185,12 +203,19 @@ pub fn build_recovery_index(entries: &[TraceEntry<StoredEvent>]) -> ApprovalReco
 
             OpenWandTraceEvent::Tool(ToolEvent::Resumed {
                 tool_call_id,
+                tool_name,
                 approval_request_id,
                 ..
             }) => {
                 resolved_ids.insert(tool_call_id.clone());
                 if let Some(arid) = approval_request_id {
                     resumed_by_arid.insert(arid.clone());
+                    resolved.push(ResolvedApprovalRecovery {
+                        approval_request_id: arid.clone(),
+                        tool_call_id: tool_call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        kind: ResolvedApprovalKind::Approved,
+                    });
                     // Check for conflict: both resumed and denied for same arid
                     if denied_by_arid.contains(arid) {
                         conflicts.push(ApprovalRecoveryConflict::ResumedAndDenied {
@@ -203,12 +228,19 @@ pub fn build_recovery_index(entries: &[TraceEntry<StoredEvent>]) -> ApprovalReco
 
             OpenWandTraceEvent::Tool(ToolEvent::Denied {
                 tool_call_id,
+                tool_name,
                 approval_request_id,
                 ..
             }) => {
                 resolved_ids.insert(tool_call_id.clone());
                 if let Some(arid) = approval_request_id {
                     denied_by_arid.insert(arid.clone());
+                    resolved.push(ResolvedApprovalRecovery {
+                        approval_request_id: arid.clone(),
+                        tool_call_id: tool_call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        kind: ResolvedApprovalKind::Denied,
+                    });
                     if resumed_by_arid.contains(arid) {
                         conflicts.push(ApprovalRecoveryConflict::ResumedAndDenied {
                             approval_request_id: arid.clone(),
@@ -271,6 +303,7 @@ pub fn build_recovery_index(entries: &[TraceEntry<StoredEvent>]) -> ApprovalReco
 
     ApprovalRecoveryIndex {
         pending: unresolved,
+        resolved,
         deferred,
         uncertain,
         conflicts,

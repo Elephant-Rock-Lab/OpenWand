@@ -185,12 +185,12 @@ async fn main() -> Result<()> {
             let approved = input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes";
 
             let decision = if approved {
-                ApprovalDecision::Approved
+                ApprovalDecision::approve()
             } else {
-                ApprovalDecision::Rejected
+                ApprovalDecision::reject()
             };
 
-            let approval_result = runner.resume_with_approval(decision, run_config).await?;
+            let approval_result = runner.resolve_approval(decision, run_config).await?;
             println!("  → {}", if approved { "Approved" } else { "Rejected" });
             if let Some(tool_result) = &approval_result.tool_result {
                 println!("  Tool result: {}", tool_result.output);

@@ -15,7 +15,6 @@ use openwand_core::events::{
 };
 use openwand_store::StoredEvent;
 use openwand_core::mode::InteractionMode;
-use openwand_core::tool_vocab::ToolResultStatus;
 use openwand_core::SessionId;
 use openwand_core::ToolCallId;
 use openwand_core::ids::ApprovalRequestId;
@@ -25,7 +24,6 @@ use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, PolicyEngine};
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::{Actor, TraceStore, TraceStreamId, TraceStreamScope};
-use std::ops::Deref;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -33,6 +31,12 @@ use tokio_util::sync::CancellationToken;
 struct InferenceOutput {
     text: String,
     tool_calls: Vec<ToolCall>,
+}
+
+/// Cache entry linking a live pending tool to its approval_request_id.
+struct CachedApproval {
+    approval_request_id: openwand_core::ApprovalRequestId,
+    pending: PendingTool,
 }
 
 struct GatedTools {
@@ -53,23 +57,68 @@ pub struct PendingTool {
     pub declared_effect: openwand_core::ToolEffect,
 }
 
-/// User's decision on a pending tool approval.
+/// How the user resolved a pending approval.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ApprovalDecision {
+pub enum ApprovalResolution {
     /// User approved — execute the tool.
-    Approved,
+    Approve,
     /// User rejected — do not execute.
-    Rejected,
+    Reject { reason: Option<String> },
+}
+
+/// A governance decision resolving a pending approval.
+#[derive(Debug, Clone)]
+pub struct ApprovalDecision {
+    /// Which approval to resolve. None = "resolve the single pending one."
+    pub approval_request_id: Option<openwand_core::ApprovalRequestId>,
+    /// The resolution itself.
+    pub resolution: ApprovalResolution,
+}
+
+impl ApprovalDecision {
+    /// Approve the single pending approval (no explicit ID).
+    pub fn approve() -> Self {
+        Self { approval_request_id: None, resolution: ApprovalResolution::Approve }
+    }
+
+    /// Reject the single pending approval (no explicit ID).
+    pub fn reject() -> Self {
+        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: None } }
+    }
+
+    /// Reject with an explicit reason.
+    pub fn reject_with_reason(reason: impl Into<String>) -> Self {
+        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: Some(reason.into()) } }
+    }
+
+    /// Resolve a specific approval by ID.
+    pub fn for_approval(arid: openwand_core::ApprovalRequestId, resolution: ApprovalResolution) -> Self {
+        Self { approval_request_id: Some(arid), resolution }
+    }
+}
+
+/// How the resolver found the approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApprovalSource {
+    /// Cache hit: pending_approval pointed to the resolved approval.
+    Live,
+    /// Cache miss or no cache: found by scanning trace.
+    Recovered,
+    /// Cache existed but pointed to a different approval than the one resolved.
+    StaleCache,
 }
 
 /// Result of resuming a pending approval.
 #[derive(Debug, Clone)]
 pub struct ApprovalResult {
-    pub decision: ApprovalDecision,
+    pub resolution: ApprovalResolution,
     pub tool_name: String,
     pub tool_call_id: ToolCallId,
+    pub approval_request_id: openwand_core::ApprovalRequestId,
     /// If approved and executed: the tool result.
     pub tool_result: Option<crate::tool::ToolResult>,
+    /// How the resolver found the approval.
+    pub source: ApprovalSource,
 }
 
 pub struct SessionRunner {
@@ -93,7 +142,7 @@ pub struct SessionRunner {
     working_directory: String,
 
     /// Pending tool awaiting user approval. Set when runner suspends for confirmation.
-    pending_approval: Mutex<Option<PendingTool>>,
+    pending_approval: Mutex<Option<CachedApproval>>,
 }
 
 impl SessionRunner {
@@ -157,7 +206,16 @@ impl SessionRunner {
 
     /// Get the current pending approval (if any).
     pub async fn pending_approval(&self) -> Option<PendingTool> {
-        self.pending_approval.lock().await.clone()
+        self.pending_approval.lock().await.as_ref().map(|c| c.pending.clone())
+    }
+
+    /// Get the approval_request_id from the cache, if any.
+    async fn pending_approval_hint(&self) -> Option<openwand_core::ApprovalRequestId> {
+        self.pending_approval
+            .lock()
+            .await
+            .as_ref()
+            .map(|c| c.approval_request_id.clone())
     }
 
     /// Run one user turn through the 10-phase loop.
@@ -271,8 +329,11 @@ impl SessionRunner {
                         .await?;
                     }
 
-                    // Store pending approval
-                    *self.pending_approval.lock().await = Some(pending.clone());
+                    // Store pending approval with its arid
+                    *self.pending_approval.lock().await = Some(CachedApproval {
+                        approval_request_id: arid.clone(),
+                        pending: pending.clone(),
+                    });
 
                     // Emit approval requested event
                     let _ = self.agent_event_tx.send(AgentEvent::ApprovalRequested {
@@ -334,101 +395,63 @@ impl SessionRunner {
     ///
     /// **Critical invariant**: ToolExecutor::execute is only called after
     /// `tool.resumed` is durably recorded in trace.
-    /// Resolve the current pending approval from live session state.
-    /// For recovered approvals after restart, use `resolve_recovered_approval` instead.
-    pub async fn resume_with_approval(
+    /// Resolve a pending tool approval.
+    ///
+    /// Single public API for both live and recovered approvals.
+    /// Builds recovery index once, uses cache as hint, resolves from trace.
+    pub async fn resolve_approval(
         &self,
         decision: ApprovalDecision,
         config: RunConfig,
     ) -> Result<ApprovalResult, SessionError> {
-        // Get the approval_request_id from live pending state WITHOUT consuming it.
-        // The resolver sources truth from trace; live pending is just a cache.
-        let approval_request_id = {
-            let guard = self.pending_approval.lock().await;
-            match guard.as_ref() {
-                Some(pending) => {
-                    // Extract from the suspended event's context.
-                    // The record_tool_suspended method embeds ApprovalContextSnapshot
-                    // which contains the approval_request_id.
-                    // For the live path, we get it from the pending tool's gate evaluation.
-                    // We need to look it up from trace since PendingTool doesn't store arid.
-                    // Instead, scan trace for the most recent tool.suspended with this tool_call_id.
-                    pending.tool_call.id.clone()
-                }
-                None => return Err(SessionError::NoPendingApproval),
-            }
-        };
+        // Phase 1: Build recovery index (single scan)
+        let index = self.approval_recovery_index().await?;
 
-        // Use the unified resolver
-        let result = self
-            .resolve_approval_internal(decision, config, approval_request_id)
+        // Phase 2: Select target (pure logic)
+        let cache_hint = self.pending_approval_hint().await;
+        let (target, source) = select_approval_target(&index, cache_hint, &decision)?;
+
+        // Phase 2.5: Idempotency check — if caller specified an arid and it's already resolved
+        if let Some(arid) = decision.approval_request_id.as_ref() {
+            if let Some(resolved) = index.resolved.iter().find(|r| &r.approval_request_id == arid) {
+                // Already resolved — return idempotent result
+                return Ok(ApprovalResult {
+                    resolution: match resolved.kind {
+                        crate::approval_recovery::ResolvedApprovalKind::Approved => ApprovalResolution::Approve,
+                        crate::approval_recovery::ResolvedApprovalKind::Denied => ApprovalResolution::Reject { reason: None },
+                    },
+                    tool_name: resolved.tool_name.clone(),
+                    tool_call_id: resolved.tool_call_id.clone(),
+                    approval_request_id: resolved.approval_request_id.clone(),
+                    tool_result: None,
+                    source: ApprovalSource::Recovered,
+                });
+            }
+        }
+
+        // Phase 3: Resolve from index (no second scan)
+        let mut result = self
+            .resolve_from_index(&index, &target, decision, config)
             .await?;
 
-        // Only clear live pending state after successful resolution
-        if result.decision == ApprovalDecision::Approved
-            || result.decision == ApprovalDecision::Rejected
-        {
-            self.pending_approval.lock().await.take();
-        }
+        // Stamp the source determined by the selector
+        result.source = source;
+
+        // Clear cache after successful resolution
+        self.pending_approval.lock().await.take();
 
         Ok(result)
     }
 
-    /// Resolve a recovered pending approval after restart.
-    ///
-    /// Unlike `resume_with_approval`, this does not require live `pending_approval` state.
-    /// It sources the pending tool call from trace via the recovery index.
-    ///
-    /// Returns Err if no recoverable pending approval exists.
-    pub async fn resolve_recovered_approval(
+    /// Effectful resolver: appends trace events, executes tool, mutates Loro.
+    /// Takes a pre-built index — no second scan.
+    async fn resolve_from_index(
         &self,
+        index: &crate::approval_recovery::ApprovalRecoveryIndex,
+        target: &crate::approval_recovery::PendingApprovalRecovery,
         decision: ApprovalDecision,
         config: RunConfig,
     ) -> Result<ApprovalResult, SessionError> {
-        // Build recovery index from trace
-        let index = self.approval_recovery_index().await?;
-
-        // Must have exactly one pending approval
-        if index.conflicts.is_empty() && index.pending.len() == 1 && index.uncertain.is_empty() {
-            let tool_call_id = index.pending[0].context.tool_call_id.clone();
-            let result = self
-                .resolve_approval_internal(decision, config, tool_call_id)
-                .await?;
-            Ok(result)
-        } else if !index.pending.is_empty() {
-            Err(SessionError::Internal(format!(
-                "Cannot resolve: {} pending approvals, {} conflicts, {} uncertain",
-                index.pending.len(), index.conflicts.len(), index.uncertain.len()
-            )))
-        } else {
-            Err(SessionError::NoPendingApproval)
-        }
-    }
-
-    /// Unified approval resolver. Both live and recovered approvals use this path.
-    /// Sources truth from trace, not from in-memory pending state.
-    async fn resolve_approval_internal(
-        &self,
-        decision: ApprovalDecision,
-        config: RunConfig,
-        tool_call_id: ToolCallId,
-    ) -> Result<ApprovalResult, SessionError> {
-        // Build recovery index from trace (source of truth)
-        let index = self.approval_recovery_index().await?;
-
-        // Find the pending approval by tool_call_id
-        let matching = index
-            .pending
-            .iter()
-            .find(|p| p.context.tool_call_id == tool_call_id);
-
-        let pending = match matching {
-            Some(p) => p.clone(),
-            None => {
-                return Err(SessionError::NoPendingApproval);
-            }
-        };
-
         // Check for conflicts
         if !index.conflicts.is_empty() {
             return Err(SessionError::Internal(format!(
@@ -437,12 +460,12 @@ impl SessionRunner {
             )));
         }
 
-        let tool_name = pending.tool_name.clone();
-        let tool_call_id = pending.context.tool_call_id.clone();
-        let approval_request_id = pending.context.approval_request_id.clone();
+        let tool_name = target.tool_name.clone();
+        let tool_call_id = target.context.tool_call_id.clone();
+        let approval_request_id = target.context.approval_request_id.clone();
 
-        match decision {
-            ApprovalDecision::Approved => {
+        match decision.resolution {
+            ApprovalResolution::Approve => {
                 // 1. Append tool.resumed BEFORE execution (durable approval proof)
                 let resumed_event = OpenWandTraceEvent::Tool(ToolEvent::Resumed {
                     tool_call_id: tool_call_id.clone(),
@@ -464,7 +487,7 @@ impl SessionRunner {
                 let called_event = OpenWandTraceEvent::Tool(ToolEvent::Called {
                     tool_call_id: tool_call_id.clone(),
                     tool_name: tool_name.clone(),
-                    args_hash: pending.context.args_hash.clone(),
+                    args_hash: target.context.args_hash.clone(),
                     invoker: openwand_core::tool_vocab::ToolInvoker::Llm,
                 });
                 self.mutation
@@ -481,7 +504,7 @@ impl SessionRunner {
                 let tools_call = openwand_tools::executor::ToolCall {
                     id: tool_call_id.clone(),
                     name: tool_name.clone(),
-                    arguments: pending.context.arguments.clone(),
+                    arguments: target.context.arguments.clone(),
                 };
                 let context = build_tool_context(
                     self.session_id.clone(),
@@ -522,25 +545,27 @@ impl SessionRunner {
                     .append_tool_result(&tool_result, None::<&str>)
                     .map_err(SessionError::Internal)?;
 
-                // 4. Clear waiting approval in Loro
+                // 6. Clear waiting approval in Loro
                 self.loro_state
                     .clear_waiting_approval()
                     .map_err(SessionError::Internal)?;
 
                 Ok(ApprovalResult {
-                    decision: ApprovalDecision::Approved,
+                    resolution: ApprovalResolution::Approve,
                     tool_name,
                     tool_call_id,
+                    approval_request_id,
                     tool_result: Some(tool_result),
+                    source: ApprovalSource::Live, // overwritten by caller
                 })
             }
-            ApprovalDecision::Rejected => {
+            ApprovalResolution::Reject { ref reason } => {
                 // 1. Append tool.denied (no execution)
                 let denied_event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
                     tool_call_id: tool_call_id.clone(),
                     tool_name: tool_name.clone(),
                     approval_request_id: Some(approval_request_id.clone()),
-                    reason: Some("user_rejected".into()),
+                    reason: reason.clone().or_else(|| Some("user_rejected".into())),
                 });
                 self.mutation
                     .apply(
@@ -573,10 +598,12 @@ impl SessionRunner {
                     .map_err(SessionError::Internal)?;
 
                 Ok(ApprovalResult {
-                    decision: ApprovalDecision::Rejected,
+                    resolution: ApprovalResolution::Reject { reason: reason.clone() },
                     tool_name,
                     tool_call_id,
+                    approval_request_id,
                     tool_result: None,
+                    source: ApprovalSource::Live, // overwritten by caller
                 })
             }
         }
@@ -1077,47 +1104,6 @@ impl SessionRunner {
         Ok(())
     }
 
-    /// Record tool.resumed in trace (approval granted).
-    /// This is the durable approval record — must exist before ToolExecutor::execute.
-    async fn record_tool_resumed(&self, pending: &PendingTool) -> Result<(), SessionError> {
-        let event = OpenWandTraceEvent::Tool(ToolEvent::Resumed {
-            tool_call_id: pending.tool_call.id.clone(),
-            tool_name: pending.tool_call.name.clone(),
-            resolution: "approved".into(),
-            approval_request_id: None,
-        });
-        self.mutation
-            .apply(
-                Actor::System { component: "gate".into() },
-                event,
-                vec![],
-                None,
-                self.stream_id.clone(),
-            )
-            .await?;
-        Ok(())
-    }
-
-    /// Record tool.denied in trace (approval rejected or hard-blocked).
-    async fn record_tool_denied_event(&self, pending: &PendingTool) -> Result<(), SessionError> {
-        let event = OpenWandTraceEvent::Tool(ToolEvent::Denied {
-            tool_call_id: pending.tool_call.id.clone(),
-            tool_name: pending.tool_call.name.clone(),
-            approval_request_id: None,
-            reason: None,
-        });
-        self.mutation
-            .apply(
-                Actor::System { component: "gate".into() },
-                event,
-                vec![],
-                None,
-                self.stream_id.clone(),
-            )
-            .await?;
-        Ok(())
-    }
-
     /// Record tool.denied for hard-blocked tools (no pending approval context).
     async fn record_denied_tools(&self, calls: &[ToolCall]) -> Result<(), SessionError> {
         for call in calls {
@@ -1183,6 +1169,62 @@ impl SessionRunner {
                 suspended_at: chrono::Utc::now(), // approximation — exact time in trace entry
             })
             .collect())
+    }
+}
+
+// ---- Pure selector (free function) ----
+
+/// Select which pending approval to resolve.
+///
+/// Pure function over index data + cache hint + decision.
+/// Returns the target pending approval and how it was found.
+pub fn select_approval_target(
+    index: &crate::approval_recovery::ApprovalRecoveryIndex,
+    cache_hint: Option<openwand_core::ApprovalRequestId>,
+    decision: &ApprovalDecision,
+) -> Result<(crate::approval_recovery::PendingApprovalRecovery, ApprovalSource), SessionError> {
+    // Case 1: Caller specified an explicit approval_request_id
+    if let Some(ref arid) = decision.approval_request_id {
+        let matching = index
+            .pending
+            .iter()
+            .find(|p| p.context.approval_request_id == *arid);
+
+        return match matching {
+            Some(target) => {
+                let source = match cache_hint {
+                    Some(hint_arid) if hint_arid == *arid => ApprovalSource::Live,
+                    Some(_) => ApprovalSource::StaleCache,
+                    None => ApprovalSource::Recovered,
+                };
+                Ok((target.clone(), source))
+            }
+            None => Err(SessionError::NoPendingApproval),
+        };
+    }
+
+    // Case 2: Caller wants "the single pending one" — use cache hint or scan
+
+    // Try cache hint first
+    if let Some(cache_arid) = cache_hint {
+        if let Some(target) = index
+            .pending
+            .iter()
+            .find(|p| p.context.approval_request_id == cache_arid)
+        {
+            return Ok((target.clone(), ApprovalSource::Live));
+        }
+        // Cache was stale — fall through to scan
+    }
+
+    // No cache or stale cache — use index
+    match index.pending.len() {
+        0 => Err(SessionError::NoPendingApproval),
+        1 => Ok((index.pending[0].clone(), ApprovalSource::Recovered)),
+        n => Err(SessionError::Internal(format!(
+            "Cannot resolve: {} pending approvals. Specify an approval_request_id.",
+            n
+        ))),
     }
 }
 

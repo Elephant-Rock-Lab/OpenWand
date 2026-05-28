@@ -44,7 +44,7 @@ async fn approval_resume_appends_resumed_before_execution() {
     // Approve
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -69,7 +69,7 @@ async fn approval_resume_executes_persisted_arguments() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -93,7 +93,7 @@ async fn approval_reject_appends_denied_no_execution() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -120,7 +120,7 @@ async fn approval_reject_denied_before_model_continuation() {
     // Reject
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -162,7 +162,7 @@ async fn approval_approve_never_calls_tool_before_resumed() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -201,7 +201,7 @@ async fn approval_resolution_fails_closed_no_matching_suspension() {
     // Trying to approve should fail (no pending)
     let result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await;
 
     assert!(result.is_err(), "Should fail when no pending approval exists");
@@ -226,7 +226,7 @@ async fn failed_approval_does_not_consume_pending() {
     // Instead, verify that a second approval attempt after success fails cleanly.
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -236,7 +236,7 @@ async fn failed_approval_does_not_consume_pending() {
     // Second approval attempt should fail
     let result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await;
     assert!(result.is_err(), "Second approval should fail (no pending)");
 }
@@ -259,7 +259,7 @@ async fn approval_trace_contains_approval_request_id() {
     // Approve
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 

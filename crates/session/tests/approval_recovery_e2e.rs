@@ -3,7 +3,6 @@
 //! Tests crash-recoverable approval governance using real SQLite trace store.
 //! Pattern: create session → suspend → drop runner → reopen → rebuild → resolve.
 
-use openwand_core::events::{OpenWandTraceEvent, ToolEvent};
 use openwand_core::mode::InteractionMode;
 use openwand_core::SessionId;
 use openwand_llm::LlmClient;
@@ -16,10 +15,9 @@ use openwand_session::testing::mock_llm::MockLlmClient;
 use openwand_session::testing::mock_memory::MockMemoryReadStore;
 use openwand_session::testing::mock_policy::MockPolicyEngine;
 use openwand_session::testing::mock_tools::MockToolExecutor;
-use openwand_session::ApprovalDecision;
+use openwand_session::{ApprovalDecision, ApprovalResolution};
 use openwand_store::StoredEvent;
 use openwand_trace::TraceStore;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -152,11 +150,11 @@ async fn sqlite_recovery_crash_restart_approve() {
     );
 
     let result = runner2
-        .resolve_recovered_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
-    assert_eq!(ApprovalDecision::Approved, result.decision);
+    assert!(matches!(result.resolution, ApprovalResolution::Approve));
     assert_eq!("local__file_write", result.tool_name);
     assert_eq!(1, tools2.execution_count().await);
 
@@ -212,11 +210,11 @@ async fn sqlite_recovery_crash_restart_reject() {
     );
 
     let result = runner2
-        .resolve_recovered_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
-    assert_eq!(ApprovalDecision::Rejected, result.decision);
+    assert!(matches!(result.resolution, ApprovalResolution::Reject { .. }));
     assert!(result.tool_result.is_none());
     assert_eq!(0, tools2.execution_count().await);
 

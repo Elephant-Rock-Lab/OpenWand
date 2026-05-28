@@ -68,7 +68,7 @@ async fn deferred_events_survive_in_trace_after_approval() {
     // Approve write_A
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 

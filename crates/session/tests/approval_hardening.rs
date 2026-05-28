@@ -92,7 +92,7 @@ async fn trace_failure_on_resumed_prevents_execution() {
 
     // Now try to approve — the tool.resumed append should fail
     let result = runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await;
 
     assert!(result.is_err(), "Approval should fail when trace append fails");
@@ -217,7 +217,7 @@ async fn multi_tool_batch_after_approval_only_approved_tool_executes() {
     // Approve write_A
     let approval_result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -261,7 +261,7 @@ async fn multi_tool_batch_deferred_tools_not_in_pending() {
     // After approving A, pending is cleared
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -295,7 +295,7 @@ async fn denied_approval_reaches_llm_as_tool_error_and_model_continues() {
     // Reject the tool
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -378,7 +378,7 @@ async fn rejection_clears_state_for_next_run() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -408,7 +408,7 @@ async fn approval_then_clear_allows_new_run() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -457,7 +457,7 @@ async fn rejection_feedback_visible_in_messages() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -518,7 +518,7 @@ async fn unresolved_suspensions_excludes_resumed_tools() {
     // Approve → tool.resumed is recorded
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -543,7 +543,7 @@ async fn unresolved_suspensions_excludes_denied_tools() {
     // Reject → tool.denied is recorded
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 

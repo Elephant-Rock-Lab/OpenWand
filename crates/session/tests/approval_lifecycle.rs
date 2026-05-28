@@ -12,7 +12,7 @@
 use openwand_core::mode::InteractionMode;
 use openwand_session::config::{RunConfig, RunStopReason};
 use openwand_session::testing::harness::SessionHarness;
-use openwand_session::ApprovalDecision;
+use openwand_session::{ApprovalDecision, ApprovalResolution};
 
 fn conversational_config() -> RunConfig {
     RunConfig {
@@ -93,11 +93,11 @@ async fn approved_tool_executes_after_resume() {
 
     let result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .expect("resume should succeed");
 
-    assert_eq!(ApprovalDecision::Approved, result.decision);
+    assert!(matches!(result.resolution, ApprovalResolution::Approve));
     assert_eq!("local__file_write", result.tool_name);
     assert!(result.tool_result.is_some(), "Tool should have executed");
 }
@@ -114,7 +114,7 @@ async fn approved_tool_clears_pending_approval() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -136,11 +136,11 @@ async fn rejected_tool_does_not_execute() {
 
     let result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .expect("resume should succeed");
 
-    assert_eq!(ApprovalDecision::Rejected, result.decision);
+    assert!(matches!(result.resolution, ApprovalResolution::Reject { .. }));
     assert_eq!("local__file_write", result.tool_name);
     assert!(result.tool_result.is_none(), "Tool should NOT have executed");
 }
@@ -157,7 +157,7 @@ async fn rejected_tool_clears_pending_approval() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 
@@ -173,7 +173,7 @@ async fn resume_without_pending_approval_fails() {
 
     let result = harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await;
 
     assert!(result.is_err(), "Resume without pending should fail");
@@ -229,7 +229,7 @@ async fn approval_trace_shows_suspended_then_resumed() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Approved, conversational_config())
+        .resolve_approval(ApprovalDecision::approve(), conversational_config())
         .await
         .unwrap();
 
@@ -266,7 +266,7 @@ async fn rejection_trace_shows_suspended_then_denied_no_resumed() {
 
     harness
         .runner
-        .resume_with_approval(ApprovalDecision::Rejected, conversational_config())
+        .resolve_approval(ApprovalDecision::reject(), conversational_config())
         .await
         .unwrap();
 

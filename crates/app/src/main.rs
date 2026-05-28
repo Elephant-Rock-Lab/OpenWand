@@ -175,8 +175,8 @@ async fn main() -> Result<()> {
     let result = if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
         println!("────────────────────────────────────────────");
         if let Some(pending) = runner.pending_approval().await {
-            println!("⚠ Tool '{}' requires your approval.", pending.tool_call.name);
-            println!("  Reason: {}", pending.gate_evaluation.summary);
+            println!("⚠ Tool '{}' requires your approval.", pending.tool_name);
+            println!("  Reason: {}", pending.policy_summary);
             println!("  Approve? [y/N] ");
 
             // Read user input

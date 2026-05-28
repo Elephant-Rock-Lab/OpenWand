@@ -108,6 +108,21 @@ pub enum ApprovalSource {
     StaleCache,
 }
 
+/// UX-facing view of a pending approval.
+///
+/// Returned by `pending_approval()`. Contains only the fields callers need
+/// for display and governance — not the full internal `PendingTool`.
+#[derive(Debug, Clone)]
+pub struct PendingApprovalView {
+    pub approval_request_id: openwand_core::ApprovalRequestId,
+    pub tool_call_id: ToolCallId,
+    pub tool_name: String,
+    pub risk_level: openwand_core::RiskLevelSnapshot,
+    pub confirmation_level: openwand_core::ConfirmationLevel,
+    pub policy_summary: String,
+    pub requested_action_summary: String,
+}
+
 /// Result of resuming a pending approval.
 #[derive(Debug, Clone)]
 pub struct ApprovalResult {
@@ -205,8 +220,16 @@ impl SessionRunner {
     }
 
     /// Get the current pending approval (if any).
-    pub async fn pending_approval(&self) -> Option<PendingTool> {
-        self.pending_approval.lock().await.as_ref().map(|c| c.pending.clone())
+    pub async fn pending_approval(&self) -> Option<PendingApprovalView> {
+        self.pending_approval.lock().await.as_ref().map(|c| PendingApprovalView {
+            approval_request_id: c.approval_request_id.clone(),
+            tool_call_id: c.pending.tool_call.id.clone(),
+            tool_name: c.pending.tool_call.name.clone(),
+            risk_level: c.pending.gate_evaluation.risk_level.clone(),
+            confirmation_level: c.pending.gate_evaluation.confirmation_level.clone(),
+            policy_summary: c.pending.gate_evaluation.summary.clone(),
+            requested_action_summary: format!("Execute '{}' with provided arguments", c.pending.tool_call.name),
+        })
     }
 
     /// Get the approval_request_id from the cache, if any.
@@ -407,14 +430,9 @@ impl SessionRunner {
         // Phase 1: Build recovery index (single scan)
         let index = self.approval_recovery_index().await?;
 
-        // Phase 2: Select target (pure logic)
-        let cache_hint = self.pending_approval_hint().await;
-        let (target, source) = select_approval_target(&index, cache_hint, &decision)?;
-
-        // Phase 2.5: Idempotency check — if caller specified an arid and it's already resolved
+        // Phase 1.5: Idempotency check — if caller specified an arid and it's already resolved
         if let Some(arid) = decision.approval_request_id.as_ref() {
             if let Some(resolved) = index.resolved.iter().find(|r| &r.approval_request_id == arid) {
-                // Already resolved — return idempotent result
                 return Ok(ApprovalResult {
                     resolution: match resolved.kind {
                         crate::approval_recovery::ResolvedApprovalKind::Approved => ApprovalResolution::Approve,
@@ -428,6 +446,10 @@ impl SessionRunner {
                 });
             }
         }
+
+        // Phase 2: Select target (pure logic)
+        let cache_hint = self.pending_approval_hint().await;
+        let (target, source) = select_approval_target(&index, cache_hint, &decision)?;
 
         // Phase 3: Resolve from index (no second scan)
         let mut result = self

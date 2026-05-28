@@ -76,7 +76,7 @@ async fn pending_approval_available_after_suspension() {
     let pending = harness.runner.pending_approval().await;
     assert!(pending.is_some(), "Pending approval should be set");
     let pending = pending.unwrap();
-    assert_eq!("local__file_write", pending.tool_call.name);
+    assert_eq!("local__file_write", pending.tool_name);
 }
 
 // ---- Approval path ----

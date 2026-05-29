@@ -92,7 +92,7 @@ impl MemoryEvidenceProvenance {
         parts.join(" · ")
     }
 
-    fn unknown() -> Self {
+    pub(crate) fn unknown() -> Self {
         Self {
             provenance_kind: ProvenanceKind::Unknown,
             record_id: None,

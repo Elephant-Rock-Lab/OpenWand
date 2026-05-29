@@ -1,0 +1,25 @@
+{
+  "id": "model_uses_missing_in_repo_claim_fails",
+  "title": "Model uses missing-in-repo claim — evaluation fails",
+  "category": "missing_in_repo",
+  "execution_mode": "full_harness",
+  "user_query": "What crates?",
+  "expected_outcome": "Fail",
+  "seed_memory": [
+    {
+      "label": "missing_claim",
+      "claim": "crate nonexistent exists",
+      "kind": "Fact",
+      "confidence": 0.9,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_not_use_in_answer": ["crate nonexistent exists"]
+  },
+  "model": {"Mock": {"behavior": {"CorrectAnswer": {"text": "crate nonexistent exists"}}}}
+}

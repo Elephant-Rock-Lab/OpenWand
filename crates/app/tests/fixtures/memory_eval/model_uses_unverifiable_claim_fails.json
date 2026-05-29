@@ -1,0 +1,25 @@
+{
+  "id": "model_uses_unverifiable_claim_fails",
+  "title": "Model uses unverifiable claim that should be excluded",
+  "category": "unverifiable",
+  "execution_mode": "full_harness",
+  "user_query": "What theme?",
+  "expected_outcome": "Fail",
+  "seed_memory": [
+    {
+      "label": "unverifiable",
+      "claim": "the team prefers dark mode",
+      "kind": "Preference",
+      "confidence": 0.8,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_not_use_in_answer": ["the team prefers dark mode"]
+  },
+  "model": {"Mock": {"behavior": {"CorrectAnswer": {"text": "the team prefers dark mode"}}}}
+}

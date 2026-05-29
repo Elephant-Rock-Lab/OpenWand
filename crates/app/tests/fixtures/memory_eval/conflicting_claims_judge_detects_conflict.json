@@ -1,0 +1,17 @@
+{
+  "id": "conflicting_claims_judge_detects_conflict",
+  "title": "Judge detects conflict bucket assignment correctly",
+  "category": "conflict",
+  "execution_mode": "judge_only",
+  "user_query": "What architecture?",
+  "expected_outcome": "Pass",
+  "seed_memory": [],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "expected_buckets": [
+      {"claim": "project uses microservices", "bucket": "Conflict"}
+    ]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

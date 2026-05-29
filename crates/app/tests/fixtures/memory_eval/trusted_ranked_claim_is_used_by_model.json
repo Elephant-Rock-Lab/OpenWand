@@ -1,0 +1,26 @@
+{
+  "id": "trusted_ranked_claim_is_used_by_model",
+  "title": "Trusted claim is retrieved and model uses it correctly",
+  "category": "prompt_included",
+  "execution_mode": "full_harness",
+  "user_query": "What do you know?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "core_claim",
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "must_use_in_answer": ["crate core exists"]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

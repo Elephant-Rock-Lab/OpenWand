@@ -1,0 +1,33 @@
+{
+  "id": "trusted_user_stated_claim_is_included",
+  "title": "User-stated claim with matching repo is included in prompt",
+  "category": "prompt_included",
+  "execution_mode": "full_harness",
+  "user_query": "What crates exist?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "core_claim",
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "must_include_in_prompt": ["crate core exists"],
+    "must_use_in_answer": ["crate core exists"],
+    "expected_buckets": [
+      {"claim": "crate core exists", "bucket": "PromptIncluded"}
+    ],
+    "expected_provenance": [
+      {"claim": "crate core exists", "has_record_id": true, "has_source_trace_ids": false}
+    ]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

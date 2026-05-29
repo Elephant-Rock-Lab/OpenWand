@@ -1,0 +1,33 @@
+{
+  "id": "claim_derived_from_episode_has_lineage",
+  "title": "Claim derived from trace episode shows lineage",
+  "category": "verified_trace_lineage",
+  "execution_mode": "full_harness",
+  "user_query": "What is derived?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "core_claim",
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": ["trace_base"],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [
+    {"label": "trace_base", "event_kind": "session.started", "actor_label": "user"},
+    {"label": "trace_derived", "event_kind": "session.started", "actor_label": "system"}
+  ],
+  "seed_relations": [
+    {"from_label": "trace_base", "to_label": "trace_derived", "kind": "DerivedFrom"}
+  ],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "expected_provenance": [
+      {"claim": "crate core exists", "has_record_id": true, "has_source_trace_ids": true}
+    ]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

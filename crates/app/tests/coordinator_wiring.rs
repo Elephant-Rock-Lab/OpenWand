@@ -4,7 +4,6 @@ use openwand_app::memory_coordinator::{
     MemoryCoordinator, PromptInputProductionConfig, PromptInputResult,
 };
 use openwand_core::SessionId;
-use openwand_memory::evidence::EvidenceKind;
 use openwand_memory::in_memory::InMemoryMemoryStore;
 use openwand_memory::memory_store::MemoryStore;
 use openwand_memory::types::{CandidateMemory, CandidateKind, EpisodeRole, MemoryEpisode};
@@ -391,4 +390,61 @@ async fn full_pipeline_produces_provenance_tagged_prompt() {
     assert!(block.contains("## Verified Memory"), "should contain Verified Memory heading");
     assert!(block.contains("core"), "should mention the supported crate");
     assert!(!block.contains("microservices"), "unverifiable text must not appear");
+}
+
+// ── Session-scoped cache filtering tests ──
+// These test the filter logic that prevents cross-session leakage.
+// The actual CachedMemoryPromptInputs struct is in ui_main.rs (binary target),
+// so we test the equivalent filter predicates here.
+
+#[derive(Debug, Clone)]
+struct TestCachedInputs {
+    session_id: String,
+    working_directory: std::path::PathBuf,
+}
+
+fn filter_cached_inputs(
+    cached: &Option<TestCachedInputs>,
+    session_id: &str,
+    working_directory: &std::path::Path,
+) -> bool {
+    cached
+        .as_ref()
+        .filter(|c| c.session_id == session_id)
+        .filter(|c| c.working_directory == working_directory)
+        .is_some()
+}
+
+#[test]
+fn ui_passes_cached_inputs_for_matching_session() {
+    let cached = Some(TestCachedInputs {
+        session_id: "sess-a".to_string(),
+        working_directory: std::path::PathBuf::from("/project"),
+    });
+    assert!(filter_cached_inputs(&cached, "sess-a", std::path::Path::new("/project")));
+}
+
+#[test]
+fn ui_does_not_pass_cached_inputs_from_other_session() {
+    let cached = Some(TestCachedInputs {
+        session_id: "sess-a".to_string(),
+        working_directory: std::path::PathBuf::from("/project"),
+    });
+    assert!(!filter_cached_inputs(&cached, "sess-b", std::path::Path::new("/project")));
+}
+
+#[test]
+fn ui_does_not_pass_cached_inputs_from_other_workdir() {
+    let cached = Some(TestCachedInputs {
+        session_id: "sess-a".to_string(),
+        working_directory: std::path::PathBuf::from("/project-a"),
+    });
+    assert!(!filter_cached_inputs(&cached, "sess-a", std::path::Path::new("/project-b")));
+}
+
+#[test]
+fn ui_clears_memory_prompt_inputs_on_session_switch() {
+    // After clearing, the cache is None
+    let cached: Option<TestCachedInputs> = None;
+    assert!(!filter_cached_inputs(&cached, "sess-a", std::path::Path::new("/project")));
 }

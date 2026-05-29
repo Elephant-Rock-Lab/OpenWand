@@ -547,3 +547,54 @@ async fn output_guard_safe_text_passes_unchanged() {
     assert!(!screened.was_screened);
     assert_eq!("The project has 12 crates and 648 tests.", screened.final_text);
 }
+
+// ---- Wave 02l: runner boundary test ----
+
+#[tokio::test]
+async fn runner_uses_memory_prompt_inputs_before_raw_search() {
+    // When RunConfig.memory_prompt_inputs is Some(), the runner's assemble_llm_request()
+    // should take the 02k branch and never call memory.search().
+    //
+    // Proven by checking that MockMemoryReadStore.calls() is empty after the run.
+
+    use openwand_memory::prompt_assembly::{
+        MemoryPromptAssemblyInputs, PromptInclusionReason, SupportedMemoryClaim,
+    };
+    use openwand_memory::evidence::EvidenceKind;
+
+    let harness = SessionHarness::text_only();
+
+    let inputs = MemoryPromptAssemblyInputs {
+        supported_claims: vec![SupportedMemoryClaim {
+            claim_text: "crate session exists".to_string(),
+            evidence_kind: EvidenceKind::AcceptedClaim,
+            confidence_bps: 9000,
+            source_provenance: None,
+            repo_evidence_key: vec!["crate:session".to_string()],
+            inclusion_reason: PromptInclusionReason::RepoSupported {
+                evidence_keys: vec!["crate:session".to_string()],
+            },
+        }],
+        ..MemoryPromptAssemblyInputs::empty()
+    };
+
+    let mut config = default_config();
+    config.memory_prompt_inputs = Some(inputs);
+
+    let result = harness
+        .runner
+        .run_turn("What crates exist?".into(), config)
+        .await
+        .expect("turn should run");
+
+    // Verify the run completed successfully
+    assert!(result.steps_completed <= 25);
+
+    // CRITICAL ASSERTION: raw memory.search() was never called
+    let calls = harness.memory.calls().await;
+    assert!(
+        calls.is_empty(),
+        "raw search() should not be called when 02k inputs are provided, but got: {:?}",
+        calls
+    );
+}

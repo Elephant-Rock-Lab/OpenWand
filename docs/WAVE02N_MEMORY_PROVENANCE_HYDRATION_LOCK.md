@@ -1,8 +1,8 @@
 # WAVE02N MEMORY PROVENANCE HYDRATION LOCK
 
 **Date:** 2026-05-29
-**Commits:** f97529b → 7efc122 (6 commits)
-**Tests:** 681 → 708, zero failures
+**Commits:** f97529b → 7efc122 + fork guard (de485f3)
+**Tests:** 681 → 709, zero failures
 
 ## Lock Condition (all met)
 
@@ -82,6 +82,36 @@ the panel and audit surface only.
 | Bucket classification | No new buckets |
 | Runner's prompt path | Prompt text unchanged |
 | `CachedMemoryPromptInputs` | Unchanged |
+
+## Provenance Fork Decision
+
+**Locked:** Memory provenance remains panel-visible, audit-visible, and evaluation-visible,
+but not prompt-visible during normal agent/tool-use runs.
+
+Trace-relation data may improve deterministic ranking, exclusion, confidence, conflict handling,
+and audit explanations, but must not be rendered into the standard memory prompt context.
+
+Any future provenance-in-prompt behavior requires:
+1. A separate `MemoryReasoningPromptBuilder`
+2. An explicit interaction mode (epistemic, not operational)
+3. Feature gating
+4. Measured model-quality justification
+
+**Hard invariant tests:**
+- `hydration_does_not_change_prompt_context_text`
+- `normal_prompt_assembly_does_not_render_provenance_tags`
+
+**Trace relation placement:**
+
+| Relation | Normal prompt | Deterministic use |
+|----------|--------------|-------------------|
+| Supersedes | Do not show | Exclusion / stale |
+| Invalidates | Do not show | Exclusion / correction |
+| ConflictsWith | Do not show raw conflict | Downgrade / exclude / review |
+| DerivedFrom | Do not show | Panel/audit lineage |
+| Verifies | Do not show | Confidence/ranking boost |
+| Refines | Show refined only | Supersession lineage |
+| References | Do not show | Weak provenance label |
 
 ## Known Gaps (honest list)
 

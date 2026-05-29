@@ -4,7 +4,7 @@
 
 use dioxus::prelude::*;
 use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
-use openwand_app::ui::memory_dto::UiMemoryPanel;
+use openwand_app::ui::memory_dto::UiFilteredMemoryPanel;
 use openwand_app::memory_coordinator::PromptInputProductionConfig;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
@@ -35,7 +35,7 @@ static SELECTED_SESSION_ID: GlobalSignal<Option<String>> = Signal::global(|| Non
 static CURRENT_SESSION: GlobalSignal<Option<UiSessionView>> = Signal::global(|| None);
 static RUN_STATE: GlobalSignal<UiRunState> = Signal::global(UiRunState::default);
 static STATUS_TEXT: GlobalSignal<String> = Signal::global(|| "Ready".into());
-static MEMORY_PANEL: GlobalSignal<UiMemoryPanel> = Signal::global(UiMemoryPanel::empty);
+static MEMORY_PANEL: GlobalSignal<UiFilteredMemoryPanel> = Signal::global(UiFilteredMemoryPanel::empty);
 
 /// Active runner + handle for the selected session.
 static ACTIVE_RUNNER: GlobalSignal<Option<ActiveRun>> = Signal::global(|| None);
@@ -218,21 +218,12 @@ fn App() -> Element {
                 div { style: "padding: 12px 16px; border-bottom: 1px solid #ddd;",
                     span { style: "font-weight: 600; font-size: 14px;", "Memory" }
                     span { style: "font-size: 11px; color: #888; margin-left: 8px;",
-                        "{MEMORY_PANEL.read().active_count} records"
+                        "{MEMORY_PANEL.read().summary.prompt_included} trusted"
                     }
                 }
 
                 div { style: "flex: 1; overflow-y: auto;",
-                    for record in MEMORY_PANEL.read().records.iter() {
-                        { render_memory_record(record) }
-                    }
-                    if MEMORY_PANEL.read().records.is_empty() {
-                        div { style: "padding: 24px 16px; color: #999; font-size: 12px; text-align: center;",
-                            "No memories yet."
-                            br {}
-                            "Say \"remember X\" to create one."
-                        }
-                    }
+                    { render_memory_buckets(&MEMORY_PANEL.read()) }
                 }
             }
         }
@@ -281,32 +272,66 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
     }
 }
 
-fn render_memory_record(record: &openwand_app::ui::memory_dto::UiMemoryRecord) -> Element {
-    let kind_color = match record.kind.as_str() {
-        "decision" => "#d4a017",
-        "preference" => "#8b5cf6",
-        _ => "#4a90d9",
-    };
-    let confidence_str = format!("{:.0}%", record.confidence * 100.0);
+fn render_memory_buckets(panel: &openwand_app::ui::memory_dto::UiFilteredMemoryPanel) -> Element {
+    if panel.is_empty() {
+        return rsx! {
+            div { style: "padding: 24px 16px; color: #999; font-size: 12px; text-align: center;",
+                "No memory analysis yet."
+                br {}
+                "Run a turn to populate."
+            }
+        };
+    }
 
     rsx! {
         div {
-            style: "padding: 10px 16px; border-bottom: 1px solid #eee;",
-            div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;",
-                span {
-                    style: "font-size: 10px; padding: 2px 6px; border-radius: 3px;
-                            background: {kind_color}; color: white; font-weight: 600;",
-                    "{record.kind}"
-                }
-                span { style: "font-size: 10px; color: #aaa;",
-                    "{confidence_str}"
+            { render_bucket("✓ Trusted", "#4caf50", &panel.prompt_included) }
+            { render_bucket("⚠ Stale", "#ff9800", &panel.stale) }
+            { render_bucket("✗ Missing in repo", "#f44336", &panel.missing_in_repo) }
+            { render_bucket("? Missing in memory", "#9e9e9e", &panel.missing_in_memory) }
+            { render_conflicts("⚡ Conflicts", "#e91e63", &panel.conflicts) }
+            { render_bucket("○ Unverifiable", "#9e9e9e", &panel.unverifiable) }
+            { render_bucket("⊘ Superseded", "#bdbdbd", &panel.superseded_ignored) }
+        }
+    }
+}
+
+fn render_bucket(title: &str, color: &str, rows: &[openwand_app::ui::memory_dto::UiMemoryPanelRow]) -> Element {
+    if rows.is_empty() {
+        return rsx! { div {} };
+    }
+
+    rsx! {
+        div { style: "border-bottom: 1px solid #eee;",
+            div { style: "padding: 8px 16px 4px; font-size: 11px; font-weight: 600; color: {color};",
+                "{title} ({rows.len()})"
+            }
+            for row in rows.iter() {
+                div { style: "padding: 4px 16px 6px; font-size: 11px; color: #333; line-height: 1.3;",
+                    "{row.claim}"
                 }
             }
-            div { style: "font-size: 12px; color: #333; line-height: 1.4;",
-                "{record.claim}"
+        }
+    }
+}
+
+fn render_conflicts(title: &str, color: &str, conflicts: &[openwand_app::ui::memory_dto::UiMemoryPanelConflict]) -> Element {
+    if conflicts.is_empty() {
+        return rsx! { div {} };
+    }
+    let total_claims: usize = conflicts.iter().map(|g| g.claims.len()).sum();
+
+    rsx! {
+        div { style: "border-bottom: 1px solid #eee;",
+            div { style: "padding: 8px 16px 4px; font-size: 11px; font-weight: 600; color: {color};",
+                "{title} ({total_claims})"
             }
-            div { style: "font-size: 10px; color: #aaa; margin-top: 4px;",
-                "{record.source_count} sources"
+            for group in conflicts.iter() {
+                for claim in group.claims.iter() {
+                    div { style: "padding: 4px 16px 6px; font-size: 11px; color: #333; line-height: 1.3;",
+                        "{claim.claim}"
+                    }
+                }
             }
         }
     }
@@ -651,6 +676,11 @@ async fn poll_and_project(
             &PromptInputProductionConfig::default(),
         )
         .await;
+    // Refresh memory panel — use filtered panel from coordinator output
+    let panel = openwand_app::ui::memory_service::build_filtered_panel(&prompt_result);
+    *MEMORY_PANEL.write() = panel;
+
+    // Cache prompt inputs for the next turn
     *MEMORY_PROMPT_INPUTS.write() = if prompt_result.inputs.is_empty() {
         None
     } else {
@@ -661,19 +691,11 @@ async fn poll_and_project(
         })
     };
 
-    // Refresh memory panel
-    match openwand_app::ui::memory_service::build_memory_panel(&*memory).await {
-        Ok(panel) => {
-            *MEMORY_PANEL.write() = panel;
-            *STATUS_TEXT.write() = format!(
-                "Run complete. Memory: {} new records.",
-                projection.records_accepted
-            );
-        }
-        Err(e) => {
-            *STATUS_TEXT.write() = format!("Run complete. Memory panel error: {e}");
-        }
-    }
+    *STATUS_TEXT.write() = format!(
+        "Run complete. Memory: {} trusted, {} new records.",
+        MEMORY_PANEL.read().summary.prompt_included,
+        projection.records_accepted
+    );
 
     *ACTIVE_RUNNER.write() = None;
 }

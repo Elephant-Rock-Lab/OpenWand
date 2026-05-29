@@ -1,38 +1,94 @@
-//! Memory UI DTOs.
+//! Memory UI DTOs — filtered by repo-consistency.
 //!
-//! Types for rendering memory records in the UI panel.
-//! Inspection only — no editing.
+//! Replaces the flat UiMemoryPanel with a governed, bucket-based view.
+//! Each row shows a memory claim classified by repo consistency (02j)
+//! and tagged with prompt inclusion provenance (02k).
 
 use serde::{Deserialize, Serialize};
 
-/// A memory record for UI display.
+/// Summary counts for the panel header.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UiMemoryPanelSummary {
+    pub prompt_included: usize,
+    pub stale: usize,
+    pub missing_in_repo: usize,
+    pub missing_in_memory: usize,
+    pub conflicts: usize,
+    pub unverifiable: usize,
+    pub superseded_ignored: usize,
+}
+
+impl UiMemoryPanelSummary {
+    pub fn total(&self) -> usize {
+        self.prompt_included
+            + self.stale
+            + self.missing_in_repo
+            + self.missing_in_memory
+            + self.conflicts
+            + self.unverifiable
+            + self.superseded_ignored
+    }
+}
+
+/// A single memory claim row in the panel.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct UiMemoryRecord {
-    pub record_id: String,
+pub struct UiMemoryPanelRow {
     pub claim: String,
-    pub kind: String,         // "fact" | "decision" | "preference"
-    pub confidence: f64,
-    pub status: String,       // "active" | "superseded" | "rejected"
-    pub source_count: usize,
-    pub source_trace_ids: Vec<String>,
-    pub created_at: i64,
-    pub superseded_by: Option<String>,
+    pub finding_kind: String,
+    pub evidence_kind: String,
+    pub repo_evidence_key: Vec<String>,
+    pub inclusion_reason: Option<String>,
+    pub severity: String,
 }
 
-/// Summary of all memory state for the UI panel.
+/// A conflict group requiring review.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiMemoryPanel {
-    pub total_records: usize,
-    pub active_count: usize,
-    pub records: Vec<UiMemoryRecord>,
+pub struct UiMemoryPanelConflict {
+    pub group_id: String,
+    pub claims: Vec<UiMemoryPanelRow>,
+    pub detail: String,
 }
 
-impl UiMemoryPanel {
+/// The full panel view — bucket-based, repo-filtered.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiFilteredMemoryPanel {
+    pub working_directory: String,
+    pub generated_at: i64,
+    pub summary: UiMemoryPanelSummary,
+    pub prompt_included: Vec<UiMemoryPanelRow>,
+    pub stale: Vec<UiMemoryPanelRow>,
+    pub missing_in_repo: Vec<UiMemoryPanelRow>,
+    pub missing_in_memory: Vec<UiMemoryPanelRow>,
+    pub conflicts: Vec<UiMemoryPanelConflict>,
+    pub unverifiable: Vec<UiMemoryPanelRow>,
+    pub superseded_ignored: Vec<UiMemoryPanelRow>,
+}
+
+impl UiFilteredMemoryPanel {
     pub fn empty() -> Self {
         Self {
-            total_records: 0,
-            active_count: 0,
-            records: vec![],
+            working_directory: String::new(),
+            generated_at: 0,
+            summary: UiMemoryPanelSummary {
+                prompt_included: 0,
+                stale: 0,
+                missing_in_repo: 0,
+                missing_in_memory: 0,
+                conflicts: 0,
+                unverifiable: 0,
+                superseded_ignored: 0,
+            },
+            prompt_included: vec![],
+            stale: vec![],
+            missing_in_repo: vec![],
+            missing_in_memory: vec![],
+            conflicts: vec![],
+            unverifiable: vec![],
+            superseded_ignored: vec![],
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.summary.total() == 0
     }
 }

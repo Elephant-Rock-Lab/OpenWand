@@ -12,7 +12,7 @@ pub mod run_dto;
 pub mod service;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
-pub use memory_dto::{UiMemoryPanel, UiMemoryRecord};
+pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};
 pub use replay::UiTimelineItem;
 pub use run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 pub use service::{UiServiceError, UiSessionService};

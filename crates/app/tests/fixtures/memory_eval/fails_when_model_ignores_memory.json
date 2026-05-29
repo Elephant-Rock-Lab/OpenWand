@@ -1,0 +1,26 @@
+{
+  "id": "fails_when_model_ignores_memory",
+  "title": "Model ignores required memory — evaluation should fail",
+  "user_query": "What memory do you have?",
+  "expected_outcome": "Fail",
+  "seed_memory": [
+    {
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim"
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "must_include_in_prompt": ["crate core exists"],
+    "must_use_in_answer": ["crate core exists"],
+    "must_not_use_in_answer": [],
+    "expected_buckets": [],
+    "expected_provenance": [],
+    "expected_trace_lineage": []
+  },
+  "model": {"Mock": {"behavior": "IgnoreIncludedMemory"}}
+}

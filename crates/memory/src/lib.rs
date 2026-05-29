@@ -15,6 +15,7 @@ pub mod prompt_assembly;
 pub mod panel_view;
 pub mod provenance_hydration;
 pub mod trace_relation_hydration;
+pub mod evaluation;
 pub mod provenance;
 pub mod query;
 pub mod ranking;

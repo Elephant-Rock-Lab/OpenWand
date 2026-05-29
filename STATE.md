@@ -51,6 +51,7 @@ crates/
 | Output Guard | Post-inference output screening | ✅ Complete (652 tests) |
 | 02l | Coordinator 02j→02k wiring | ✅ Complete (667 tests) |
 | 02m | Memory panel repo-filtered view | ✅ Complete (681 tests) |
+| 02n | Memory provenance hydration | ✅ Complete (708 tests) |
 
 ## Test Count
 **197 tests, zero failures, zero warnings.**

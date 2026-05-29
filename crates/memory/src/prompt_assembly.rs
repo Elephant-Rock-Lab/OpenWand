@@ -32,7 +32,7 @@ fn assemble_prompt_inputs(findings: &[RepoConsistencyFinding]) -> MemoryPromptAs
     let mut superseded = Vec::new();
     let mut conflicts = Vec::new();
     let mut missing = Vec::new();
-    let mut unverifiable = 0usize;
+    let mut unverifiable = Vec::new();
 
     for finding in findings {
         match finding.kind {
@@ -110,8 +110,10 @@ fn assemble_prompt_inputs(findings: &[RepoConsistencyFinding]) -> MemoryPromptAs
                 }
             }
             RepoConsistencyFindingKind::Unverifiable => {
-                unverifiable += 1;
-                // Claim text deliberately NOT stored
+                unverifiable.push(UnverifiableMemoryClaim {
+                    claim_text: finding.claim_text.clone().unwrap_or_default(),
+                    evidence_kind: finding.evidence_kind,
+                });
             }
         }
     }
@@ -182,6 +184,15 @@ pub struct MissingMemoryObservation {
     pub inclusion_reason: PromptInclusionReason,
 }
 
+/// An unverifiable claim excluded from prompt context.
+/// Cannot be checked deterministically against the active workdir.
+/// Claim text IS stored for panel visibility but NOT included in prompt output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnverifiableMemoryClaim {
+    pub claim_text: String,
+    pub evidence_kind: Option<EvidenceKind>,
+}
+
 /// The full assembly input — the only structure used for prompt formatting.
 /// Produced from RepoConsistencyReport, never from raw ranked hits.
 #[derive(Debug, Clone)]
@@ -190,7 +201,10 @@ pub struct MemoryPromptAssemblyInputs {
     pub relevant_superseded_history: Vec<SupersededMemoryClaim>,
     pub conflicts_for_user_or_model: Vec<MemoryConflictGroup>,
     pub missing_memory_gaps: Vec<MissingMemoryObservation>,
-    pub unverifiable_claims_excluded: usize,
+    /// Unverifiable claims excluded from prompt context.
+    /// Cannot be checked deterministically against the active workdir.
+    /// Claim text IS stored for panel visibility (02m) but NOT included in prompt output.
+    pub unverifiable_claims_excluded: Vec<UnverifiableMemoryClaim>,
 }
 
 impl MemoryPromptAssemblyInputs {
@@ -200,7 +214,7 @@ impl MemoryPromptAssemblyInputs {
             relevant_superseded_history: vec![],
             conflicts_for_user_or_model: vec![],
             missing_memory_gaps: vec![],
-            unverifiable_claims_excluded: 0,
+            unverifiable_claims_excluded: vec![],
         }
     }
 
@@ -209,7 +223,7 @@ impl MemoryPromptAssemblyInputs {
             && self.relevant_superseded_history.is_empty()
             && self.conflicts_for_user_or_model.is_empty()
             && self.missing_memory_gaps.is_empty()
-            && self.unverifiable_claims_excluded == 0
+            && self.unverifiable_claims_excluded.is_empty()
     }
 
     /// Format as a provenance-tagged prompt block.
@@ -278,10 +292,10 @@ impl MemoryPromptAssemblyInputs {
         }
 
         // Unverifiable count (if any)
-        if self.unverifiable_claims_excluded > 0 {
+        if !self.unverifiable_claims_excluded.is_empty() {
             sections.push(format!(
                 "({} claims excluded: outside verification scope)",
-                self.unverifiable_claims_excluded
+                self.unverifiable_claims_excluded.len()
             ));
         }
 
@@ -355,7 +369,12 @@ mod tests {
     #[test]
     fn inputs_with_unverifiable_only_is_not_empty() {
         let inputs = MemoryPromptAssemblyInputs {
-            unverifiable_claims_excluded: 3,
+            unverifiable_claims_excluded: vec![
+                UnverifiableMemoryClaim {
+                    claim_text: "test".to_string(),
+                    evidence_kind: None,
+                },
+            ],
             ..MemoryPromptAssemblyInputs::empty()
         };
         assert!(!inputs.is_empty());
@@ -425,8 +444,9 @@ mod tests {
     fn unverifiable_incremented_not_stored() {
         let findings = vec![make_finding(RepoConsistencyFindingKind::Unverifiable, "microservices")];
         let inputs = assemble_prompt_inputs(&findings);
-        assert_eq!(1, inputs.unverifiable_claims_excluded);
+        assert_eq!(1, inputs.unverifiable_claims_excluded.len());
         assert!(inputs.supported_claims.is_empty());
+        assert_eq!("microservices", inputs.unverifiable_claims_excluded[0].claim_text);
     }
 
     #[test]
@@ -443,7 +463,7 @@ mod tests {
             make_finding(RepoConsistencyFindingKind::Unverifiable, "c"),
         ];
         let inputs = assemble_prompt_inputs(&findings);
-        assert_eq!(3, inputs.unverifiable_claims_excluded);
+        assert_eq!(3, inputs.unverifiable_claims_excluded.len());
         assert!(inputs.supported_claims.is_empty());
         assert!(inputs.relevant_superseded_history.is_empty());
     }
@@ -458,7 +478,7 @@ mod tests {
         let inputs = assemble_prompt_inputs(&findings);
         assert_eq!(1, inputs.supported_claims.len());
         assert_eq!(1, inputs.relevant_superseded_history.len());
-        assert_eq!(1, inputs.unverifiable_claims_excluded);
+        assert_eq!(1, inputs.unverifiable_claims_excluded.len());
     }
 
     #[test]
@@ -565,7 +585,11 @@ mod tests {
     #[test]
     fn unverifiable_count_appears_without_claim_text() {
         let inputs = MemoryPromptAssemblyInputs {
-            unverifiable_claims_excluded: 3,
+            unverifiable_claims_excluded: vec![
+                UnverifiableMemoryClaim { claim_text: "a".to_string(), evidence_kind: None },
+                UnverifiableMemoryClaim { claim_text: "b".to_string(), evidence_kind: None },
+                UnverifiableMemoryClaim { claim_text: "c".to_string(), evidence_kind: None },
+            ],
             ..MemoryPromptAssemblyInputs::empty()
         };
         let block = inputs.to_prompt_block().unwrap();

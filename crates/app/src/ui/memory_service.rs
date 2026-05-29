@@ -5,7 +5,7 @@
 
 use crate::memory_coordinator::PromptInputResult;
 use crate::ui::memory_dto::{
-    UiFilteredMemoryPanel, UiMemoryPanelConflict, UiMemoryPanelRow, UiMemoryPanelSummary,
+    UiFilteredMemoryPanel, UiMemoryPanelConflict, UiMemoryPanelRow, UiMemoryPanelSummary, UiTraceRelationCounts,
 };
 use openwand_memory::panel_view::RepoFilteredPanelView;
 
@@ -57,6 +57,17 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
         conflict_group_id: c.conflict_group_id.clone(),
         superseded_by: c.superseded_by.clone(),
         hydration_status: format!("{:?}", c.hydration_status),
+        trace_lineage_summary: c.trace_lineage_summary.clone(),
+        trace_relation_counts: UiTraceRelationCounts {
+            derived_from: c.trace_relation_counts.as_ref().map(|t| t.derived_from).unwrap_or(0),
+            verifies: c.trace_relation_counts.as_ref().map(|t| t.verifies).unwrap_or(0),
+            supersedes: c.trace_relation_counts.as_ref().map(|t| t.supersedes).unwrap_or(0),
+            invalidates: c.trace_relation_counts.as_ref().map(|t| t.invalidates).unwrap_or(0),
+            refines: c.trace_relation_counts.as_ref().map(|t| t.refines).unwrap_or(0),
+            conflicts_with: c.trace_relation_counts.as_ref().map(|t| t.conflicts_with).unwrap_or(0),
+            other: c.trace_relation_counts.as_ref().map(|t| t.other).unwrap_or(0),
+        },
+        trace_lineage_status: c.trace_lineage_status.clone(),
     };
 
     UiFilteredMemoryPanel {
@@ -84,6 +95,9 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
                 conflict_group_id: None,
                 superseded_by: None,
                 hydration_status: "Missing".to_string(),
+                trace_lineage_summary: None,
+                trace_relation_counts: UiTraceRelationCounts::default(),
+                trace_lineage_status: None,
             })
             .collect(),
         conflicts: view

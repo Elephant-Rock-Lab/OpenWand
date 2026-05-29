@@ -47,6 +47,20 @@ pub struct UiMemoryPanelRow {
     pub conflict_group_id: Option<String>,
     pub superseded_by: Option<String>,
     pub hydration_status: String,
+    pub trace_lineage_summary: Option<String>,
+    pub trace_relation_counts: UiTraceRelationCounts,
+    pub trace_lineage_status: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct UiTraceRelationCounts {
+    pub derived_from: usize,
+    pub verifies: usize,
+    pub supersedes: usize,
+    pub invalidates: usize,
+    pub refines: usize,
+    pub conflicts_with: usize,
+    pub other: usize,
 }
 
 /// A conflict group requiring review.

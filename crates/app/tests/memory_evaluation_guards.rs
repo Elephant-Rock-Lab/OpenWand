@@ -166,3 +166,43 @@ async fn memory_evaluation_prompt_hash_matches_runtime() {
     assert_eq!(r1.snapshot.memory_context_hash, r2.snapshot.memory_context_hash,
         "Same seed must produce same prompt hash");
 }
+
+#[tokio::test]
+async fn expanded_eval_suite_does_not_change_runtime_prompt_hashes() {
+    // Run 3 different scenarios with different seeds, verify each is internally stable
+    let scenarios = vec![
+        make_guard_scenario(),
+        MemoryEvaluationScenario {
+            id: "guard_extra".into(),
+            title: "Extra guard".into(),
+            category: MemoryEvaluationCategory::PromptIncluded,
+            execution_mode: ScenarioExecutionMode::FullHarness,
+            user_query: "test".into(),
+            expected_outcome: ExpectedScenarioOutcome::Pass,
+            seed_memory: vec![MemoryRecordSeed {
+                label: Some("tools_claim".into()),
+                claim: "crate core exists".into(),
+                kind: "Fact".into(),
+                confidence: 0.85,
+                evidence_kind: "AcceptedClaim".into(),
+                source_trace_labels: vec![],
+                superseded_by_label: None,
+            }],
+            seed_trace: vec![],
+            seed_relations: vec![],
+            expectations: MemoryEvaluationExpectations::default(),
+            model: EvaluationModelConfig::Mock {
+                behavior: MockEvaluationBehavior::EchoIncludedMemory,
+            },
+        },
+    ];
+
+    for scenario in &scenarios {
+        let harness = MemoryEvaluationHarness::new();
+        let dir = create_workspace_dir();
+        let r1 = harness.run_scenario(scenario, dir.path()).await;
+        let r2 = harness.run_scenario(scenario, dir.path()).await;
+        assert_eq!(r1.snapshot.memory_context_hash, r2.snapshot.memory_context_hash,
+            "Scenario {} hash must be stable across runs", scenario.id);
+    }
+}

@@ -545,6 +545,13 @@ async fn handle_send(
     let policy: Arc<dyn openwand_policy::PolicyEngine> = Arc::new(build_smoke_policy());
     let memory_read: Arc<dyn MemoryReadStore> = memory.clone() as Arc<dyn MemoryReadStore>;
 
+    // Get working directory from session view
+    let working_dir = CURRENT_SESSION
+        .read()
+        .as_ref()
+        .and_then(|s| s.working_directory.clone())
+        .unwrap_or_else(|| ".".to_string());
+
     let runner = Arc::new(SessionRunner::new(
         SessionId(session_id.clone()),
         trace_store,
@@ -552,10 +559,25 @@ async fn handle_send(
         tools,
         policy,
         memory_read,
-        ".".into(),
+        working_dir.clone(),
     ));
 
-    match service.start_run(&session_id, text.clone(), llm_target, runner.clone()).await {
+    // Read cached 02k prompt inputs, filtered by session and working directory
+    let cached_inputs = MEMORY_PROMPT_INPUTS
+        .read()
+        .as_ref()
+        .filter(|cached| cached.session_id == session_id)
+        .filter(|cached| cached.working_directory == std::path::PathBuf::from(&working_dir))
+        .map(|cached| cached.inputs.clone());
+
+    match service.start_run(
+        &session_id,
+        text.clone(),
+        llm_target,
+        runner.clone(),
+        std::path::PathBuf::from(&working_dir),
+        cached_inputs,
+    ).await {
         Ok(handle) => {
             *ACTIVE_RUNNER.write() = Some(ActiveRun {
                 runner: runner.clone(),

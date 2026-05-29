@@ -163,6 +163,8 @@ impl UiSessionService {
         user_text: String,
         llm_target: LlmTarget,
         runner: Arc<SessionRunner>,
+        working_directory: std::path::PathBuf,
+        memory_prompt_inputs: Option<openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs>,
     ) -> Result<RunHandle, UiServiceError> {
         // Check run lock via try_run — if runner has an active run, it fails
         let cancellation = CancellationToken::new();
@@ -180,10 +182,10 @@ impl UiSessionService {
         let config = RunConfig {
             max_steps: 25,
             mode: InteractionMode::Direct,
-            working_directory: ".".into(),
+            working_directory: working_directory.display().to_string(),
             system_prompt: None,
             llm_target: Some(llm_target),
-            memory_prompt_inputs: None,
+            memory_prompt_inputs,
             output_guard: None,
         };
 

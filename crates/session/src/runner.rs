@@ -21,7 +21,7 @@ use openwand_core::ids::ApprovalRequestId;
 use openwand_core::snapshots::ApprovalContextSnapshot;
 use openwand_llm::{LlmClient, LlmDelta, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
-use openwand_policy::{GateDecision, PolicyEngine};
+use openwand_policy::{GateDecision, OutputGuardConfig, PolicyEngine, guard_output};
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::{Actor, TraceStore, TraceStreamId, TraceStreamScope};
 use std::sync::Arc;
@@ -288,8 +288,29 @@ impl SessionRunner {
 
             // AfterInference
             self.emit_phase(Phase::AfterInference, step).await;
-            if !inference_output.text.is_empty() {
-                self.record_assistant_message(&inference_output.text).await?;
+
+            // Post-inference output record guard.
+            // Streaming remains live — the user may have already seen raw text.
+            // This guards the durable record, not the live stream.
+            let assistant_text = if let Some(ref guard_config) = config.output_guard {
+                if guard_config.enabled {
+                    let screened = guard_output(
+                        &inference_output.text,
+                        &guard_config.forbidden_actions,
+                    );
+                    if screened.was_screened {
+                        self.record_output_guard_gate(&screened).await?;
+                    }
+                    screened.final_text
+                } else {
+                    inference_output.text.clone()
+                }
+            } else {
+                inference_output.text.clone()
+            };
+
+            if !assistant_text.is_empty() {
+                self.record_assistant_message(&assistant_text).await?;
             }
 
             if inference_output.tool_calls.is_empty() {
@@ -1017,7 +1038,30 @@ impl SessionRunner {
         Ok(())
     }
 
-    /// Record tool.suspended in trace (pending approval).
+    /// Record gate.output_screened when post-inference guard fires.
+    /// This records that the durable assistant message was screened.
+    /// It does NOT guarantee the user never saw the raw text.
+    async fn record_output_guard_gate(
+        &self,
+        screened: &openwand_policy::ScreenedOutput,
+    ) -> Result<(), SessionError> {
+        let event = OpenWandTraceEvent::Gate(GateEvent::OutputScreened {
+            gate_id: format!("output_guard:{}", chrono::Utc::now().timestamp_millis()),
+            passed: !screened.was_screened,
+            forbidden_hits: screened.forbidden_hits.clone(),
+            fallback_used: screened.was_screened,
+        });
+        self.mutation
+            .apply(
+                Actor::System { component: "output_guard".into() },
+                event,
+                vec![],
+                None,
+                self.stream_id.clone(),
+            )
+            .await?;
+        Ok(())
+    }
     async fn record_tool_suspended(&self, pending: &PendingTool, step: u64) -> Result<Option<ApprovalRequestId>, SessionError> {
         use crate::approval_recovery::{approval_args_hash, validate_approval_context_size};
 

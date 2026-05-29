@@ -39,6 +39,7 @@ pub struct UiMemoryPanelRow {
     pub repo_evidence_key: Vec<String>,
     pub inclusion_reason: Option<String>,
     pub severity: String,
+    pub has_provenance: bool,
 }
 
 /// A conflict group requiring review.

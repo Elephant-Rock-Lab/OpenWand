@@ -11,6 +11,7 @@ use crate::evidence::EvidenceKind;
 use crate::prompt_assembly::{
     MemoryPromptAssemblyInputs, PromptInclusionReason, UnverifiableMemoryClaim,
 };
+use crate::provenance::ProvenanceSnapshot;
 use crate::repo_consistency::{
     ConsistencySeverity, RepoConsistencyFinding, RepoConsistencyFindingKind, RepoConsistencyReport,
 };
@@ -38,6 +39,10 @@ pub struct MemoryPanelClaim {
     pub repo_evidence_key: Vec<String>,
     pub inclusion_reason: Option<PromptInclusionReason>,
     pub severity: ConsistencySeverity,
+    /// Source provenance — WHERE the claim came from.
+    /// Currently always None for findings (coordinator doesn't fill it yet).
+    /// Will be populated from RankedMemoryHit.provenance in a future wave.
+    pub source_provenance: Option<ProvenanceSnapshot>,
 }
 
 /// A repo observation with no memory claim — context gap.
@@ -109,6 +114,7 @@ impl RepoFilteredPanelView {
                 evidence_kind: finding.evidence_kind,
                 repo_evidence_key: finding.repo_evidence_key.clone(),
                 inclusion_reason: inclusion.cloned(),
+                source_provenance: None,
                 severity: finding.severity.clone(),
             };
 

@@ -53,6 +53,7 @@ crates/
 | 02m | Memory panel repo-filtered view | ✅ Complete (681 tests) |
 | 02n | Memory provenance hydration | ✅ Complete (709 tests) |
 | 02o | Trace relation audit hydration | ✅ Complete (738 tests) |
+| 02p | Memory evaluation harness | ✅ Complete (785 tests) |
 
 ## Test Count
 **197 tests, zero failures, zero warnings.**

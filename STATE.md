@@ -36,6 +36,20 @@ crates/
 | 01e | SQLite TraceStore | ✅ Complete (187 tests) |
 | 02a | Reality smoke: real model + real tool calls | ✅ Complete (197 tests) |
 | 02b | TBD | ⬚ Next |
+| 02b-0 to 02b-5 | Dioxus + runtime spike through crash recovery | ✅ Complete (228 tests) |
+| 02c | Real MCP stdio | ✅ Complete (235 tests) |
+| 02d | Memory extraction v0 | ✅ Complete (247 tests) |
+| 02e | Memory persistence + UI visibility | ✅ Complete (257 tests) |
+| 02f | Memory integration hardening | ✅ Complete (265 tests) |
+| 02g | Real wiring | ✅ Complete (267 tests) |
+| 02h | Honesty correction + binary E2E | ✅ Complete (267 tests) |
+| 03a-03f | Approval governance arc | ✅ Complete (376 tests) |
+| 04a-04b | Governed shell + git execution | ✅ Complete (412 tests) |
+| 02i-02i-c | Explainable memory + evidence semantics | ✅ Complete (543 tests) |
+| 02j | Memory-backed repo consistency check | ✅ Complete (592 tests) |
+| 02k | Memory-guided prompt assembly | ✅ Complete (629 tests) |
+| Output Guard | Post-inference output screening | ✅ Complete (652 tests) |
+| 02l | Coordinator 02j→02k wiring | ✅ Complete (667 tests) |
 
 ## Test Count
 **197 tests, zero failures, zero warnings.**

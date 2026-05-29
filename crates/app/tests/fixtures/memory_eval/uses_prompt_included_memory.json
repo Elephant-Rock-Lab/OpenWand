@@ -1,14 +1,19 @@
 {
   "id": "uses_prompt_included_memory",
   "title": "Supported claim is retrieved, included in prompt, and model uses it",
+  "category": "prompt_included",
+  "execution_mode": "full_harness",
   "user_query": "What memory do you have about the project?",
   "expected_outcome": "Pass",
   "seed_memory": [
     {
+      "label": "core_claim",
       "claim": "crate core exists",
       "kind": "Fact",
       "confidence": 0.95,
-      "evidence_kind": "AcceptedClaim"
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
     }
   ],
   "seed_trace": [],

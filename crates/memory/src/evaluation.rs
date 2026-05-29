@@ -7,10 +7,66 @@
 //! captures results, runs mock/deterministic model behaviors, and judges
 //! expected vs actual memory usage.
 
-use crate::evidence::EvidenceKind;
 use crate::provenance_hydration::HydratedMemoryClaim;
 use crate::repo_consistency::RepoConsistencyReport;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+// ── Category ───────────────────────────────────────────────────────────────
+
+/// Taxonomy of memory evaluation scenario categories.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryEvaluationCategory {
+    PromptIncluded,
+    Stale,
+    Superseded,
+    Conflict,
+    Unverifiable,
+    MissingInRepo,
+    MissingInMemory,
+    VerifiedTraceLineage,
+    LowConfidence,
+    UnsupportedOutput,
+}
+
+impl MemoryEvaluationCategory {
+    /// All known categories, in canonical order.
+    pub fn all() -> &'static [MemoryEvaluationCategory] {
+        &[
+            MemoryEvaluationCategory::PromptIncluded,
+            MemoryEvaluationCategory::Stale,
+            MemoryEvaluationCategory::Superseded,
+            MemoryEvaluationCategory::Conflict,
+            MemoryEvaluationCategory::Unverifiable,
+            MemoryEvaluationCategory::MissingInRepo,
+            MemoryEvaluationCategory::MissingInMemory,
+            MemoryEvaluationCategory::VerifiedTraceLineage,
+            MemoryEvaluationCategory::LowConfidence,
+            MemoryEvaluationCategory::UnsupportedOutput,
+        ]
+    }
+}
+
+// ── Scenario execution mode ────────────────────────────────────────────────
+
+/// How a scenario is executed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScenarioExecutionMode {
+    /// Seed memory + trace, run coordinator, judge results.
+    FullHarness,
+    /// Construct hydrated claims directly, judge only (no coordinator).
+    JudgeOnly,
+}
+
+impl Default for ScenarioExecutionMode {
+    fn default() -> Self {
+        ScenarioExecutionMode::FullHarness
+    }
+}
 
 // ── Scenario definition ────────────────────────────────────────────────────
 
@@ -19,10 +75,18 @@ use serde::{Deserialize, Serialize};
 pub struct MemoryEvaluationScenario {
     pub id: String,
     pub title: String,
+    /// Required — every fixture must declare its category explicitly.
+    pub category: MemoryEvaluationCategory,
+    /// How this scenario is executed. Defaults to FullHarness.
+    #[serde(default)]
+    pub execution_mode: ScenarioExecutionMode,
     pub user_query: String,
     pub expected_outcome: ExpectedScenarioOutcome,
+    #[serde(default)]
     pub seed_memory: Vec<MemoryRecordSeed>,
+    #[serde(default)]
     pub seed_trace: Vec<TraceSeed>,
+    #[serde(default)]
     pub seed_relations: Vec<TraceRelationSeed>,
     pub expectations: MemoryEvaluationExpectations,
     pub model: EvaluationModelConfig,
@@ -36,27 +100,41 @@ pub enum ExpectedScenarioOutcome {
 }
 
 /// A memory record to seed into the store before evaluation.
+/// Uses stable labels for cross-referencing (patches 5+6).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryRecordSeed {
+    /// Stable label for cross-referencing within the scenario.
+    /// Used by superseded_by_label and source_trace_labels.
+    #[serde(default)]
+    pub label: Option<String>,
     pub claim: String,
-    pub kind: String, // "Fact", "Preference", etc.
+    pub kind: String,
     pub confidence: f64,
-    pub evidence_kind: String, // "AcceptedClaim", etc.
+    pub evidence_kind: String,
+    /// Labels of trace seeds that should be linked as source traces
+    /// for this memory record. Resolved via the trace-label map.
+    #[serde(default)]
+    pub source_trace_labels: Vec<String>,
+    /// Label of another memory seed that this record supersedes.
+    /// Harness resolves labels to record IDs after all seeds are inserted.
+    #[serde(default)]
+    pub superseded_by_label: Option<String>,
 }
 
-/// A trace entry to seed before evaluation.
+/// A trace entry to seed before evaluation. Uses labels, not store-assigned IDs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceSeed {
-    pub trace_id: String,
+    /// Stable label for cross-referencing (memory seeds, relations).
+    pub label: String,
     pub event_kind: String,
     pub actor_label: String,
 }
 
-/// A trace relation to seed before evaluation.
+/// A trace relation to seed before evaluation. Uses labels resolved to TraceIds.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceRelationSeed {
-    pub from: String,
-    pub to: String,
+    pub from_label: String,
+    pub to_label: String,
     pub kind: String,
 }
 
@@ -121,7 +199,7 @@ pub struct MemoryEvaluationReport {
 #[derive(Debug, Clone)]
 pub struct PromptInputEvaluationSnapshot {
     pub prompt_block: Option<String>,
-    /// SHA-256 hash of the prompt block for stability checks.
+    /// Hash of the prompt block for stability checks.
     pub memory_context_hash: String,
     pub retrieved_claims: Vec<HydratedMemoryClaim>,
     pub prompt_included_claims: Vec<HydratedMemoryClaim>,
@@ -214,6 +292,17 @@ pub enum MockEvaluationBehavior {
     CorrectAnswer { text: String },
 }
 
+// ── Coverage ───────────────────────────────────────────────────────────────
+
+/// Label-to-ID resolution maps produced by the harness during seeding.
+#[derive(Debug, Clone, Default)]
+pub struct SeedResolutionMaps {
+    /// label → TraceId (from trace seeding)
+    pub trace_labels: BTreeMap<String, String>,
+    /// label → record_id (from memory seeding)
+    pub memory_labels: BTreeMap<String, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,21 +364,21 @@ mod tests {
             MemoryEvaluationFailure::MissingProvenance { claim: "h".into() },
             MemoryEvaluationFailure::MissingTraceLineage { claim: "i".into() },
         ];
-        // Verify each message is non-empty and contains the claim text
         for f in &failures {
             let msg = f.message();
             assert!(!msg.is_empty(), "failure message must not be empty");
         }
-        // Verify stable ordering of message content
         assert!(failures[0].message().contains("not retrieved"));
         assert!(failures[5].message().contains("Unsupported claim"));
     }
 
     #[test]
-    fn scenario_ids_are_required() {
+    fn scenario_category_is_required() {
         let scenario = MemoryEvaluationScenario {
             id: "test_scenario_001".to_string(),
             title: "Test".to_string(),
+            category: MemoryEvaluationCategory::PromptIncluded,
+            execution_mode: ScenarioExecutionMode::FullHarness,
             user_query: "test query".to_string(),
             expected_outcome: ExpectedScenarioOutcome::Pass,
             seed_memory: vec![],
@@ -300,7 +389,25 @@ mod tests {
                 behavior: MockEvaluationBehavior::EchoIncludedMemory,
             },
         };
-        assert!(!scenario.id.is_empty());
+        assert_eq!(MemoryEvaluationCategory::PromptIncluded, scenario.category);
+    }
+
+    #[test]
+    fn scenario_category_serializes_stably() {
+        let json = serde_json::to_string(&MemoryEvaluationCategory::PromptIncluded).unwrap();
+        assert_eq!("\"prompt_included\"", json);
+
+        let json = serde_json::to_string(&MemoryEvaluationCategory::VerifiedTraceLineage).unwrap();
+        assert_eq!("\"verified_trace_lineage\"", json);
+
+        // Roundtrip
+        let cat: MemoryEvaluationCategory = serde_json::from_str(&json).unwrap();
+        assert_eq!(MemoryEvaluationCategory::VerifiedTraceLineage, cat);
+    }
+
+    #[test]
+    fn all_categories_are_ten() {
+        assert_eq!(10, MemoryEvaluationCategory::all().len());
     }
 
     #[test]
@@ -314,5 +421,66 @@ mod tests {
         assert!(exp.expected_buckets.is_empty());
         assert!(exp.expected_provenance.is_empty());
         assert!(exp.expected_trace_lineage.is_empty());
+    }
+
+    #[test]
+    fn seed_has_label_fields() {
+        let seed = MemoryRecordSeed {
+            label: Some("claim_a".into()),
+            claim: "crate core exists".into(),
+            kind: "Fact".into(),
+            confidence: 0.95,
+            evidence_kind: "AcceptedClaim".into(),
+            source_trace_labels: vec!["trace_1".into()],
+            superseded_by_label: None,
+        };
+        assert_eq!(Some("claim_a"), seed.label.as_deref());
+        assert_eq!(vec!["trace_1"], seed.source_trace_labels);
+    }
+
+    #[test]
+    fn trace_seed_uses_label_not_id() {
+        let seed = TraceSeed {
+            label: "my_trace".into(),
+            event_kind: "session.started".into(),
+            actor_label: "user".into(),
+        };
+        assert_eq!("my_trace", seed.label);
+        assert!(!seed.label.is_empty());
+    }
+
+    #[test]
+    fn relation_seed_uses_labels() {
+        let seed = TraceRelationSeed {
+            from_label: "trace_a".into(),
+            to_label: "trace_b".into(),
+            kind: "Verifies".into(),
+        };
+        assert_eq!("trace_a", seed.from_label);
+        assert_eq!("trace_b", seed.to_label);
+    }
+
+    #[test]
+    fn execution_mode_defaults_to_full_harness() {
+        let mode: ScenarioExecutionMode = Default::default();
+        assert_eq!(ScenarioExecutionMode::FullHarness, mode);
+    }
+
+    #[test]
+    fn old_fixtures_without_category_default_field_rejected() {
+        // Verify that category is required (no serde default)
+        let json = r#"{
+            "id": "test",
+            "title": "test",
+            "user_query": "test",
+            "expected_outcome": "Pass",
+            "seed_memory": [],
+            "seed_trace": [],
+            "seed_relations": [],
+            "expectations": {},
+            "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+        }"#;
+        let result: Result<MemoryEvaluationScenario, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "category field is required, must not deserialize without it");
     }
 }

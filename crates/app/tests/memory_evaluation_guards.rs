@@ -2,8 +2,9 @@
 
 use openwand_app::memory_evaluation::MemoryEvaluationHarness;
 use openwand_memory::evaluation::{
-    EvaluationModelConfig, ExpectedScenarioOutcome, MemoryEvaluationExpectations,
-    MemoryEvaluationScenario, MemoryRecordSeed, MockEvaluationBehavior,
+    EvaluationModelConfig, ExpectedScenarioOutcome, MemoryEvaluationCategory,
+    MemoryEvaluationExpectations, MemoryEvaluationScenario, MemoryRecordSeed,
+    MockEvaluationBehavior, ScenarioExecutionMode,
 };
 use std::path::Path;
 
@@ -22,13 +23,18 @@ fn make_guard_scenario() -> MemoryEvaluationScenario {
     MemoryEvaluationScenario {
         id: "guard_test".into(),
         title: "Guard test".into(),
+        category: MemoryEvaluationCategory::PromptIncluded,
+        execution_mode: ScenarioExecutionMode::FullHarness,
         user_query: "test".into(),
         expected_outcome: ExpectedScenarioOutcome::Pass,
         seed_memory: vec![MemoryRecordSeed {
+            label: Some("core_claim".into()),
             claim: "crate core exists".into(),
             kind: "Fact".into(),
             confidence: 0.95,
             evidence_kind: "AcceptedClaim".into(),
+            source_trace_labels: vec![],
+            superseded_by_label: None,
         }],
         seed_trace: vec![],
         seed_relations: vec![],

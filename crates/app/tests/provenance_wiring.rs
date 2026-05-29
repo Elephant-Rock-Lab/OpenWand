@@ -184,3 +184,60 @@ async fn hydrated_claims_include_record_ids() {
     assert_eq!(rec.map(|r| r.record_id.clone()), supported.provenance.record_id,
         "hydrated claim should carry the actual record_id");
 }
+
+// ── Provenance fork decision guards ──────────────────────────────────────────
+// Fork lock: "Memory provenance remains panel-visible, audit-visible, and
+// evaluation-visible, but not prompt-visible during normal agent/tool-use runs."
+//
+// These two tests are the hard invariant. If either fails, provenance has
+// leaked into the normal prompt path — a governance boundary violation.
+
+#[tokio::test]
+async fn normal_prompt_assembly_does_not_render_provenance_tags() {
+    // The RepoConsistencyPromptAssembler must NOT produce prompt text
+    // containing provenance labels, record IDs, trace IDs, or rank score summaries.
+    // Provenance is for the panel/audit surface, not for model context.
+    let store = Arc::new(InMemoryMemoryStore::new());
+    store.project_episode(make_episode("ep1", "s1", "text")).await.unwrap();
+    store.accept_candidate(make_candidate("crate core exists", 0.95, &["ep1"])).await.unwrap();
+
+    let coordinator = make_coordinator(store);
+    let dir = create_workspace_dir();
+    let result = coordinator.produce_prompt_inputs(None, dir.path(), &PromptInputProductionConfig::default()).await;
+
+    let prompt_block = result.inputs.to_prompt_block();
+
+    if let Some(ref block) = prompt_block {
+        // Provenance labels (e.g. "User-stated claim")
+        assert!(!block.contains("User-stated"),
+            "Provenance label must not appear in prompt context");
+        assert!(!block.contains("LLM-extracted"),
+            "Provenance label must not appear in prompt context");
+        assert!(!block.contains("System-derived"),
+            "Provenance label must not appear in prompt context");
+
+        // Record IDs
+        assert!(!block.contains("record "),
+            "Record IDs must not appear in prompt context");
+
+        // Trace IDs
+        assert!(!block.contains("trace_"),
+            "Trace IDs must not appear in prompt context");
+
+        // Rank score summaries
+        assert!(!block.contains("relevance"),
+            "Rank score components must not appear in prompt context");
+        assert!(!block.contains("recency"),
+            "Rank score components must not appear in prompt context");
+        assert!(!block.contains("final_bps"),
+            "Rank score internals must not appear in prompt context");
+
+        // Hydration status
+        assert!(!block.contains("Complete"),
+            "Hydration status must not appear in prompt context");
+        assert!(!block.contains("Partial"),
+            "Hydration status must not appear in prompt context");
+        assert!(!block.contains("Missing"),
+            "Hydration status must not appear in prompt context");
+    }
+}

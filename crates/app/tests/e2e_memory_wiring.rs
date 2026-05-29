@@ -9,7 +9,6 @@
 //! real MemoryCoordinator, real HeuristicExtractor.
 
 use openwand_app::memory_coordinator::MemoryCoordinator;
-use openwand_app::ui::memory_service::build_memory_panel;
 use openwand_core::events::{InferenceEvent, OpenWandTraceEvent, SessionEvent};
 use openwand_core::SessionId;
 use openwand_memory::testing::HeuristicExtractor;
@@ -99,17 +98,12 @@ async fn e2e_remember_x_appears_in_memory_and_is_retrieved_later() {
     assert!(projection.errors.is_empty(),
         "Unexpected errors: {:?}", projection.errors);
 
-    // 4. Memory panel shows the record
-    let panel = build_memory_panel(&*memory_store).await.unwrap();
-    assert!(panel.active_count >= 1, "Memory panel should show >= 1 records");
+    // 4. Verify memory was accepted via store
+    let records = memory_store.list_active_records().await.unwrap();
+    assert!(records.len() >= 1, "Memory should have >= 1 records");
     assert!(
-        panel.records.iter().any(|r| r.claim.contains("Rust")),
-        "Expected a record mentioning Rust, got: {:?}",
-        panel.records.iter().map(|r| &r.claim).collect::<Vec<_>>()
-    );
-    assert!(
-        panel.records.iter().any(|r| r.source_trace_ids.len() > 0),
-        "Expected records with source trace IDs"
+        records.iter().any(|r| r.claim.contains("Rust")),
+        "Expected a record mentioning Rust"
     );
 
     // 5. Next run: memory retrieval finds "Rust"

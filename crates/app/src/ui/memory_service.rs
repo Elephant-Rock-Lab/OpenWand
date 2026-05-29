@@ -1,38 +1,76 @@
-//! Memory UI service — bridges MemoryStore to Dioxus UI.
+//! Memory UI service — bridges coordinator output to Dioxus UI.
+//!
+//! Pure format conversion: PromptInputResult → UiFilteredMemoryPanel.
+//! No store access. No re-classification. One memory reality.
 
-use crate::ui::memory_dto::{UiMemoryPanel, UiMemoryRecord};
-use openwand_memory::MemoryStore;
+use crate::memory_coordinator::PromptInputResult;
+use crate::ui::memory_dto::{
+    UiFilteredMemoryPanel, UiMemoryPanelConflict, UiMemoryPanelRow, UiMemoryPanelSummary,
+};
+use openwand_memory::panel_view::RepoFilteredPanelView;
 
-/// Build a memory panel from the memory store.
-pub async fn build_memory_panel(store: &dyn MemoryStore) -> Result<UiMemoryPanel, String> {
-    let records = store
-        .list_active_records()
-        .await
-        .map_err(|e| e.to_string())?;
+/// Build a filtered memory panel from coordinator output.
+///
+/// This is the ONLY way to build a panel view for the UI.
+/// No store queries. No re-classification.
+pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel {
+    let view = RepoFilteredPanelView::from_coordinator_output(
+        result.source_working_directory.clone(),
+        &result.report,
+        &result.inputs,
+    );
 
-    let active_count = records.len();
-    let ui_records: Vec<UiMemoryRecord> = records
-        .into_iter()
-        .map(|r| {
-            let is_active = r.superseded_by.is_none()
-                && r.valid_until.map_or(true, |v| v > chrono::Utc::now());
-            UiMemoryRecord {
-                record_id: r.record_id,
-                claim: r.claim,
-                kind: format!("{:?}", r.kind).to_lowercase(),
-                confidence: r.confidence,
-                status: if is_active { "active" } else { "superseded" }.into(),
-                source_count: r.source_episode_ids.len(),
-                source_trace_ids: r.source_trace_ids,
-                created_at: r.created_at.timestamp(),
-                superseded_by: r.superseded_by,
-            }
-        })
-        .collect();
+    let summary = UiMemoryPanelSummary {
+        prompt_included: view.summary.prompt_included_count,
+        stale: view.summary.stale_count,
+        missing_in_repo: view.summary.missing_in_repo_count,
+        missing_in_memory: view.summary.missing_in_memory_count,
+        conflicts: view.summary.conflict_count,
+        unverifiable: view.summary.unverifiable_count,
+        superseded_ignored: view.summary.superseded_ignored_count,
+    };
 
-    Ok(UiMemoryPanel {
-        total_records: ui_records.len(),
-        active_count,
-        records: ui_records,
-    })
+    let convert_claim = |c: &openwand_memory::panel_view::MemoryPanelClaim| UiMemoryPanelRow {
+        claim: c.claim_text.clone(),
+        finding_kind: format!("{:?}", c.finding_kind),
+        evidence_kind: c
+            .evidence_kind
+            .map(|e| format!("{:?}", e))
+            .unwrap_or_default(),
+        repo_evidence_key: c.repo_evidence_key.clone(),
+        inclusion_reason: c.inclusion_reason.as_ref().map(|r| format!("{:?}", r)),
+        severity: format!("{:?}", c.severity),
+    };
+
+    UiFilteredMemoryPanel {
+        working_directory: view.working_directory.display().to_string(),
+        generated_at: view.generated_at.timestamp(),
+        summary,
+        prompt_included: view.prompt_included.iter().map(convert_claim).collect(),
+        stale: view.stale.iter().map(convert_claim).collect(),
+        missing_in_repo: view.missing_in_repo.iter().map(convert_claim).collect(),
+        missing_in_memory: view
+            .missing_in_memory
+            .iter()
+            .map(|m| UiMemoryPanelRow {
+                claim: m.repo_evidence_key.clone(),
+                finding_kind: "MissingInMemory".to_string(),
+                evidence_kind: String::new(),
+                repo_evidence_key: vec![m.repo_evidence_key.clone()],
+                inclusion_reason: None,
+                severity: format!("{:?}", m.severity),
+            })
+            .collect(),
+        conflicts: view
+            .conflicts
+            .iter()
+            .map(|g| UiMemoryPanelConflict {
+                group_id: g.group_id.clone(),
+                claims: g.claims.iter().map(convert_claim).collect(),
+                detail: g.detail.clone(),
+            })
+            .collect(),
+        unverifiable: view.unverifiable.iter().map(convert_claim).collect(),
+        superseded_ignored: view.superseded_ignored.iter().map(convert_claim).collect(),
+    }
 }

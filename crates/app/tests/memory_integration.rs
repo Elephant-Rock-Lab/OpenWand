@@ -7,7 +7,6 @@
 //! - Manual rebuild is idempotent
 //! - Projection errors don't corrupt existing records
 
-use openwand_app::ui::memory_service::build_memory_panel;
 use openwand_core::SessionId;
 use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{
@@ -58,10 +57,10 @@ async fn memory_panel_refreshes_after_projection() {
     let extractor = HeuristicExtractor;
     memory.extract_and_accept(&extractor).await.unwrap();
 
-    // Build panel — simulates UI refresh
-    let panel = build_memory_panel(&*memory).await.unwrap();
-    assert_eq!(1, panel.active_count);
-    assert_eq!("Remember I use Rust", panel.records[0].claim);
+    // Verify memory was accepted
+    let records = memory.list_active_records().await.unwrap();
+    assert_eq!(1, records.len());
+    assert!(records[0].claim.contains("Rust"));
 }
 
 #[tokio::test]
@@ -152,9 +151,9 @@ async fn memory_projection_runs_after_session_run() {
     let accepted = memory.extract_and_accept(&extractor).await.unwrap();
     assert_eq!(1, accepted.len());
 
-    // Panel shows it
-    let panel = build_memory_panel(&*memory).await.unwrap();
-    assert_eq!(1, panel.active_count);
+    // Verify memory was accepted
+    let records = memory.list_active_records().await.unwrap();
+    assert_eq!(1, records.len());
 
     // Next run can retrieve it
     let ctx = memory

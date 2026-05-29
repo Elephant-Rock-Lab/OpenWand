@@ -145,6 +145,8 @@ fn format_rank_score(score: &MemoryRankScore) -> String {
     )
 }
 
+use crate::trace_relation_hydration::ClaimTraceLineage;
+
 /// A fully hydrated memory claim — display-ready, no store references.
 #[derive(Debug, Clone)]
 pub struct HydratedMemoryClaim {
@@ -157,6 +159,8 @@ pub struct HydratedMemoryClaim {
     pub repo_evidence_key: Vec<String>,
     pub severity: ConsistencySeverity,
     pub inclusion_reason: Option<PromptInclusionReason>,
+    /// Trace relation lineage — audit/panel-only.
+    pub trace_lineage: Option<ClaimTraceLineage>,
 }
 
 /// Pure hydrator — no store queries, no async, no trace lookups.
@@ -226,6 +230,7 @@ impl MemoryProvenanceHydrator {
             repo_evidence_key: finding.repo_evidence_key.clone(),
             severity: finding.severity.clone(),
             inclusion_reason: None, // Filled by caller from inputs
+            trace_lineage: None,
         }
     }
 

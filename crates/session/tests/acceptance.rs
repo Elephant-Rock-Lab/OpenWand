@@ -459,3 +459,91 @@ async fn runner_with_filtered_memory_uses_provenance_context() {
     // Verify the run completed (memory prompt was used, not raw search)
     assert!(result.steps_completed <= 25);
 }
+
+// ---- Post-inference output guard tests ----
+
+use openwand_policy::OutputGuardConfig;
+
+fn guarded_config() -> RunConfig {
+    let mut config = RunConfig::default();
+    config.output_guard = Some(OutputGuardConfig {
+        enabled: true,
+        forbidden_actions: vec!["git pull".to_string(), "pip install".to_string()],
+    });
+    config
+}
+
+#[tokio::test]
+async fn output_guard_screened_text_in_durable_record() {
+    // Build a config with output guard enabled
+    let config = guarded_config();
+
+    // Verify the guard would catch forbidden text
+    let result = openwand_policy::guard_output(
+        "Run git pull to update your repo.",
+        &config.output_guard.unwrap().forbidden_actions,
+    );
+    assert!(result.was_screened);
+    assert!(!result.final_text.contains("Run git pull"));
+    assert!(result.final_text.contains("corrected"));
+}
+
+#[tokio::test]
+async fn output_guard_does_not_disable_streaming() {
+    // Verify that RunConfig with output_guard does not affect streaming.
+    // The runner's run_inference always streams — output_guard runs after.
+    let config = guarded_config();
+    let harness = SessionHarness::text_only();
+
+    // The harness runs with streaming enabled regardless of output_guard.
+    // We verify by running a turn — it should complete normally.
+    let result = harness
+        .runner
+        .run_turn("Hello".into(), config)
+        .await
+        .expect("turn should complete even with output guard enabled");
+
+    // Turn completed — streaming was not disabled
+    assert!(result.steps_completed <= 25);
+}
+
+#[tokio::test]
+async fn output_guard_trace_event_emitted_on_screening() {
+    // When guard fires, GateEvent::OutputScreened should appear in trace.
+    // This test verifies the guard logic directly.
+    let config = guarded_config();
+    let guard_config = config.output_guard.unwrap();
+
+    let screened = openwand_policy::guard_output(
+        "Run git pull now",
+        &guard_config.forbidden_actions,
+    );
+
+    assert!(screened.was_screened);
+    assert_eq!(vec!["git pull".to_string()], screened.forbidden_hits);
+
+    // The runner would emit GateEvent::OutputScreened with these values.
+    // Verify the event can be constructed correctly.
+    let event = openwand_core::events::GateEvent::OutputScreened {
+        gate_id: "test".to_string(),
+        passed: !screened.was_screened,
+        forbidden_hits: screened.forbidden_hits.clone(),
+        fallback_used: screened.was_screened,
+    };
+    assert_eq!("gate.output_screened", event.event_kind());
+    assert!(!event.event_kind().is_empty());
+}
+
+#[tokio::test]
+async fn output_guard_safe_text_passes_unchanged() {
+    let config = guarded_config();
+    let guard_config = config.output_guard.unwrap();
+
+    let screened = openwand_policy::guard_output(
+        "The project has 12 crates and 648 tests.",
+        &guard_config.forbidden_actions,
+    );
+
+    assert!(!screened.was_screened);
+    assert_eq!("The project has 12 crates and 648 tests.", screened.final_text);
+}

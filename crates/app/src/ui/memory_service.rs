@@ -14,11 +14,20 @@ use openwand_memory::panel_view::RepoFilteredPanelView;
 /// This is the ONLY way to build a panel view for the UI.
 /// No store queries. No re-classification.
 pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel {
-    let view = RepoFilteredPanelView::from_coordinator_output(
-        result.source_working_directory.clone(),
-        &result.report,
-        &result.inputs,
-    );
+    // Use hydrated claims constructor when available
+    let view = if result.hydrated_claims.is_empty() {
+        RepoFilteredPanelView::from_coordinator_output(
+            result.source_working_directory.clone(),
+            &result.report,
+            &result.inputs,
+        )
+    } else {
+        RepoFilteredPanelView::from_hydrated_claims(
+            result.source_working_directory.clone(),
+            &result.hydrated_claims,
+            &result.report,
+        )
+    };
 
     let summary = UiMemoryPanelSummary {
         prompt_included: view.summary.prompt_included_count,
@@ -40,7 +49,14 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
         repo_evidence_key: c.repo_evidence_key.clone(),
         inclusion_reason: c.inclusion_reason.as_ref().map(|r| format!("{:?}", r)),
         severity: format!("{:?}", c.severity),
-        has_provenance: c.source_provenance.is_some(),
+        has_provenance: c.source_provenance.is_some() || c.record_id.is_some(),
+        record_id: c.record_id.clone(),
+        provenance_label: c.provenance_label.clone(),
+        source_traces: c.source_trace_ids.clone(),
+        confidence: c.confidence,
+        conflict_group_id: c.conflict_group_id.clone(),
+        superseded_by: c.superseded_by.clone(),
+        hydration_status: format!("{:?}", c.hydration_status),
     };
 
     UiFilteredMemoryPanel {
@@ -61,6 +77,13 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
                 inclusion_reason: None,
                 severity: format!("{:?}", m.severity),
                 has_provenance: false,
+                record_id: None,
+                provenance_label: String::new(),
+                source_traces: vec![],
+                confidence: None,
+                conflict_group_id: None,
+                superseded_by: None,
+                hydration_status: "Missing".to_string(),
             })
             .collect(),
         conflicts: view

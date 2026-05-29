@@ -307,8 +307,13 @@ fn render_bucket(title: &str, color: &str, rows: &[openwand_app::ui::memory_dto:
                 "{title} ({rows.len()})"
             }
             for row in rows.iter() {
-                div { style: "padding: 4px 16px 6px; font-size: 11px; color: #333; line-height: 1.3;",
+                div { style: "padding: 4px 16px 2px; font-size: 11px; color: #333; line-height: 1.3;",
                     "{row.claim}"
+                }
+                if !row.provenance_label.is_empty() {
+                    div { style: "padding: 0 16px 4px; font-size: 10px; color: #888; line-height: 1.2;",
+                        "{row.provenance_label}"
+                    }
                 }
             }
         }

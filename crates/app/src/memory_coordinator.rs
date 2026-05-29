@@ -60,6 +60,7 @@ impl Default for PromptInputProductionConfig {
 #[derive(Debug, Clone)]
 pub struct PromptInputResult {
     pub inputs: MemoryPromptAssemblyInputs,
+    pub report: RepoConsistencyReport,
     pub claims_checked: usize,
     pub repo_observed: bool,
     pub source_session_id: Option<SessionId>,
@@ -190,8 +191,17 @@ impl MemoryCoordinator {
         working_directory: &Path,
         config: &PromptInputProductionConfig,
     ) -> PromptInputResult {
+        let empty_report = || RepoConsistencyReport {
+            repo_root: working_directory.to_path_buf(),
+            checked_at: chrono::Utc::now(),
+            summary: openwand_memory::repo_consistency::RepoConsistencySummary::from_findings(&[]),
+            findings: vec![],
+            memory_inputs: RepoMemoryInputSummary::default(),
+            repo_inputs: RepoObservationSummary::default(),
+        };
         let make_empty = |errors: Vec<String>| PromptInputResult {
             inputs: MemoryPromptAssemblyInputs::empty(),
+            report: empty_report(),
             claims_checked: 0,
             repo_observed: false,
             source_session_id: session_id.clone(),
@@ -252,6 +262,7 @@ impl MemoryCoordinator {
         if all_hits.is_empty() && !records.is_empty() && !search_errors.is_empty() {
             return PromptInputResult {
                 inputs: MemoryPromptAssemblyInputs::empty(),
+                report: empty_report(),
                 claims_checked: claims_to_check,
                 repo_observed: false,
                 source_session_id: session_id,
@@ -266,6 +277,7 @@ impl MemoryCoordinator {
             Err(e) => {
                 return PromptInputResult {
                     inputs: MemoryPromptAssemblyInputs::empty(),
+                    report: empty_report(),
                     claims_checked: claims_to_check,
                     repo_observed: false,
                     source_session_id: session_id,
@@ -316,6 +328,7 @@ impl MemoryCoordinator {
             claims_checked: claims_to_check,
             repo_observed: true,
             inputs,
+            report,
             source_session_id: session_id,
             source_working_directory: working_directory.to_path_buf(),
             errors: search_errors,

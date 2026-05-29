@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use openwand_app::memory_coordinator::MemoryCoordinator;
+use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
 use openwand_core::SessionId;
 use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
 use openwand_llm::LlmClient;
@@ -235,6 +235,27 @@ async fn main() -> Result<()> {
     println!("  Records accepted:    {}", projection.records_accepted);
     if !projection.errors.is_empty() {
         println!("  Errors: {:?}", projection.errors);
+    }
+
+    // 9b. Produce 02k prompt inputs (diagnostic — shows what the next turn would see)
+    let prompt_result = coordinator
+        .produce_prompt_inputs(
+            Some(session_id.clone()),
+            std::env::current_dir()?.as_path(),
+            &PromptInputProductionConfig::default(),
+        )
+        .await;
+    println!();
+    println!("Prompt inputs:");
+    println!("  Claims checked:  {}", prompt_result.claims_checked);
+    println!("  Repo observed:   {}", prompt_result.repo_observed);
+    if prompt_result.repo_observed {
+        println!("  Supported:       {}", prompt_result.inputs.supported_claims.len());
+        println!("  Unverifiable:    {}", prompt_result.inputs.unverifiable_claims_excluded);
+        println!("  Missing gaps:    {}", prompt_result.inputs.missing_memory_gaps.len());
+    }
+    if !prompt_result.errors.is_empty() {
+        println!("  Errors: {:?}", prompt_result.errors);
     }
 
     // 10. Show Loro projection

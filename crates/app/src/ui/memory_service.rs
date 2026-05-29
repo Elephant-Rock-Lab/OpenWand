@@ -40,6 +40,7 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
         repo_evidence_key: c.repo_evidence_key.clone(),
         inclusion_reason: c.inclusion_reason.as_ref().map(|r| format!("{:?}", r)),
         severity: format!("{:?}", c.severity),
+        has_provenance: c.source_provenance.is_some(),
     };
 
     UiFilteredMemoryPanel {
@@ -59,6 +60,7 @@ pub fn build_filtered_panel(result: &PromptInputResult) -> UiFilteredMemoryPanel
                 repo_evidence_key: vec![m.repo_evidence_key.clone()],
                 inclusion_reason: None,
                 severity: format!("{:?}", m.severity),
+                has_provenance: false,
             })
             .collect(),
         conflicts: view

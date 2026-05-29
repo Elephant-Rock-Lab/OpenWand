@@ -11,6 +11,9 @@ use openwand_memory::{
 };
 use openwand_memory::prompt_assembly::{MemoryPromptAssemblyInputs, RepoConsistencyPromptAssembler};
 use openwand_memory::provenance_hydration::{HydratedMemoryClaim, MemoryProvenanceHydrator};
+use openwand_memory::trace_relation_hydration::{
+    ClaimTraceLineage, TraceEventAuditMetadata, TraceRelationAuditHydrator, TraceRelationAuditRow,
+};
 use openwand_memory::repo_consistency::{
     classify_current_claim, detect_missing_in_memory, observe_repo,
     RepoConsistencyFinding, RepoConsistencyReport,
@@ -19,7 +22,7 @@ use openwand_memory::repo_consistency::{
 use openwand_memory::retrieval::RankedMemoryHit;
 use openwand_memory::supersession::RetrievalMode;
 use openwand_store::StoredEvent;
-use openwand_trace::{TraceQuery, TraceStore};
+use openwand_trace::{RelationQuery, TraceQuery, TraceStore};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -338,6 +341,9 @@ impl MemoryCoordinator {
             &records,
         );
 
+        // Step 11: Hydrate trace relation lineage
+        let hydrated_claims = Self::hydrate_trace_lineage(hydrated_claims, &self.trace).await;
+
         PromptInputResult {
             claims_checked: claims_to_check,
             repo_observed: true,
@@ -348,6 +354,134 @@ impl MemoryCoordinator {
             source_working_directory: working_directory.to_path_buf(),
             errors: search_errors,
         }
+    }
+
+    /// Hydrate trace relation lineage for all claims.
+    /// Non-fatal: failures produce Partial status and continue.
+    async fn hydrate_trace_lineage(
+        claims: Vec<HydratedMemoryClaim>,
+        trace: &Arc<dyn TraceStore<StoredEvent>>,
+    ) -> Vec<HydratedMemoryClaim> {
+        // 1. Collect and deduplicate all source trace IDs
+        let mut all_trace_ids = std::collections::HashSet::new();
+        for claim in &claims {
+            for id in &claim.provenance.source_trace_ids {
+                all_trace_ids.insert(id.clone());
+            }
+        }
+
+        if all_trace_ids.is_empty() {
+            // No source traces — nothing to hydrate
+            return claims;
+        }
+
+        // 2. Query relations for each trace ID (bidirectional)
+        let mut relation_rows = Vec::new();
+        let mut trace_errors = Vec::new();
+
+        for trace_id in &all_trace_ids {
+            let id = openwand_trace::ids::TraceId(trace_id.clone());
+
+            // Forward: trace_id is the source (from)
+            match trace.scan_relations(RelationQuery {
+                from: Some(id.clone()),
+                ..Default::default()
+            }).await {
+                Ok(rels) => {
+                    for r in rels {
+                        relation_rows.push(TraceRelationAuditRow {
+                            from_trace_id: r.from.0.clone(),
+                            to_trace_id: r.to.0.clone(),
+                            kind: format!("{:?}", r.kind),
+                            created_at: r.created_at,
+                        });
+                    }
+                }
+                Err(e) => {
+                    trace_errors.push(format!("scan_relations(from {}): {}", trace_id, e));
+                }
+            }
+
+            // Reverse: trace_id is the target (to)
+            match trace.scan_relations(RelationQuery {
+                to: Some(id.clone()),
+                ..Default::default()
+            }).await {
+                Ok(rels) => {
+                    for r in rels {
+                        relation_rows.push(TraceRelationAuditRow {
+                            from_trace_id: r.from.0.clone(),
+                            to_trace_id: r.to.0.clone(),
+                            kind: format!("{:?}", r.kind),
+                            created_at: r.created_at,
+                        });
+                    }
+                }
+                Err(e) => {
+                    trace_errors.push(format!("scan_relations(to {}): {}", trace_id, e));
+                }
+            }
+        }
+
+        // 3. Collect all unique related trace IDs for metadata lookup
+        let mut related_ids = std::collections::HashSet::new();
+        for row in &relation_rows {
+            related_ids.insert(row.from_trace_id.clone());
+            related_ids.insert(row.to_trace_id.clone());
+        }
+        // Also include source IDs
+        for id in &all_trace_ids {
+            related_ids.insert(id.clone());
+        }
+
+        // 4. Query event metadata for all involved trace IDs
+        let mut event_metadata = Vec::new();
+        for trace_id in &related_ids {
+            let id = openwand_trace::ids::TraceId(trace_id.clone());
+            match trace.get(id).await {
+                Ok(Some(entry)) => {
+                    let actor_label = match &entry.actor {
+                        openwand_trace::actor::Actor::User => "User".to_string(),
+                        openwand_trace::actor::Actor::Llm { model, .. } => format!("LLM ({})", model),
+                        openwand_trace::actor::Actor::System { component } => format!("System ({})", component),
+                        openwand_trace::actor::Actor::MemoryPipeline => "MemoryPipeline".to_string(),
+                        openwand_trace::actor::Actor::WorkflowEngine => "WorkflowEngine".to_string(),
+                        openwand_trace::actor::Actor::PolicyEngine => "PolicyEngine".to_string(),
+                    };
+                    event_metadata.push(TraceEventAuditMetadata {
+                        trace_id: entry.id.0.clone(),
+                        event_kind: entry.event_kind.clone(),
+                        occurred_at: entry.occurred_at,
+                        actor_label,
+                    });
+                }
+                Ok(None) => {} // Trace not found — skip
+                Err(e) => {
+                    trace_errors.push(format!("get({}): {}", trace_id, e));
+                }
+            }
+        }
+
+        // 5. Pure hydration
+        let claims_trace_ids: Vec<Vec<String>> = claims
+            .iter()
+            .map(|c| c.provenance.source_trace_ids.clone())
+            .collect();
+        let lineages = TraceRelationAuditHydrator::hydrate_claims(
+            &claims_trace_ids,
+            &relation_rows,
+            &event_metadata,
+        );
+
+        // 6. Attach lineage to claims
+        claims
+            .into_iter()
+            .zip(lineages.into_iter())
+            .map(|(mut claim, lineage)| {
+                claim.trace_lineage = Some(lineage);
+                claim
+            })
+            .collect()
     }
 
     /// Convert a trace entry to a memory episode, if relevant.

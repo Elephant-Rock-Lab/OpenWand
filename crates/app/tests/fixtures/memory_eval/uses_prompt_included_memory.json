@@ -1,0 +1,29 @@
+{
+  "id": "uses_prompt_included_memory",
+  "title": "Supported claim is retrieved, included in prompt, and model uses it",
+  "user_query": "What memory do you have about the project?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim"
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "must_include_in_prompt": ["crate core exists"],
+    "must_exclude_from_prompt": [],
+    "must_use_in_answer": ["crate core exists"],
+    "must_not_use_in_answer": [],
+    "expected_buckets": [
+      {"claim": "crate core exists", "bucket": "PromptIncluded"}
+    ],
+    "expected_provenance": [],
+    "expected_trace_lineage": []
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

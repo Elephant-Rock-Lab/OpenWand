@@ -17,6 +17,7 @@ pub mod provenance_hydration;
 pub mod trace_relation_hydration;
 pub mod evaluation;
 pub mod evaluation_judge;
+pub mod evaluation_report;
 pub mod provenance;
 pub mod query;
 pub mod ranking;

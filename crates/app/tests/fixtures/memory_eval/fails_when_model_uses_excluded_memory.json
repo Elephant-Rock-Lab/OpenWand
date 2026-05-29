@@ -1,0 +1,25 @@
+{
+  "id": "fails_when_model_uses_excluded_memory",
+  "title": "Model uses excluded memory — evaluation should fail",
+  "user_query": "What do you know?",
+  "expected_outcome": "Fail",
+  "seed_memory": [
+    {
+      "claim": "the project uses microservices",
+      "kind": "Fact",
+      "confidence": 0.3,
+      "evidence_kind": "AcceptedClaim"
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": [],
+    "must_include_in_prompt": [],
+    "must_not_use_in_answer": ["the project uses microservices"],
+    "expected_buckets": [],
+    "expected_provenance": [],
+    "expected_trace_lineage": []
+  },
+  "model": {"Mock": {"behavior": "UseExcludedMemory"}}
+}

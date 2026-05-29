@@ -6,9 +6,10 @@
 use crate::evaluation::{
     ExpectedBucketAssignment, ExpectedProvenanceAssertion,
     ExpectedScenarioOutcome, ExpectedTraceLineageAssertion,
-    MemoryEvaluationFailure, MemoryEvaluationExpectations,
+    MemoryEvaluationCategory, MemoryEvaluationFailure, MemoryEvaluationExpectations,
     MemoryEvaluationReport, MemoryEvaluationScenario,
     PromptInputEvaluationSnapshot, RepoConsistencySummarySnapshot,
+    ScenarioExecutionMode,
 };
 use crate::provenance_hydration::{HydratedMemoryClaim, MemoryTrustBucket};
 
@@ -282,6 +283,8 @@ mod tests {
         MemoryEvaluationScenario {
             id: "test".to_string(),
             title: "test".to_string(),
+            category: MemoryEvaluationCategory::PromptIncluded,
+            execution_mode: ScenarioExecutionMode::FullHarness,
             user_query: "test".to_string(),
             expected_outcome: ExpectedScenarioOutcome::Pass,
             seed_memory: vec![],

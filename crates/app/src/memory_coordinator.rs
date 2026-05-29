@@ -10,6 +10,7 @@ use openwand_memory::{
     EpisodeRole, MemoryEpisode, MemoryExtractor, MemoryStore, MemoryQuery,
 };
 use openwand_memory::prompt_assembly::{MemoryPromptAssemblyInputs, RepoConsistencyPromptAssembler};
+use openwand_memory::provenance_hydration::{HydratedMemoryClaim, MemoryProvenanceHydrator};
 use openwand_memory::repo_consistency::{
     classify_current_claim, detect_missing_in_memory, observe_repo,
     RepoConsistencyFinding, RepoConsistencyReport,
@@ -61,6 +62,9 @@ impl Default for PromptInputProductionConfig {
 pub struct PromptInputResult {
     pub inputs: MemoryPromptAssemblyInputs,
     pub report: RepoConsistencyReport,
+    /// Hydrated claims with full provenance from MemoryRecord + RankedMemoryHit.
+    /// Panel/audit consumers use this instead of raw findings.
+    pub hydrated_claims: Vec<HydratedMemoryClaim>,
     pub claims_checked: usize,
     pub repo_observed: bool,
     pub source_session_id: Option<SessionId>,
@@ -202,6 +206,7 @@ impl MemoryCoordinator {
         let make_empty = |errors: Vec<String>| PromptInputResult {
             inputs: MemoryPromptAssemblyInputs::empty(),
             report: empty_report(),
+            hydrated_claims: vec![],
             claims_checked: 0,
             repo_observed: false,
             source_session_id: session_id.clone(),
@@ -263,6 +268,7 @@ impl MemoryCoordinator {
             return PromptInputResult {
                 inputs: MemoryPromptAssemblyInputs::empty(),
                 report: empty_report(),
+                hydrated_claims: vec![],
                 claims_checked: claims_to_check,
                 repo_observed: false,
                 source_session_id: session_id,
@@ -278,6 +284,7 @@ impl MemoryCoordinator {
                 return PromptInputResult {
                     inputs: MemoryPromptAssemblyInputs::empty(),
                     report: empty_report(),
+                    hydrated_claims: vec![],
                     claims_checked: claims_to_check,
                     repo_observed: false,
                     source_session_id: session_id,
@@ -324,11 +331,19 @@ impl MemoryCoordinator {
         // Step 9: Assemble
         let inputs = RepoConsistencyPromptAssembler::assemble_from_report(&report);
 
+        // Step 10: Hydrate provenance from records + hits
+        let hydrated_claims = MemoryProvenanceHydrator::hydrate_findings(
+            &report.findings,
+            &all_hits,
+            &records,
+        );
+
         PromptInputResult {
             claims_checked: claims_to_check,
             repo_observed: true,
             inputs,
             report,
+            hydrated_claims,
             source_session_id: session_id,
             source_working_directory: working_directory.to_path_buf(),
             errors: search_errors,

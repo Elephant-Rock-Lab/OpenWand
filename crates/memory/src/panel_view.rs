@@ -15,6 +15,7 @@ use crate::provenance::ProvenanceSnapshot;
 use crate::provenance_hydration::{
     HydratedMemoryClaim, MemoryTrustBucket, ProvenanceHydrationStatus,
 };
+use crate::trace_relation_hydration::TraceRelationCounts;
 use crate::repo_consistency::{
     ConsistencySeverity, RepoConsistencyFinding, RepoConsistencyFindingKind, RepoConsistencyReport,
 };
@@ -58,6 +59,10 @@ pub struct MemoryPanelClaim {
     pub superseded_by: Option<String>,
     /// Hydration status — was provenance complete, partial, or missing?
     pub hydration_status: ProvenanceHydrationStatus,
+    /// Trace relation lineage summary — audit/panel-only.
+    pub trace_lineage_summary: Option<String>,
+    pub trace_relation_counts: Option<TraceRelationCounts>,
+    pub trace_lineage_status: Option<String>,
 }
 
 /// A repo observation with no memory claim — context gap.
@@ -140,6 +145,9 @@ impl RepoFilteredPanelView {
                     reason: "from_coordinator_output — use from_hydrated_claims for provenance".to_string(),
                 },
                 severity: finding.severity.clone(),
+                trace_lineage_summary: None,
+                trace_relation_counts: None,
+                trace_lineage_status: None,
             };
 
             match finding.kind {
@@ -252,6 +260,9 @@ impl RepoFilteredPanelView {
                 superseded_by: hc.supersession.as_ref().and_then(|s| s.superseded_by_record_id.clone()),
                 hydration_status: hc.hydration_status.clone(),
                 severity: hc.severity.clone(),
+                trace_lineage_summary: hc.trace_lineage.as_ref().map(|l| l.compact_summary()),
+                trace_relation_counts: hc.trace_lineage.as_ref().map(|l| l.counts()),
+                trace_lineage_status: hc.trace_lineage.as_ref().map(|l| format!("{:?}", l.hydration_status)),
             };
 
             match hc.bucket {

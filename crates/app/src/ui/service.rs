@@ -184,6 +184,7 @@ impl UiSessionService {
             system_prompt: None,
             llm_target: Some(llm_target),
             memory_prompt_inputs: None,
+            output_guard: None,
         };
 
         // Spawn the run in background

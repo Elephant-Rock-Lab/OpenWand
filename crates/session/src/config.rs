@@ -1,5 +1,6 @@
 use openwand_core::mode::InteractionMode;
 use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
+use openwand_policy::OutputGuardConfig;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for a single run_turn invocation.
@@ -18,6 +19,16 @@ pub struct RunConfig {
     /// RepoConsistencyReport and assembling these inputs.
     #[serde(skip)]
     pub memory_prompt_inputs: Option<MemoryPromptAssemblyInputs>,
+    /// Post-inference output record guard config.
+    ///
+    /// When enabled, the durable assistant message is screened for
+    /// forbidden action patterns after generation. Streaming remains live.
+    ///
+    /// This is NOT pre-disclosure safety enforcement.
+    /// It is post-hoc durable-record correction.
+    /// This does NOT guarantee the user never saw the raw text.
+    #[serde(skip)]
+    pub output_guard: Option<OutputGuardConfig>,
 }
 
 impl Default for RunConfig {
@@ -29,6 +40,7 @@ impl Default for RunConfig {
             system_prompt: None,
             llm_target: None,
             memory_prompt_inputs: None,
+            output_guard: None,
         }
     }
 }

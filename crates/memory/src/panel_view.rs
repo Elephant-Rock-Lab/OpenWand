@@ -12,6 +12,9 @@ use crate::prompt_assembly::{
     MemoryPromptAssemblyInputs, PromptInclusionReason, UnverifiableMemoryClaim,
 };
 use crate::provenance::ProvenanceSnapshot;
+use crate::provenance_hydration::{
+    HydratedMemoryClaim, MemoryTrustBucket, ProvenanceHydrationStatus,
+};
 use crate::repo_consistency::{
     ConsistencySeverity, RepoConsistencyFinding, RepoConsistencyFindingKind, RepoConsistencyReport,
 };
@@ -40,9 +43,21 @@ pub struct MemoryPanelClaim {
     pub inclusion_reason: Option<PromptInclusionReason>,
     pub severity: ConsistencySeverity,
     /// Source provenance — WHERE the claim came from.
-    /// Currently always None for findings (coordinator doesn't fill it yet).
-    /// Will be populated from RankedMemoryHit.provenance in a future wave.
     pub source_provenance: Option<ProvenanceSnapshot>,
+    /// Record ID from MemoryRecord.
+    pub record_id: Option<String>,
+    /// Source trace IDs from MemoryRecord.
+    pub source_trace_ids: Vec<String>,
+    /// Confidence score from MemoryRecord.
+    pub confidence: Option<f64>,
+    /// Provenance label (e.g. "User-stated claim · record rec_1 · 1 trace(s)").
+    pub provenance_label: String,
+    /// Conflict group ID, if this claim is in a conflict.
+    pub conflict_group_id: Option<String>,
+    /// Superseded-by record ID, if this claim has been superseded.
+    pub superseded_by: Option<String>,
+    /// Hydration status — was provenance complete, partial, or missing?
+    pub hydration_status: ProvenanceHydrationStatus,
 }
 
 /// A repo observation with no memory claim — context gap.
@@ -115,6 +130,15 @@ impl RepoFilteredPanelView {
                 repo_evidence_key: finding.repo_evidence_key.clone(),
                 inclusion_reason: inclusion.cloned(),
                 source_provenance: None,
+                record_id: None,
+                source_trace_ids: vec![],
+                confidence: None,
+                provenance_label: String::new(),
+                conflict_group_id: None,
+                superseded_by: None,
+                hydration_status: ProvenanceHydrationStatus::Missing {
+                    reason: "from_coordinator_output — use from_hydrated_claims for provenance".to_string(),
+                },
                 severity: finding.severity.clone(),
             };
 
@@ -150,6 +174,98 @@ impl RepoFilteredPanelView {
                 RepoConsistencyFindingKind::Unverifiable => {
                     unverifiable.push(panel_claim);
                 }
+            }
+        }
+
+        let summary = MemoryPanelSummary {
+            prompt_included_count: prompt_included.len(),
+            stale_count: stale.len(),
+            missing_in_repo_count: missing_in_repo.len(),
+            missing_in_memory_count: missing_in_memory.len(),
+            conflict_count: conflicts.len(),
+            unverifiable_count: unverifiable.len(),
+            superseded_ignored_count: superseded_ignored.len(),
+        };
+
+        Self {
+            working_directory,
+            generated_at: report.checked_at,
+            summary,
+            prompt_included,
+            stale,
+            missing_in_repo,
+            missing_in_memory,
+            conflicts,
+            unverifiable,
+            superseded_ignored,
+        }
+    }
+
+    /// Build a panel view from hydrated claims.
+    /// Preferred constructor — provides full provenance from coordinator hydration.
+    /// The hydrated claims already carry record IDs, trace IDs, provenance labels, etc.
+    pub fn from_hydrated_claims(
+        working_directory: PathBuf,
+        hydrated: &[HydratedMemoryClaim],
+        report: &RepoConsistencyReport,
+    ) -> Self {
+        let mut prompt_included = Vec::new();
+        let mut stale = Vec::new();
+        let mut missing_in_repo = Vec::new();
+        let mut missing_in_memory = Vec::new();
+        let mut conflicts = Vec::new();
+        let mut unverifiable = Vec::new();
+        let mut superseded_ignored = Vec::new();
+
+        // Build missing-in-memory from report findings (these have no hydrated claim)
+        for finding in &report.findings {
+            if matches!(finding.kind, RepoConsistencyFindingKind::MissingInMemory) {
+                missing_in_memory.push(MemoryPanelMissingObservation {
+                    repo_evidence_key: finding.repo_evidence_key.first().cloned().unwrap_or_default(),
+                    detail: finding.detail.clone(),
+                    severity: finding.severity.clone(),
+                });
+            }
+        }
+
+        for hc in hydrated {
+            let panel_claim = MemoryPanelClaim {
+                claim_text: hc.claim_text.clone(),
+                finding_kind: match hc.bucket {
+                    MemoryTrustBucket::PromptIncluded => RepoConsistencyFindingKind::Supported,
+                    MemoryTrustBucket::Stale => RepoConsistencyFindingKind::StaleMemory,
+                    MemoryTrustBucket::MissingInRepo => RepoConsistencyFindingKind::MissingInRepo,
+                    MemoryTrustBucket::MissingInMemory => RepoConsistencyFindingKind::MissingInMemory,
+                    MemoryTrustBucket::Conflict => RepoConsistencyFindingKind::ConflictRequiresReview,
+                    MemoryTrustBucket::Unverifiable => RepoConsistencyFindingKind::Unverifiable,
+                    MemoryTrustBucket::SupersededIgnored => RepoConsistencyFindingKind::SupersededMemoryIgnored,
+                },
+                evidence_kind: hc.provenance.evidence_kind,
+                repo_evidence_key: hc.repo_evidence_key.clone(),
+                inclusion_reason: hc.inclusion_reason.clone(),
+                source_provenance: None,
+                record_id: hc.provenance.record_id.clone(),
+                source_trace_ids: hc.provenance.source_trace_ids.clone(),
+                confidence: hc.provenance.confidence,
+                provenance_label: hc.provenance.evidence_line(),
+                conflict_group_id: hc.conflict.as_ref().and_then(|c| c.conflict_group_id.clone()),
+                superseded_by: hc.supersession.as_ref().and_then(|s| s.superseded_by_record_id.clone()),
+                hydration_status: hc.hydration_status.clone(),
+                severity: hc.severity.clone(),
+            };
+
+            match hc.bucket {
+                MemoryTrustBucket::PromptIncluded => prompt_included.push(panel_claim),
+                MemoryTrustBucket::Stale => stale.push(panel_claim),
+                MemoryTrustBucket::MissingInRepo => missing_in_repo.push(panel_claim),
+                MemoryTrustBucket::MissingInMemory => {} // Handled from report above
+                MemoryTrustBucket::Conflict => conflicts.push(MemoryPanelConflictGroup {
+                    group_id: hc.conflict.as_ref().and_then(|c| c.conflict_group_id.clone()).unwrap_or_default(),
+                    claims: vec![panel_claim],
+                    detail: hc.conflict.as_ref().map(|c| c.explanation.clone()).unwrap_or_default(),
+                }),
+                MemoryTrustBucket::Unverifiable => unverifiable.push(panel_claim),
+                MemoryTrustBucket::SupersededIgnored => superseded_ignored.push(panel_claim),
             }
         }
 

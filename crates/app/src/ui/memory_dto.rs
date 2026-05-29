@@ -40,6 +40,13 @@ pub struct UiMemoryPanelRow {
     pub inclusion_reason: Option<String>,
     pub severity: String,
     pub has_provenance: bool,
+    pub record_id: Option<String>,
+    pub provenance_label: String,
+    pub source_traces: Vec<String>,
+    pub confidence: Option<f64>,
+    pub conflict_group_id: Option<String>,
+    pub superseded_by: Option<String>,
+    pub hydration_status: String,
 }
 
 /// A conflict group requiring review.

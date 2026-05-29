@@ -251,7 +251,7 @@ async fn main() -> Result<()> {
     println!("  Repo observed:   {}", prompt_result.repo_observed);
     if prompt_result.repo_observed {
         println!("  Supported:       {}", prompt_result.inputs.supported_claims.len());
-        println!("  Unverifiable:    {}", prompt_result.inputs.unverifiable_claims_excluded);
+        println!("  Unverifiable:    {}", prompt_result.inputs.unverifiable_claims_excluded.len());
         println!("  Missing gaps:    {}", prompt_result.inputs.missing_memory_gaps.len());
     }
     if !prompt_result.errors.is_empty() {

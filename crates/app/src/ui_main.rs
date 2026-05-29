@@ -5,10 +5,12 @@
 use dioxus::prelude::*;
 use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
 use openwand_app::ui::memory_dto::UiMemoryPanel;
+use openwand_app::memory_coordinator::PromptInputProductionConfig;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
+use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
 use openwand_memory::{MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_session::runner::SessionRunner;
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
@@ -37,6 +39,19 @@ static MEMORY_PANEL: GlobalSignal<UiMemoryPanel> = Signal::global(UiMemoryPanel:
 
 /// Active runner + handle for the selected session.
 static ACTIVE_RUNNER: GlobalSignal<Option<ActiveRun>> = Signal::global(|| None);
+
+/// Session-scoped cache for 02k memory prompt inputs.
+/// Produced by coordinator after turn N, consumed by start_run at turn N+1.
+/// Scoped by session_id and working_directory to prevent cross-session leakage.
+#[derive(Debug, Clone)]
+struct CachedMemoryPromptInputs {
+    session_id: String,
+    working_directory: std::path::PathBuf,
+    inputs: MemoryPromptAssemblyInputs,
+}
+
+static MEMORY_PROMPT_INPUTS: GlobalSignal<Option<CachedMemoryPromptInputs>> =
+    Signal::global(|| None);
 
 pub struct ActiveRun {
     pub runner: Arc<SessionRunner>,
@@ -244,6 +259,7 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                     let svc = svc.clone();
                     spawn(async move {
                         *SELECTED_SESSION_ID.write() = Some(id.clone());
+                        *MEMORY_PROMPT_INPUTS.write() = None; // Clear on session switch
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);
@@ -599,6 +615,29 @@ async fn poll_and_project(
 
     let session_id = runner.session_id.clone();
     let projection = coordinator.project_after_run(&session_id).await;
+
+    // Produce 02k prompt inputs for the next turn
+    let working_dir = CURRENT_SESSION
+        .read()
+        .as_ref()
+        .and_then(|s| s.working_directory.clone())
+        .unwrap_or_else(|| ".".to_string());
+    let prompt_result = coordinator
+        .produce_prompt_inputs(
+            Some(session_id.clone()),
+            std::path::Path::new(&working_dir),
+            &PromptInputProductionConfig::default(),
+        )
+        .await;
+    *MEMORY_PROMPT_INPUTS.write() = if prompt_result.inputs.is_empty() {
+        None
+    } else {
+        Some(CachedMemoryPromptInputs {
+            session_id: session_id.to_string(),
+            working_directory: std::path::PathBuf::from(&working_dir),
+            inputs: prompt_result.inputs,
+        })
+    };
 
     // Refresh memory panel
     match openwand_app::ui::memory_service::build_memory_panel(&*memory).await {

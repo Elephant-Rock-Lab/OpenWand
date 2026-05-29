@@ -1,0 +1,33 @@
+{
+  "id": "claim_verified_by_trace_relation_passes",
+  "title": "Claim with Verifies trace relation has provenance",
+  "category": "verified_trace_lineage",
+  "execution_mode": "full_harness",
+  "user_query": "What is verified?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "core_claim",
+      "claim": "crate core exists",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": ["trace_source"],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [
+    {"label": "trace_source", "event_kind": "session.started", "actor_label": "user"},
+    {"label": "trace_verify", "event_kind": "session.started", "actor_label": "user"}
+  ],
+  "seed_relations": [
+    {"from_label": "trace_source", "to_label": "trace_verify", "kind": "Verifies"}
+  ],
+  "expectations": {
+    "must_retrieve": ["crate core exists"],
+    "expected_provenance": [
+      {"claim": "crate core exists", "has_record_id": true, "has_source_trace_ids": true}
+    ]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

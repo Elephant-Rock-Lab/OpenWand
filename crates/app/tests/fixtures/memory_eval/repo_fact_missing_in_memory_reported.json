@@ -1,0 +1,15 @@
+{
+  "id": "repo_fact_missing_in_memory_reported",
+  "title": "Repo crate with no memory claim is reported as missing in memory",
+  "category": "missing_in_memory",
+  "execution_mode": "full_harness",
+  "user_query": "What do you know?",
+  "expected_outcome": "Pass",
+  "seed_memory": [],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": []
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

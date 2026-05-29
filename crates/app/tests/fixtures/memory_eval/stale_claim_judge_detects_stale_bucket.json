@@ -1,0 +1,17 @@
+{
+  "id": "stale_claim_judge_detects_stale_bucket",
+  "title": "Judge detects stale bucket assignment correctly",
+  "category": "stale",
+  "execution_mode": "judge_only",
+  "user_query": "What version?",
+  "expected_outcome": "Pass",
+  "seed_memory": [],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "expected_buckets": [
+      {"claim": "project uses version 1", "bucket": "Stale"}
+    ]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

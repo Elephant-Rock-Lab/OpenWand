@@ -1,0 +1,25 @@
+{
+  "id": "unverifiable_claim_is_excluded",
+  "title": "Non-repo claim is unverifiable and excluded",
+  "category": "unverifiable",
+  "execution_mode": "full_harness",
+  "user_query": "What do you know?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "unverifiable",
+      "claim": "the team prefers dark mode",
+      "kind": "Preference",
+      "confidence": 0.8,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["the team prefers dark mode"]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

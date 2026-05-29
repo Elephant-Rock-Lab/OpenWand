@@ -1,0 +1,25 @@
+{
+  "id": "low_confidence_claim_behavior",
+  "title": "Low-confidence claim is observed, bucket matches current policy",
+  "category": "low_confidence",
+  "execution_mode": "full_harness",
+  "user_query": "What do you know?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "low_conf",
+      "claim": "the project might use rust",
+      "kind": "Fact",
+      "confidence": 0.2,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["the project might use rust"]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

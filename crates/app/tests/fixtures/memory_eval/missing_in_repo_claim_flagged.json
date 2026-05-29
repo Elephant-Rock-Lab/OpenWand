@@ -1,0 +1,25 @@
+{
+  "id": "missing_in_repo_claim_flagged",
+  "title": "Memory claim about nonexistent repo object is flagged",
+  "category": "missing_in_repo",
+  "execution_mode": "full_harness",
+  "user_query": "What crates exist?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "missing_claim",
+      "claim": "crate nonexistent exists",
+      "kind": "Fact",
+      "confidence": 0.9,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_retrieve": ["crate nonexistent exists"]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

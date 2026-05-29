@@ -1,0 +1,34 @@
+{
+  "id": "superseded_claim_is_excluded",
+  "title": "Superseded claim is not included in prompt",
+  "category": "superseded",
+  "execution_mode": "full_harness",
+  "user_query": "What version?",
+  "expected_outcome": "Pass",
+  "seed_memory": [
+    {
+      "label": "old_claim",
+      "claim": "project uses version 1",
+      "kind": "Fact",
+      "confidence": 0.9,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": null
+    },
+    {
+      "label": "new_claim",
+      "claim": "project uses version 2",
+      "kind": "Fact",
+      "confidence": 0.95,
+      "evidence_kind": "AcceptedClaim",
+      "source_trace_labels": [],
+      "superseded_by_label": "old_claim"
+    }
+  ],
+  "seed_trace": [],
+  "seed_relations": [],
+  "expectations": {
+    "must_not_use_in_answer": ["project uses version 1"]
+  },
+  "model": {"Mock": {"behavior": "EchoIncludedMemory"}}
+}

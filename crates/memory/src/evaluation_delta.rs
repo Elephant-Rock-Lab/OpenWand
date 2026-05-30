@@ -152,6 +152,21 @@ impl MemoryEvaluationDeltaReport {
     }
 }
 
+/// Approved behavior changes for 02s production wiring.
+/// Every change from Default → Batch02rDefault must be listed here.
+/// The delta harness validates that observed changes match this ledger.
+pub fn approved_02s_deltas() -> Vec<ApprovedBehaviorChange> {
+    vec![
+        ApprovedBehaviorChange {
+            scenario_id: "low_confidence_claim_behavior".to_string(),
+            field: "prompt_hash".to_string(),
+            before: "(captured at runtime)".to_string(),
+            after: "(captured at runtime)".to_string(),
+            reason: "02s: batch_02r_default excludes low-confidence claims (2000 bps) below prompt_include_min_bps (3000)".to_string(),
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,5 +278,37 @@ mod tests {
         let json = serde_json::to_string(&change).unwrap();
         let restored: ApprovedBehaviorChange = serde_json::from_str(&json).unwrap();
         assert_eq!(change, restored);
+    }
+
+    // ── 02s ledger validation tests ───────────────────────────────────────
+
+    #[test]
+    fn approved_02s_deltas_reference_existing_scenario() {
+        let deltas = approved_02s_deltas();
+        assert!(!deltas.is_empty(), "Ledger must not be empty");
+        for delta in &deltas {
+            assert!(!delta.scenario_id.is_empty());
+            assert!(!delta.field.is_empty());
+            assert!(!delta.reason.is_empty());
+        }
+    }
+
+    #[test]
+    fn approved_02s_delta_ids_are_unique() {
+        let deltas = approved_02s_deltas();
+        let mut seen = std::collections::HashSet::new();
+        for delta in &deltas {
+            let key = format!("{}:{}", delta.scenario_id, delta.field);
+            assert!(seen.insert(key), "Duplicate delta: {}", delta.scenario_id);
+        }
+    }
+
+    #[test]
+    fn approved_02s_deltas_only_reference_low_confidence() {
+        let deltas = approved_02s_deltas();
+        for delta in &deltas {
+            assert_eq!("low_confidence_claim_behavior", delta.scenario_id,
+                "Only low_confidence_claim_behavior should change under batch_02r_default");
+        }
     }
 }

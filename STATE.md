@@ -55,6 +55,7 @@ crates/
 | 02o | Trace relation audit hydration | ✅ Complete (738 tests) |
 | 02p | Memory evaluation harness | ✅ Complete (785 tests) |
 | 02q | Memory eval scenario expansion | ✅ Complete (821 tests) |
+| 02r | Memory ranking and governance tuning | ✅ Complete (858 tests) |
 
 ## Test Count
 **197 tests, zero failures, zero warnings.**

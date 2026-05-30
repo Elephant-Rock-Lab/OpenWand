@@ -251,6 +251,7 @@ async fn produce_prompt_inputs_caps_records_checked() {
     let config = PromptInputProductionConfig {
         max_records_checked: 5,
         max_hits_per_record: 2,
+        governance_profile: None,
     };
 
     let result = coordinator
@@ -279,6 +280,7 @@ async fn produce_prompt_inputs_order_is_deterministic() {
     let config = PromptInputProductionConfig {
         max_records_checked: 2,
         max_hits_per_record: 5,
+        governance_profile: None,
     };
 
     let result1 = coordinator

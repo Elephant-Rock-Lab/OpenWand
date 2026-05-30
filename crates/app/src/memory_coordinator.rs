@@ -49,6 +49,8 @@ pub struct PromptInputProductionConfig {
     pub max_records_checked: usize,
     /// Maximum number of ranked hits to retrieve per record.
     pub max_hits_per_record: usize,
+    /// Governance profile. If None, pre-02r behavior is preserved.
+    pub governance_profile: Option<openwand_memory::governance::MemoryGovernanceProfile>,
 }
 
 impl Default for PromptInputProductionConfig {
@@ -56,6 +58,7 @@ impl Default for PromptInputProductionConfig {
         Self {
             max_records_checked: 100,
             max_hits_per_record: 5,
+            governance_profile: None, // pre-02r: no governance filtering
         }
     }
 }
@@ -73,6 +76,102 @@ pub struct PromptInputResult {
     pub source_session_id: Option<SessionId>,
     pub source_working_directory: std::path::PathBuf,
     pub errors: Vec<String>,
+}
+
+/// Assemble prompt inputs from a governed report.
+/// Only includes findings with PromptEligibility::Include.
+fn assemble_from_governed(
+    governed: &openwand_memory::governance::GovernanceFilteredReport,
+) -> MemoryPromptAssemblyInputs {
+    use openwand_memory::governance::PromptEligibility;
+    use openwand_memory::prompt_assembly::*;
+    use openwand_memory::repo_consistency::RepoConsistencyFindingKind;
+
+    let mut supported = Vec::new();
+    let mut superseded = Vec::new();
+    let mut conflicts = Vec::new();
+    let mut missing = Vec::new();
+    let mut unverifiable = Vec::new();
+
+    for gf in &governed.governed_findings {
+        match gf.prompt_eligibility {
+            PromptEligibility::Include => {
+                match gf.finding.kind {
+                    RepoConsistencyFindingKind::Supported
+                    | RepoConsistencyFindingKind::StaleMemory
+                    | RepoConsistencyFindingKind::MissingInRepo => {
+                        if let Some(ref claim_text) = gf.finding.claim_text {
+                            supported.push(SupportedMemoryClaim {
+                                claim_text: claim_text.clone(),
+                                evidence_kind: gf.finding.evidence_kind
+                                    .unwrap_or(openwand_memory::evidence::EvidenceKind::AcceptedClaim),
+                                confidence_bps: 0,
+                                source_provenance: None,
+                                repo_evidence_key: gf.finding.repo_evidence_key.clone(),
+                                inclusion_reason: PromptInclusionReason::RepoSupported {
+                                    evidence_keys: gf.finding.repo_evidence_key.clone(),
+                                },
+                            });
+                        }
+                    }
+                    RepoConsistencyFindingKind::SupersededMemoryIgnored => {
+                        if let Some(ref claim_text) = gf.finding.claim_text {
+                            superseded.push(SupersededMemoryClaim {
+                                claim_text: claim_text.clone(),
+                                source_provenance: None,
+                                inclusion_reason: PromptInclusionReason::SupersededHistory,
+                            });
+                        }
+                    }
+                    RepoConsistencyFindingKind::ConflictRequiresReview => {
+                        if let Some(ref claim_text) = gf.finding.claim_text {
+                            conflicts.push(MemoryConflictGroup {
+                                claims: vec![ConflictPromptClaim {
+                                    claim_text: claim_text.clone(),
+                                    source_provenance: None,
+                                }],
+                                group_id: String::new(),
+                                inclusion_reason: PromptInclusionReason::ConflictReview,
+                            });
+                        }
+                    }
+                    RepoConsistencyFindingKind::MissingInMemory => {
+                        missing.push(MissingMemoryObservation {
+                            repo_evidence_key: gf.finding.repo_evidence_key
+                                .first()
+                                .cloned()
+                                .unwrap_or_default(),
+                            detail: gf.finding.detail.clone(),
+                            severity: gf.finding.severity.clone(),
+                            inclusion_reason: PromptInclusionReason::MissingMemoryGap,
+                        });
+                    }
+                    RepoConsistencyFindingKind::Unverifiable => {
+                        unverifiable.push(UnverifiableMemoryClaim {
+                            claim_text: gf.finding.claim_text.clone().unwrap_or_default(),
+                            evidence_kind: gf.finding.evidence_kind,
+                        });
+                    }
+                }
+            }
+            PromptEligibility::ExcludeAuditOnly { .. } => {
+                if matches!(gf.finding.kind, RepoConsistencyFindingKind::Unverifiable) {
+                    unverifiable.push(UnverifiableMemoryClaim {
+                        claim_text: gf.finding.claim_text.clone().unwrap_or_default(),
+                        evidence_kind: gf.finding.evidence_kind,
+                    });
+                }
+            }
+        }
+    }
+
+    MemoryPromptAssemblyInputs {
+        supported_claims: supported,
+        relevant_superseded_history: superseded,
+        conflicts_for_user_or_model: conflicts,
+        missing_memory_gaps: missing,
+        unverifiable_claims_excluded: unverifiable,
+    }
 }
 
 /// Coordinates automatic memory projection after session runs.
@@ -331,8 +430,16 @@ impl MemoryCoordinator {
             repo_inputs: RepoObservationSummary::default(),
         };
 
-        // Step 9: Assemble
-        let inputs = RepoConsistencyPromptAssembler::assemble_from_report(&report);
+        // Step 9: Assemble (governed if profile provided)
+        let inputs = if let Some(ref profile) = config.governance_profile {
+            let governed = openwand_memory::governance::GovernanceFilteredReport::from_report(
+                &report, profile, &all_hits,
+            );
+            // Build assembly inputs from governed findings only
+            assemble_from_governed(&governed)
+        } else {
+            RepoConsistencyPromptAssembler::assemble_from_report(&report)
+        };
 
         // Step 10: Hydrate provenance from records + hits
         let hydrated_claims = MemoryProvenanceHydrator::hydrate_findings(

@@ -603,14 +603,44 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
         }
     }
 
+    // Record preimage if file exists (for rollback)
+    let preimage_info = if full_path.exists() {
+        match tokio::fs::read(&full_path).await {
+            Ok(existing) => {
+                let hash = blake3::hash(&existing).to_hex().to_string();
+                let size = existing.len();
+
+                // Write rollback
+                let rollback_dir = std::path::Path::new(&ctx.working_directory)
+                    .join(".openwand")
+                    .join("rollback");
+                let _ = tokio::fs::create_dir_all(&rollback_dir).await;
+                let rollback_path = rollback_dir.join(format!("write_{}.bak", call_id));
+                let _ = tokio::fs::write(&rollback_path, &existing).await;
+
+                Some(format!("Preimage: {} ({} bytes)", hash, size))
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     // Write the file
     match tokio::fs::write(&full_path, content).await {
-        Ok(()) => ToolResult::success(
-            call_id,
-            tool_name,
-            format!("Wrote {} bytes to {}", content.len(), full_path.display()),
-            start.elapsed().as_millis() as u64,
-        ),
+        Ok(()) => {
+            let postimage_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
+            let mut msg = format!(
+                "Wrote {} bytes to {}\nPostimage: {}",
+                content.len(),
+                full_path.display(),
+                postimage_hash
+            );
+            if let Some(pre) = preimage_info {
+                msg = format!("{}\n{}", pre, msg);
+            }
+            ToolResult::success(call_id, tool_name, msg, start.elapsed().as_millis() as u64)
+        }
         Err(e) => ToolResult::error(
             call_id,
             tool_name,
@@ -968,6 +998,81 @@ mod tests {
             .await
             .unwrap();
         assert_eq!("nested content", content);
+    }
+
+    #[tokio::test]
+    async fn write_tool_records_preimage_when_overwriting() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::write(dir.path().join("exists.txt"), "original content")
+            .await.unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "exists.txt",
+            "content": "new content",
+            "overwrite": true,
+            "_call_id": "tc_preimage"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await.unwrap();
+        assert!(!result.is_error);
+        assert!(result.output.contains("Preimage:"), "Should record preimage: {}", result.output);
+        assert!(result.output.contains("Postimage:"));
+    }
+
+    #[tokio::test]
+    async fn write_tool_creates_rollback_on_overwrite() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::write(dir.path().join("rollback_test.txt"), "original data")
+            .await.unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "rollback_test.txt",
+            "content": "replaced data",
+            "overwrite": true,
+            "_call_id": "tc_rollback"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await.unwrap();
+        assert!(!result.is_error);
+
+        // Verify rollback file was created
+        let rollback_dir = dir.path().join(".openwand").join("rollback");
+        let rollback_files: Vec<_> = std::fs::read_dir(&rollback_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert_eq!(1, rollback_files.len(), "Should have exactly one rollback file");
+
+        let rollback_content = tokio::fs::read_to_string(rollback_files[0].path()).await.unwrap();
+        assert_eq!("original data", rollback_content);
+    }
+
+    #[tokio::test]
+    async fn write_new_file_has_no_preimage() {
+        let dir = TempDir::new().unwrap();
+        let ctx = test_context(&dir);
+        let mut provider = BuiltinToolProvider::new();
+        provider.register_fn(file_write_descriptor(), file_write_handler);
+
+        let args = serde_json::json!({
+            "path": "brand_new.txt",
+            "content": "fresh content",
+            "_call_id": "tc_new"
+        });
+        let result = provider
+            .execute(&canonical_local_tool_name("file_write"), args, ctx)
+            .await.unwrap();
+        assert!(!result.is_error);
+        assert!(!result.output.contains("Preimage:"), "New file should not have preimage");
+        assert!(result.output.contains("Postimage:"));
     }
 }
 

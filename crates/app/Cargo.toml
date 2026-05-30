@@ -46,3 +46,4 @@ dioxus-desktop = { version = "=0.7.9", optional = true }
 [features]
 default = []
 desktop = ["dioxus", "dioxus-desktop"]
+memory-regression = []

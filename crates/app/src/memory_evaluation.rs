@@ -60,6 +60,16 @@ impl MemoryEvaluationHarness {
         scenario: &MemoryEvaluationScenario,
         working_dir: &Path,
     ) -> MemoryEvaluationReport {
+        self.run_scenario_with_config(scenario, working_dir, &crate::memory_coordinator::PromptInputProductionConfig::default()).await
+    }
+
+    /// Run scenario with explicit config (for governance profile testing).
+    pub async fn run_scenario_with_config(
+        &self,
+        scenario: &MemoryEvaluationScenario,
+        working_dir: &Path,
+        config: &crate::memory_coordinator::PromptInputProductionConfig,
+    ) -> MemoryEvaluationReport {
         let maps = self.seed_all(scenario).await;
 
         // 2. Create coordinator with isolated stores
@@ -71,7 +81,7 @@ impl MemoryEvaluationHarness {
 
         // 3. Run produce_prompt_inputs (same path as runtime)
         let result = coordinator
-            .produce_prompt_inputs(None, working_dir, &PromptInputProductionConfig::default())
+            .produce_prompt_inputs(None, working_dir, config)
             .await;
 
         // 4. Build snapshot

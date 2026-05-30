@@ -21,6 +21,7 @@ pub mod mutation;
 pub mod persistence;
 pub mod phase;
 pub mod projector;
+pub mod rebuild;
 pub mod runner;
 pub mod task_context;
 pub mod tool;

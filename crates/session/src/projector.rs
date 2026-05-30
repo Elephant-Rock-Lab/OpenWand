@@ -13,6 +13,11 @@ impl LoroProjector {
         Self { state }
     }
 
+    /// Borrow the projected state.
+    pub fn state(&self) -> &LoroSessionState {
+        &self.state
+    }
+
     /// Apply a trace event to the Loro projection.
     pub fn apply(
         &mut self,

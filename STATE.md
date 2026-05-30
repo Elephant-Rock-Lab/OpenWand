@@ -57,6 +57,7 @@ crates/
 | 02q | Memory eval scenario expansion | ✅ Complete (821 tests) |
 | 02r | Memory ranking and governance tuning | ✅ Complete (858 tests) |
 | 02s | Governance production wiring | ✅ Complete (874 tests) |
+| 02t | Integration delta proof | ✅ Complete (897 tests) |
 
 ## Test Count
 **197 tests, zero failures, zero warnings.**

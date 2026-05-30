@@ -20,6 +20,7 @@ pub mod evaluation_judge;
 pub mod evaluation_report;
 pub mod evaluation_coverage;
 pub mod evaluation_delta;
+pub mod verification_signal;
 pub mod governance;
 pub mod provenance;
 pub mod query;

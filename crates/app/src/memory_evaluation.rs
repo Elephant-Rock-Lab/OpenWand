@@ -132,6 +132,52 @@ impl MemoryEvaluationHarness {
         MemoryEvaluationJudge::judge(scenario, &snapshot, &model_output)
     }
 
+    /// Run a single scenario against both Default and Batch02rDefault profiles,
+    /// producing a delta report that captures prompt hash, inclusion, and bucket changes.
+    pub async fn run_governance_delta(
+        &self,
+        scenario: &MemoryEvaluationScenario,
+        working_dir: &Path,
+        approved: &[openwand_memory::evaluation_delta::ApprovedBehaviorChange],
+    ) -> openwand_memory::evaluation_delta::MemoryEvaluationDeltaReport {
+        use openwand_memory::governance::MemoryGovernanceProfileId;
+
+        // Run with Default (compatibility)
+        let config_default = crate::memory_coordinator::PromptInputProductionConfig {
+            governance_profile: Some(MemoryGovernanceProfileId::Default.resolve()),
+            ..Default::default()
+        };
+        let report_default = self.run_scenario_with_config(scenario, working_dir, &config_default).await;
+
+        // Run with Batch02rDefault (production)
+        let config_tuned = crate::memory_coordinator::PromptInputProductionConfig {
+            governance_profile: Some(MemoryGovernanceProfileId::Batch02rDefault.resolve()),
+            ..Default::default()
+        };
+        let report_tuned = self.run_scenario_with_config(scenario, working_dir, &config_tuned).await;
+
+        // Build baseline from Default run
+        let mut scenario_hashes = std::collections::BTreeMap::new();
+        let mut scenario_results = std::collections::BTreeMap::new();
+        scenario_hashes.insert(scenario.id.clone(), report_default.snapshot.memory_context_hash.clone());
+        scenario_results.insert(scenario.id.clone(), report_default.passed);
+
+        let baseline = openwand_memory::evaluation_delta::MemoryEvaluationBaseline {
+            profile_label: "Default".to_string(),
+            scenario_hashes,
+            scenario_results,
+        };
+
+        // Compute delta
+        openwand_memory::evaluation_delta::MemoryEvaluationDeltaReport::compute(
+            "Default",
+            "Batch02rDefault",
+            &baseline,
+            &[report_tuned],
+            approved,
+        )
+    }
+
     /// Seed trace entries, trace relations, memory records, and supersession.
     /// Returns resolution maps (label → ID) for use in test assertions.
     async fn seed_all(&self, scenario: &MemoryEvaluationScenario) -> SeedResolutionMaps {

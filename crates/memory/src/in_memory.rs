@@ -12,20 +12,30 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-/// Deterministic acceptance threshold. Candidates below this are rejected.
-const CONFIDENCE_THRESHOLD: f64 = 0.7;
+/// Default deterministic acceptance threshold. Candidates below this are rejected.
+const DEFAULT_CONFIDENCE_THRESHOLD: f64 = 0.7;
 
 /// In-memory implementation of MemoryStore.
 pub struct InMemoryMemoryStore {
     episodes: Mutex<HashMap<String, MemoryEpisode>>,
     pub records: Mutex<HashMap<String, MemoryRecord>>,
+    confidence_threshold: f64,
 }
 
 impl InMemoryMemoryStore {
+    /// Create with default 0.7 confidence threshold.
     pub fn new() -> Self {
+        Self::with_confidence_threshold(DEFAULT_CONFIDENCE_THRESHOLD)
+    }
+
+    /// Create with custom confidence threshold.
+    /// Use for integration tests that need to seed low-confidence claims.
+    /// Production code should use `new()` which preserves the default.
+    pub fn with_confidence_threshold(threshold: f64) -> Self {
         Self {
             episodes: Mutex::new(HashMap::new()),
             records: Mutex::new(HashMap::new()),
+            confidence_threshold: threshold,
         }
     }
 
@@ -86,7 +96,7 @@ impl MemoryStore for InMemoryMemoryStore {
         candidate: CandidateMemory,
     ) -> Result<Option<MemoryRecord>, MemoryError> {
         // Deterministic acceptance rules
-        if candidate.confidence < CONFIDENCE_THRESHOLD {
+        if candidate.confidence < self.confidence_threshold {
             return Ok(None);
         }
         if candidate.source_episode_ids.is_empty() {
@@ -335,5 +345,81 @@ impl crate::store::MemoryReadStore for InMemoryMemoryStore {
         query: MemoryQuery,
     ) -> Result<RetrievalContext, MemoryError> {
         self.search_records(query).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{CandidateMemory, CandidateKind, MemoryEpisode, EpisodeRole};
+
+    fn make_episode(id: &str, content: &str) -> MemoryEpisode {
+        MemoryEpisode {
+            episode_id: id.to_string(),
+            source_trace_id: "test_trace".to_string(),
+            session_id: "test_session".to_string(),
+            event_kind: "test".to_string(),
+            role: EpisodeRole::User,
+            content: content.to_string(),
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    fn make_candidate(claim: &str, confidence: f64) -> CandidateMemory {
+        CandidateMemory {
+            claim: claim.to_string(),
+            kind: CandidateKind::Fact,
+            confidence,
+            source_episode_ids: vec!["ep_1".to_string()],
+        }
+    }
+
+    #[tokio::test]
+    async fn default_threshold_rejects_below_0_7() {
+        let store = InMemoryMemoryStore::new();
+        let ep = make_episode("ep_1", "test claim");
+        store.project_episode(ep).await.unwrap();
+        let result = store.accept_candidate(make_candidate("test claim", 0.5)).await;
+        assert!(result.unwrap().is_none(), "0.5 should be rejected by default 0.7 threshold");
+    }
+
+    #[tokio::test]
+    async fn default_threshold_accepts_at_0_7() {
+        let store = InMemoryMemoryStore::new();
+        let ep = make_episode("ep_1", "test claim");
+        store.project_episode(ep).await.unwrap();
+        let result = store.accept_candidate(make_candidate("test claim", 0.7)).await;
+        assert!(result.unwrap().is_some(), "0.7 should be accepted by default threshold");
+    }
+
+    #[tokio::test]
+    async fn custom_threshold_accepts_below_default() {
+        let store = InMemoryMemoryStore::with_confidence_threshold(0.1);
+        let ep = make_episode("ep_1", "test claim");
+        store.project_episode(ep).await.unwrap();
+        let result = store.accept_candidate(make_candidate("test claim", 0.25)).await;
+        assert!(result.unwrap().is_some(), "0.25 should be accepted by 0.1 custom threshold");
+    }
+
+    #[tokio::test]
+    async fn custom_threshold_still_rejects_empty_claims() {
+        let store = InMemoryMemoryStore::with_confidence_threshold(0.0);
+        let ep = make_episode("ep_1", "test claim");
+        store.project_episode(ep).await.unwrap();
+        let result = store.accept_candidate(make_candidate("  ", 0.9)).await;
+        assert!(result.unwrap().is_none(), "Empty claim should be rejected regardless of threshold");
+    }
+
+    #[tokio::test]
+    async fn custom_threshold_still_rejects_no_episodes() {
+        let store = InMemoryMemoryStore::with_confidence_threshold(0.0);
+        let candidate = CandidateMemory {
+            claim: "test claim".to_string(),
+            kind: CandidateKind::Fact,
+            confidence: 0.9,
+            source_episode_ids: vec![],
+        };
+        let result = store.accept_candidate(candidate).await;
+        assert!(result.unwrap().is_none(), "No episodes should be rejected regardless of threshold");
     }
 }

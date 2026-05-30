@@ -600,6 +600,7 @@ impl MemoryStore for SqliteMemoryStore {
                     recency_bps: 7000,
                     confidence_bps: (r.confidence * 10000.0) as u16,
                     evidence_bps,
+                    verification_bps: 0, // populated post-ranking by coordinator
                     final_bps: 0,
                 };
 

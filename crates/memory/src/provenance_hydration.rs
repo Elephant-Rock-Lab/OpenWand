@@ -376,6 +376,7 @@ mod tests {
                 recency_bps: 6000,
                 confidence_bps: 9000,
                 evidence_bps: 8500,
+                verification_bps: 0,
                 final_bps: 7200,
             },
             evidence_kind: EvidenceKind::AcceptedClaim,

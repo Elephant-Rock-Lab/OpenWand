@@ -141,6 +141,7 @@ mod ranked_tests {
                 recency_bps: 0,
                 confidence_bps: 0,
                 evidence_bps: 0,
+                verification_bps: 0,
                 final_bps,
             },
             evidence_kind: EvidenceKind::AcceptedClaim,

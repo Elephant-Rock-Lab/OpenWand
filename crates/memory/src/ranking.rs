@@ -15,6 +15,7 @@ pub struct MemoryRankScore {
     pub recency_bps: u16,
     pub confidence_bps: u16,
     pub evidence_bps: u16,
+    pub verification_bps: u16,
     pub final_bps: u16,
 }
 
@@ -28,6 +29,7 @@ pub struct RankingWeights {
     pub recency: u16,
     pub confidence: u16,
     pub evidence: u16,
+    pub verification: u16,
 }
 
 impl Default for RankingWeights {
@@ -39,6 +41,7 @@ impl Default for RankingWeights {
             recency: 1000,
             confidence: 1000,
             evidence: 1000,
+            verification: 0, // pre-02r: no verification component
         }
     }
 }
@@ -51,6 +54,7 @@ impl RankingWeights {
             + self.recency as u32
             + self.confidence as u32
             + self.evidence as u32
+            + self.verification as u32
     }
 }
 
@@ -62,7 +66,8 @@ pub fn compute_final_score(score: &MemoryRankScore, weights: &RankingWeights) ->
         + (score.scope_bps as u32 * weights.scope as u32 / 10000)
         + (score.recency_bps as u32 * weights.recency as u32 / 10000)
         + (score.confidence_bps as u32 * weights.confidence as u32 / 10000)
-        + (score.evidence_bps as u32 * weights.evidence as u32 / 10000);
+        + (score.evidence_bps as u32 * weights.evidence as u32 / 10000)
+        + (score.verification_bps as u32 * weights.verification as u32 / 10000);
     raw.min(10000) as u16
 }
 
@@ -91,6 +96,7 @@ mod tests {
             recency_bps: 5000,
             confidence_bps: 9000,
             evidence_bps: 8000,
+            verification_bps: 0,
             final_bps: 0,
         };
         let weights = RankingWeights::default();
@@ -110,6 +116,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         let high = MemoryRankScore {
@@ -119,6 +126,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         assert!(compute_final_score(&high, &weights) > compute_final_score(&low, &weights));
@@ -134,6 +142,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         let high_prov = MemoryRankScore {
@@ -143,6 +152,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         assert!(compute_final_score(&high_prov, &weights) > compute_final_score(&low_prov, &weights));
@@ -158,6 +168,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         let project = MemoryRankScore {
@@ -167,6 +178,7 @@ mod tests {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps: 7000,
+            verification_bps: 0,
             final_bps: 0,
         };
         assert!(compute_final_score(&project, &weights) > compute_final_score(&global, &weights));
@@ -181,6 +193,7 @@ mod tests {
             recency_bps: 10000,
             confidence_bps: 10000,
             evidence_bps: 10000,
+            verification_bps: 0,
             final_bps: 0,
         };
         let weights = RankingWeights::default();

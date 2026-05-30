@@ -94,7 +94,7 @@ fn make_hit(text: &str) -> RankedMemoryHit {
         text: text.to_string(),
         score: MemoryRankScore {
             relevance_bps: 0, provenance_bps: 0, scope_bps: 0,
-            recency_bps: 0, confidence_bps: 0, evidence_bps: 0, final_bps: 0,
+            recency_bps: 0, confidence_bps: 0, evidence_bps: 0, verification_bps: 0, final_bps: 0,
         },
         evidence_kind: EvidenceKind::AcceptedClaim,
         source_episode_ids: vec![],

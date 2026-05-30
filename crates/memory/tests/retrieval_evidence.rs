@@ -17,6 +17,7 @@ fn hit_with_evidence(id: &str, kind: EvidenceKind) -> RankedMemoryHit {
             recency_bps: 7000,
             confidence_bps: 7000,
             evidence_bps,
+            verification_bps: 0,
             final_bps: 0,
         },
         evidence_kind: kind,

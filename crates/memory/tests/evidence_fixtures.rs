@@ -77,6 +77,7 @@ fn score_record(rec: &FixtureRecord, mode: RetrievalMode) -> (String, u16) {
         recency_bps: 7000,
         confidence_bps: rec.confidence_bps,
         evidence_bps: if evidence_bps > penalty { evidence_bps - penalty } else { 0 },
+        verification_bps: 0,
         final_bps: 0,
     };
     let weights = RankingWeights::default();

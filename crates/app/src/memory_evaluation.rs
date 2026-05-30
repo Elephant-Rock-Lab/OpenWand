@@ -54,6 +54,14 @@ impl MemoryEvaluationHarness {
         }
     }
 
+    /// Create with custom confidence threshold for integration tests.
+    pub fn with_confidence_threshold(threshold: f64) -> Self {
+        Self {
+            memory_store: Arc::new(InMemoryMemoryStore::with_confidence_threshold(threshold)),
+            trace_store: Arc::new(InMemoryTraceStore::new()),
+        }
+    }
+
     /// Seed memory + trace fixtures, run produce_prompt_inputs(), judge results.
     pub async fn run_scenario(
         &self,

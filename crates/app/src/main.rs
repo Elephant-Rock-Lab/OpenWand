@@ -1,9 +1,9 @@
 //! OpenWand — Conjure results from intent.
 //!
-//! Wave 02g: CLI binary with real memory wiring.
+//! Wave 05: CLI binary with subcommand structure.
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
 use openwand_core::SessionId;
 use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
@@ -23,25 +23,54 @@ use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(name = "openwand", version, about = "Conjure results from intent")]
-struct Args {
+struct Cli {
     /// LLM provider base URL (OpenAI-compatible)
-    #[arg(long, default_value = "http://localhost:1234/v1")]
+    #[arg(long, global = true, default_value = "http://localhost:1234/v1")]
     base_url: String,
 
     /// Model name
-    #[arg(long, default_value = "default")]
+    #[arg(long, global = true, default_value = "default")]
     model: String,
 
     /// API key (optional for local servers)
-    #[arg(long)]
+    #[arg(long, global = true)]
     api_key: Option<String>,
 
     /// Path to SQLite database
-    #[arg(long, default_value = "openwand.db")]
+    #[arg(long, global = true, default_value = "openwand.db")]
     db: String,
 
-    /// The user message to send
-    message: Option<String>,
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Run an agent turn (default when no subcommand given)
+    Run {
+        /// The user message to send
+        message: Option<String>,
+    },
+
+    /// Explain why a session produced its results
+    Explain {
+        /// Session ID to explain
+        session_id: String,
+    },
+
+    /// Verify trace integrity for a session
+    #[command(name = "trace-verify")]
+    TraceVerify {
+        /// Session ID to verify
+        session_id: String,
+    },
+
+    /// Rebuild session projection from trace
+    #[command(name = "session-rebuild")]
+    SessionRebuild {
+        /// Session ID to rebuild
+        session_id: String,
+    },
 }
 
 fn build_write_policy() -> BuiltinPolicyEngine {
@@ -102,14 +131,27 @@ fn build_write_policy() -> BuiltinPolicyEngine {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let args = Args::parse();
+    let mut cli = Cli::parse();
+
+    let command = cli.command.take().unwrap_or(Commands::Run { message: None });
+    match command {
+        Commands::Run { message } => cmd_run(&cli, message).await,
+        Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
+        Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
+        Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
+    }
+}
+
+// ── Subcommand: run (existing behavior) ────────────────────────────────────
+
+async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
 
     // 1. Open SQLite store (trace + registry)
-    let store = SqliteStore::open(SqliteStoreConfig::file(&args.db)).await?;
+    let store = SqliteStore::open(SqliteStoreConfig::file(&cli.db)).await?;
     let trace: Arc<dyn TraceStore<StoredEvent>> = Arc::new(store);
 
     // 2. Open SQLite memory store (same file, own migrations)
-    let memory_store = SqliteMemoryStore::open(std::path::Path::new(&args.db))?;
+    let memory_store = SqliteMemoryStore::open(std::path::Path::new(&cli.db))?;
     let memory_read: Arc<dyn MemoryReadStore> = Arc::new(memory_store);
 
     // 3. Create LLM client
@@ -124,7 +166,7 @@ async fn main() -> Result<()> {
     let policy: Arc<dyn PolicyEngine> = Arc::new(build_write_policy());
 
     // 6. Get user message
-    let message = args.message.unwrap_or_else(|| {
+    let message = message.unwrap_or_else(|| {
         "Hello! Can you tell me a short joke?".to_string()
     });
 
@@ -132,9 +174,9 @@ async fn main() -> Result<()> {
     println!("║          OpenWand Reality Smoke          ║");
     println!("╚══════════════════════════════════════════╝");
     println!();
-    println!("Provider: {}", args.base_url);
-    println!("Model:    {}", args.model);
-    println!("Database: {}", args.db);
+    println!("Provider: {}", cli.base_url);
+    println!("Model:    {}", cli.model);
+    println!("Database: {}", cli.db);
     println!("Memory:   SQLite (same file)");
     println!();
     println!("User: {message}");
@@ -145,7 +187,7 @@ async fn main() -> Result<()> {
 
     // Need a second trace store connection for the coordinator
     let trace_for_coordinator: Arc<dyn TraceStore<StoredEvent>> = Arc::new(
-        SqliteStore::open(SqliteStoreConfig::file(&args.db)).await?
+        SqliteStore::open(SqliteStoreConfig::file(&cli.db)).await?
     );
 
     let runner = SessionRunner::new(
@@ -165,9 +207,9 @@ async fn main() -> Result<()> {
         provider: openwand_llm::LlmProvider::Custom {
             name: "lm-studio".into(),
         },
-        model: args.model.clone(),
-        base_url: Some(args.base_url.clone()),
-        api_key: args.api_key.clone(),
+        model: cli.model.clone(),
+        base_url: Some(cli.base_url.clone()),
+        api_key: cli.api_key.clone(),
     });
     let result = runner.run_turn(message.clone(), run_config.clone()).await?;
 
@@ -218,7 +260,7 @@ async fn main() -> Result<()> {
     // 9. Run memory projection after the turn
     let memory_for_coordinator: Arc<dyn MemoryStore> = {
         // Re-open memory store for write access through the store trait
-        Arc::new(SqliteMemoryStore::open(std::path::Path::new(&args.db))?)
+        Arc::new(SqliteMemoryStore::open(std::path::Path::new(&cli.db))?)
     };
     let extractor: Arc<dyn MemoryExtractor> = Arc::new(HeuristicExtractor);
     let coordinator = MemoryCoordinator::new(
@@ -289,5 +331,44 @@ async fn main() -> Result<()> {
         println!("✓ Loro projection is fresh");
     }
 
+    Ok(())
+}
+
+// ── Subcommand: explain ────────────────────────────────────────────────────
+
+async fn cmd_explain(_cli: &Cli, session_id: &str) -> Result<()> {
+    println!("╔══════════════════════════════════════════╗");
+    println!("║       OpenWand Trust Explanation         ║");
+    println!("╚══════════════════════════════════════════╝");
+    println!();
+    println!("Session: {}", session_id);
+    println!();
+    println!("(Explanation rendering will be wired in Wave 05 commit 5)");
+    Ok(())
+}
+
+// ── Subcommand: trace-verify ───────────────────────────────────────────────
+
+async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
+    println!("╔══════════════════════════════════════════╗");
+    println!("║       OpenWand Trace Verification        ║");
+    println!("╚══════════════════════════════════════════╝");
+    println!();
+    println!("Session: {}", session_id);
+    println!();
+    println!("(Trace verification will be wired in Wave 05 commit 7)");
+    Ok(())
+}
+
+// ── Subcommand: session-rebuild ────────────────────────────────────────────
+
+async fn cmd_session_rebuild(_cli: &Cli, session_id: &str) -> Result<()> {
+    println!("╔══════════════════════════════════════════╗");
+    println!("║       OpenWand Session Rebuild           ║");
+    println!("╚══════════════════════════════════════════╝");
+    println!();
+    println!("Session: {}", session_id);
+    println!();
+    println!("(Session rebuild will be wired in Wave 05 commit 7)");
     Ok(())
 }

@@ -18,7 +18,7 @@ chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync", "macros", "time"] }
+tokio = { workspace = true, features = ["sync", "macros", "time", "process"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }

@@ -22,6 +22,7 @@ pub mod persistence;
 pub mod phase;
 pub mod projector;
 pub mod runner;
+pub mod task_context;
 pub mod tool;
 
 #[cfg(feature = "testing")]

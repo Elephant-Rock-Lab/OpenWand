@@ -58,7 +58,7 @@ impl Default for PromptInputProductionConfig {
         Self {
             max_records_checked: 100,
             max_hits_per_record: 5,
-            governance_profile: None, // pre-02r: no governance filtering
+            governance_profile: Some(openwand_memory::governance::MemoryGovernanceProfileId::Batch02rDefault.resolve()),
         }
     }
 }
@@ -76,6 +76,8 @@ pub struct PromptInputResult {
     pub source_session_id: Option<SessionId>,
     pub source_working_directory: std::path::PathBuf,
     pub errors: Vec<String>,
+    /// Which governance profile was used for prompt assembly.
+    pub governance_profile_id: Option<openwand_memory::governance::MemoryGovernanceProfileId>,
 }
 
 /// Assemble prompt inputs from a governed report.
@@ -305,6 +307,9 @@ impl MemoryCoordinator {
             memory_inputs: RepoMemoryInputSummary::default(),
             repo_inputs: RepoObservationSummary::default(),
         };
+        let governance_profile_id = config.governance_profile.as_ref()
+            .map(|_| openwand_memory::governance::MemoryGovernanceProfileId::Batch02rDefault);
+
         let make_empty = |errors: Vec<String>| PromptInputResult {
             inputs: MemoryPromptAssemblyInputs::empty(),
             report: empty_report(),
@@ -314,6 +319,7 @@ impl MemoryCoordinator {
             source_session_id: session_id.clone(),
             source_working_directory: working_directory.to_path_buf(),
             errors,
+            governance_profile_id,
         };
 
         // Step 1: Get all active records
@@ -376,6 +382,7 @@ impl MemoryCoordinator {
                 source_session_id: session_id,
                 source_working_directory: working_directory.to_path_buf(),
                 errors: search_errors,
+                governance_profile_id,
             };
         }
 
@@ -392,6 +399,7 @@ impl MemoryCoordinator {
                     source_session_id: session_id,
                     source_working_directory: working_directory.to_path_buf(),
                     errors: vec![format!("observe_repo: {e}")],
+                    governance_profile_id,
                 };
             }
         };
@@ -460,6 +468,7 @@ impl MemoryCoordinator {
             source_session_id: session_id,
             source_working_directory: working_directory.to_path_buf(),
             errors: search_errors,
+            governance_profile_id,
         }
     }
 

@@ -10,6 +10,55 @@ use serde::{Deserialize, Serialize};
 
 use crate::ranking::RankingWeights;
 
+// ── Profile ID and registry ─────────────────────────────────────────────────
+
+/// Stable identifier for a named governance profile.
+/// Production code references profiles by ID — no hand-assembled weights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MemoryGovernanceProfileId {
+    /// Pre-02r: no governance filtering, all claims eligible regardless of confidence.
+    Default,
+    /// 02r tuned: confidence minimum (3000 bps), verification boost, stale exclusion.
+    Batch02rDefault,
+}
+
+impl MemoryGovernanceProfileId {
+    /// Resolve this ID to its concrete profile.
+    /// Deterministic: same ID always produces same profile.
+    pub fn resolve(&self) -> MemoryGovernanceProfile {
+        match self {
+            Self::Default => MemoryGovernanceProfile::default(),
+            Self::Batch02rDefault => MemoryGovernanceProfile::batch_02r_default(),
+        }
+    }
+
+    /// Parse from string. Returns None for unknown IDs.
+    /// Used in config parsing. Unknown profile fails closed.
+    pub fn from_str_lossy(s: &str) -> Option<Self> {
+        match s {
+            "Default" | "default" => Some(Self::Default),
+            "Batch02rDefault" | "batch_02r_default" | "batch-02r-default" => Some(Self::Batch02rDefault),
+            _ => None,
+        }
+    }
+
+    /// All known profile IDs.
+    pub fn all() -> &'static [Self] {
+        &[Self::Default, Self::Batch02rDefault]
+    }
+}
+
+impl std::fmt::Display for MemoryGovernanceProfileId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Default => write!(f, "Default"),
+            Self::Batch02rDefault => write!(f, "Batch02rDefault"),
+        }
+    }
+}
+
+// ── Governance profile ──────────────────────────────────────────────────────
+
 /// Central governance profile for memory ranking, confidence, and inclusion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryGovernanceProfile {
@@ -463,5 +512,79 @@ mod tests {
         let restored_exc: PromptEligibility = serde_json::from_str(&json_exc).unwrap();
         assert_eq!(inc, restored_inc);
         assert_eq!(exc, restored_exc);
+    }
+
+    // ── Profile ID registry tests ─────────────────────────────────────────
+
+    #[test]
+    fn registry_resolves_default_to_default_profile() {
+        let id = MemoryGovernanceProfileId::Default;
+        let profile = id.resolve();
+        assert_eq!(0, profile.confidence_policy.prompt_include_min_bps);
+        assert_eq!(0, profile.verification_policy.verifies_boost_bps);
+    }
+
+    #[test]
+    fn registry_resolves_batch_02r_to_tuned_profile() {
+        let id = MemoryGovernanceProfileId::Batch02rDefault;
+        let profile = id.resolve();
+        assert_eq!(3000, profile.confidence_policy.prompt_include_min_bps);
+        assert_eq!(2000, profile.verification_policy.verifies_boost_bps);
+        assert!(profile.stale_policy.exclude_from_prompt);
+    }
+
+    #[test]
+    fn registry_rejects_unknown_id() {
+        assert!(MemoryGovernanceProfileId::from_str_lossy("nonexistent").is_none());
+        assert!(MemoryGovernanceProfileId::from_str_lossy("batch_03").is_none());
+        assert!(MemoryGovernanceProfileId::from_str_lossy("").is_none());
+    }
+
+    #[test]
+    fn registry_accepts_known_ids() {
+        assert_eq!(Some(MemoryGovernanceProfileId::Default), MemoryGovernanceProfileId::from_str_lossy("Default"));
+        assert_eq!(Some(MemoryGovernanceProfileId::Default), MemoryGovernanceProfileId::from_str_lossy("default"));
+        assert_eq!(Some(MemoryGovernanceProfileId::Batch02rDefault), MemoryGovernanceProfileId::from_str_lossy("Batch02rDefault"));
+        assert_eq!(Some(MemoryGovernanceProfileId::Batch02rDefault), MemoryGovernanceProfileId::from_str_lossy("batch_02r_default"));
+        assert_eq!(Some(MemoryGovernanceProfileId::Batch02rDefault), MemoryGovernanceProfileId::from_str_lossy("batch-02r-default"));
+    }
+
+    #[test]
+    fn batch_02r_default_values_match_lock_doc() {
+        let profile = MemoryGovernanceProfileId::Batch02rDefault.resolve();
+        // Ranking weights
+        assert_eq!(3000, profile.ranking_weights.relevance);
+        assert_eq!(2000, profile.ranking_weights.provenance);
+        assert_eq!(1500, profile.ranking_weights.scope);
+        assert_eq!(1000, profile.ranking_weights.recency);
+        assert_eq!(1000, profile.ranking_weights.confidence);
+        assert_eq!(500, profile.ranking_weights.evidence);
+        assert_eq!(1000, profile.ranking_weights.verification);
+        assert_eq!(10000, profile.ranking_weights.sum());
+        // Confidence policy
+        assert_eq!(3000, profile.confidence_policy.prompt_include_min_bps);
+        assert_eq!(5000, profile.confidence_policy.require_verification_below_bps);
+        // Verification policy
+        assert_eq!(2000, profile.verification_policy.verifies_boost_bps);
+        assert_eq!(500, profile.verification_policy.derived_from_boost_bps);
+        assert_eq!(800, profile.verification_policy.refines_boost_bps);
+        // Stale/conflict/supersession
+        assert!(profile.stale_policy.exclude_from_prompt);
+        assert!(profile.supersession_policy.exclude_superseded_from_prompt);
+        assert!(profile.conflict_policy.exclude_unresolved_from_prompt);
+    }
+
+    #[test]
+    fn profile_id_serializes_stably() {
+        let id = MemoryGovernanceProfileId::Batch02rDefault;
+        let json = serde_json::to_string(&id).unwrap();
+        let restored: MemoryGovernanceProfileId = serde_json::from_str(&json).unwrap();
+        assert_eq!(id, restored);
+    }
+
+    #[test]
+    fn profile_id_display_matches_enum_name() {
+        assert_eq!("Default", format!("{}", MemoryGovernanceProfileId::Default));
+        assert_eq!("Batch02rDefault", format!("{}", MemoryGovernanceProfileId::Batch02rDefault));
     }
 }

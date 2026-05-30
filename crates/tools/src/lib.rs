@@ -9,6 +9,7 @@ pub mod effect;
 pub mod error;
 pub mod executor;
 pub mod local;
+pub mod file_patch;
 pub mod naming;
 pub mod normalize;
 pub mod result;

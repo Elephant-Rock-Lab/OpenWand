@@ -113,13 +113,14 @@ pub fn batch1_local_tools() -> BuiltinToolProvider {
 pub fn batch2_local_tools() -> BuiltinToolProvider {
     let mut provider = batch1_local_tools();
     provider.register_fn(file_write_descriptor(), file_write_handler);
+    provider.register_fn(crate::file_patch::file_patch_descriptor(), crate::file_patch::file_patch_handler);
     provider
 }
 
 // ---------------------------------------------------------------------------
 // Helper: extract call_id from args or generate one
 // ---------------------------------------------------------------------------
-fn extract_call_id(args: &serde_json::Value) -> ToolCallId {
+pub(crate) fn extract_call_id(args: &serde_json::Value) -> ToolCallId {
     match args.get("_call_id").and_then(|v| v.as_str()) {
         Some(id) => ToolCallId(id.to_string()),
         None => ToolCallId::new(),
@@ -475,7 +476,7 @@ fn file_write_descriptor() -> ToolDef {
 }
 
 /// Validate a file write path. Returns the resolved full path or an error message.
-fn validate_write_path(
+pub(crate) fn validate_write_path(
     path_str: &str,
     working_directory: &str,
 ) -> Result<std::path::PathBuf, String> {
@@ -756,10 +757,12 @@ mod tests {
     }
 
     #[test]
-    fn batch2_registers_four_tools_including_write() {
+    fn batch2_registers_five_tools_including_write_and_patch() {
         let provider = batch2_local_tools();
         let tools = provider.available_descriptors();
-        assert_eq!(4, tools.len());
+        assert_eq!(5, tools.len());
+        assert!(tools.iter().any(|t| t.name.ends_with("file_write")));
+        assert!(tools.iter().any(|t| t.name.ends_with("file_patch")));
 
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"local__file_read"));

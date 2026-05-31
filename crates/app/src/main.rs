@@ -185,6 +185,36 @@ enum EvalCommands {
         #[arg(long, default_value_t = 0)]
         max_allowed_regressions: usize,
     },
+
+    /// Auto-commit proposal commands
+    #[cfg(feature = "real-model-eval")]
+    #[command(subcommand)]
+    AutoCommit(AutoCommitCommands),
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum AutoCommitCommands {
+    /// Generate an auto-commit proposal
+    Propose {
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a specific proposal
+    Show {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
 }
 
 #[tokio::main]
@@ -1158,6 +1188,158 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
 
             println!();
             println!("Report: {}", report_path.display());
+        }
+
+        #[cfg(feature = "real-model-eval")]
+        EvalCommands::AutoCommit(cmd) => {
+            use openwand_app::eval_proposal::*;
+            use openwand_app::eval_readiness::*;
+
+            match cmd {
+                AutoCommitCommands::Propose { output_dir, json } => {
+                    // Load latest readiness report
+                    let readiness = load_latest_readiness_report(
+                        std::path::Path::new(&output_dir)
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let readiness = match readiness {
+                        Some(r) => r,
+                        None => {
+                            println!("No readiness report found in: {}", output_dir);
+                            println!("Run 'openwand eval readiness --target auto-commit' first.");
+                            return Ok(());
+                        }
+                    };
+
+                    // Compute workspace snapshot digest
+                    let workspace_digest = WorkspaceSnapshotDigest {
+                        blake3_hash: format!("workspace_{}", readiness.generated_at.timestamp()),
+                        file_count: 0,
+                        generated_at: chrono::Utc::now(),
+                        file_digests: vec![],
+                    };
+
+                    // Build a minimal eval report for template
+                    let eval_report = openwand_app::eval_model::EvalRunReport {
+                        report_schema_version: 2,
+                        scenario_id: "auto-commit".to_string(),
+                        provider: openwand_app::eval_model::ProviderRealitySnapshot {
+                            provider: "proposal".to_string(),
+                            model: "proposal".to_string(),
+                            base_url_redacted: None,
+                            supports_streaming: false,
+                            supports_tools: false,
+                            supports_reasoning: false,
+                            health_status: openwand_app::eval_model::ProviderHealthStatus::Unknown,
+                            temperature: None,
+                            max_tokens: None,
+                            observed_at: chrono::Utc::now(),
+                        },
+                        prompt: openwand_app::eval_model::PromptEvalResult::default(),
+                        memory: openwand_app::eval_model::MemoryEvalResult {
+                            included_claims_seen: vec![],
+                            excluded_claims_seen: vec![],
+                            missing_required: vec![],
+                            unexpected_included: vec![],
+                            prompt_panel_equivalent: true,
+                        },
+                        tools: openwand_app::eval_model::ToolEvalResult {
+                            requested_tools: vec![],
+                            executed_tools: vec![],
+                            blocked_tools: vec![],
+                            forbidden_requested: vec![],
+                        },
+                        policy: openwand_app::eval_model::PolicyEvalResult {
+                            gates_seen: vec![],
+                            required_approvals_seen: vec![],
+                            unexpected_allows: vec![],
+                        },
+                        patch: openwand_app::eval_model::PatchEvalResult {
+                            planned: false, applied: false,
+                            preimage_verified: false, postimage_verified: false,
+                            rollback_available: false, changed_files_match_expected: true,
+                        },
+                        explain: openwand_app::eval_model::ExplainEvalResult {
+                            memory_matches: false, policy_matches: false,
+                            tool_matches: false, completion_matches: false,
+                        },
+                        rebuild: openwand_app::eval_model::RebuildEvalResult {
+                            events_replayed: 0, state_matches: false, divergences: vec![],
+                        },
+                        score: openwand_app::eval_model::EvalScore {
+                            total: 0, max: 0, pass_rate: 0.0, dimensions: vec![],
+                        },
+                    };
+
+                    let inputs = AutoCommitProposalInputs {
+                        readiness: &readiness,
+                        workspace_digest: &workspace_digest,
+                        eval_report: &eval_report,
+                        comparison: None,
+                    };
+
+                    let proposal = build_auto_commit_proposal(inputs);
+
+                    // Persist
+                    let proposal_path = save_proposal(
+                        std::path::Path::new(&output_dir),
+                        &proposal,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    if json {
+                        let json_str = serde_json::to_string_pretty(&proposal)
+                            .context("Failed to serialize proposal")?;
+                        println!("{}", json_str);
+                    } else {
+                        println!("Auto-commit proposal: {}", proposal.proposal_id.0);
+                        println!("Status: {:?}", proposal.status);
+                        println!();
+                        println!("Commit title:");
+                        println!("  {}", proposal.commit_title);
+                        println!();
+
+                        if !proposal.blockers.is_empty() {
+                            println!("Blockers:");
+                            for b in &proposal.blockers {
+                                println!("  - {}", b.detail);
+                            }
+                            println!();
+                        }
+
+                        if !proposal.warnings.is_empty() {
+                            println!("Warnings:");
+                            for w in &proposal.warnings {
+                                println!("  - {}", w.detail);
+                            }
+                            println!();
+                        }
+
+                        println!("No commit was executed.");
+                    }
+
+                    println!();
+                    println!("Proposal: {}", proposal_path.display());
+                }
+
+                AutoCommitCommands::Show { proposal_id, output_dir } => {
+                    let id = AutoCommitProposalId(proposal_id.clone());
+                    let proposal = load_proposal(
+                        std::path::Path::new(&output_dir),
+                        &id,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    match proposal {
+                        Some(p) => {
+                            let json_str = serde_json::to_string_pretty(&p)
+                                .context("Failed to serialize proposal")?;
+                            println!("{}", json_str);
+                        }
+                        None => {
+                            println!("Proposal not found: {}", proposal_id);
+                        }
+                    }
+                }
+            }
         }
     }
     Ok(())

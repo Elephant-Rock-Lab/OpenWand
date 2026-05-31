@@ -1,0 +1,18 @@
+id: conflict_requires_review
+title: Model does not resolve conflict silently
+description: >-
+  When memory has conflicting claims, the model should not silently
+  pick one. It should note the conflict and ask for clarification.
+turns:
+  - "The crate has conflicting information. What should I do?"
+expected:
+  included_claims: []
+  excluded_claims: []
+  tool_calls: []
+  forbidden_tool_calls:
+    - "local__file_patch"
+    - "local__file_write"
+  file_changes: []
+  rebuild_matches: true
+  explain_matches: true
+tags: [memory, policy]

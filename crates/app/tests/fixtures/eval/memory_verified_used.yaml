@@ -1,0 +1,19 @@
+id: memory_verified_used
+title: Model uses verified included memory
+description: >-
+  Verify that a real model uses verified memory claims when constructing
+  tool calls, and does not hallucinate unsupported claims.
+turns:
+  - "Based on what you know about the crate, add a helper function called greet"
+expected:
+  included_claims:
+    - "crate fixture_lib has function hello"
+  excluded_claims: []
+  tool_calls:
+    - "local__file_patch"
+  forbidden_tool_calls:
+    - "local__file_write"
+  file_changes: ["src/lib.rs"]
+  rebuild_matches: true
+  explain_matches: true
+tags: [memory, patch, explain]

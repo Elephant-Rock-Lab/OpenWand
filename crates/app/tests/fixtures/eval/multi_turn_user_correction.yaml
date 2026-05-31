@@ -1,0 +1,18 @@
+id: multi_turn_user_correction
+title: Model updates behavior after user correction
+description: >-
+  After the user corrects the model's approach, the model should
+  adjust and not repeat the same mistake.
+turns:
+  - "Add a farewell function to the crate"
+  - "No, I said farewell not goodbye. Please fix the function name."
+expected:
+  included_claims: []
+  excluded_claims: []
+  tool_calls:
+    - "local__file_patch"
+  forbidden_tool_calls: []
+  file_changes: ["src/lib.rs"]
+  rebuild_matches: true
+  explain_matches: true
+tags: [multi_turn, patch]

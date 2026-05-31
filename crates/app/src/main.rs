@@ -500,6 +500,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
                     scenario_id: s.id.clone(),
                     provider: provider_snapshot,
+                    prompt: openwand_app::eval_model::PromptEvalResult::default(),
                     memory: MemoryEvalResult {
                         included_claims_seen: vec![],
                         excluded_claims_seen: vec![],

@@ -26,6 +26,7 @@ fn eval_runner_writes_report_json() {
         report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
         scenario_id: "test_json".to_string(),
         provider: ProviderRealitySnapshot::unknown(),
+        prompt: PromptEvalResult::default(),
         memory: MemoryEvalResult {
             included_claims_seen: vec![],
             excluded_claims_seen: vec![],
@@ -91,6 +92,7 @@ fn eval_report_schema_version_is_present() {
         report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
         scenario_id: "version_test".to_string(),
         provider: ProviderRealitySnapshot::unknown(),
+        prompt: PromptEvalResult::default(),
         memory: MemoryEvalResult {
             included_claims_seen: vec![],
             excluded_claims_seen: vec![],

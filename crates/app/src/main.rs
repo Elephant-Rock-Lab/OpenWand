@@ -466,7 +466,6 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 });
 
                 // Run each turn in the scenario
-                let mut all_tools_executed = Vec::new();
                 let mut steps_total = 0u64;
 
                 for (turn_idx, turn_msg) in s.turns.iter().enumerate() {
@@ -479,6 +478,67 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
                         let decision = ApprovalDecision::approve();
                         let _approval_result = rt.runner.resolve_approval(decision, run_config.clone()).await?;
+                    }
+                }
+
+                // ── Trace-derived evidence collection ──
+
+                // 1. Scan trace for evidence
+                let trace_evidence = openwand_app::eval_trace::scan_trace_evidence(
+                    rt.trace.as_ref(), &rt.session_id.to_string(),
+                ).await;
+
+                // 2. Prompt collector
+                let prompt_result = openwand_app::eval_collector::collect_prompt_eval(&trace_evidence);
+
+                // 3. Tool collector
+                let tool_result = openwand_app::eval_collector::collect_tool_eval(
+                    &trace_evidence, &s.expected,
+                );
+
+                // 4. Policy collector
+                let policy_result = openwand_app::eval_collector::collect_policy_eval(
+                    &trace_evidence, &s.expected,
+                );
+
+                // 5. Patch collector
+                let patch_result = openwand_app::eval_collector::collect_patch_eval_from_trace(
+                    &trace_evidence, &s.expected,
+                );
+
+                // 6. Memory collector (requires governed report)
+                let memory_result = MemoryEvalResult {
+                    included_claims_seen: vec![],
+                    excluded_claims_seen: vec![],
+                    missing_required: vec![],
+                    unexpected_included: vec![],
+                    prompt_panel_equivalent: true,
+                };
+
+                // 7. Explain collector
+                let explain_result = ExplainEvalResult {
+                    memory_matches: true,
+                    policy_matches: true,
+                    tool_matches: true,
+                    completion_matches: true,
+                };
+
+                // 8. Rebuild collector
+                let rebuild_result = RebuildEvalResult {
+                    events_replayed: 0,
+                    state_matches: true,
+                    divergences: vec![],
+                };
+
+                // 9. Anti-vacuous-pass check
+                let evidence_check = openwand_app::eval_collector::check_evidence_presence(
+                    trace_evidence.has_inference_events(),
+                    trace_evidence.has_tool_events() || patch_result.planned,
+                    !memory_result.included_claims_seen.is_empty() || s.expected.included_claims.is_empty(),
+                );
+                if let Err(missing) = evidence_check {
+                    for msg in &missing {
+                        println!("  ⚠ {}", msg);
                     }
                 }
 
@@ -500,44 +560,13 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
                     scenario_id: s.id.clone(),
                     provider: provider_snapshot,
-                    prompt: openwand_app::eval_model::PromptEvalResult::default(),
-                    memory: MemoryEvalResult {
-                        included_claims_seen: vec![],
-                        excluded_claims_seen: vec![],
-                        missing_required: vec![],
-                        unexpected_included: vec![],
-                        prompt_panel_equivalent: true,
-                    },
-                    tools: ToolEvalResult {
-                        requested_tools: all_tools_executed.clone(),
-                        executed_tools: all_tools_executed.clone(),
-                        blocked_tools: vec![],
-                        forbidden_requested: vec![],
-                    },
-                    policy: PolicyEvalResult {
-                        gates_seen: vec![],
-                        required_approvals_seen: vec![],
-                        unexpected_allows: vec![],
-                    },
-                    patch: PatchEvalResult {
-                        planned: false,
-                        applied: false,
-                        preimage_verified: false,
-                        postimage_verified: false,
-                        rollback_available: false,
-                        changed_files_match_expected: true,
-                    },
-                    explain: ExplainEvalResult {
-                        memory_matches: true,
-                        policy_matches: true,
-                        tool_matches: true,
-                        completion_matches: true,
-                    },
-                    rebuild: RebuildEvalResult {
-                        events_replayed: 0,
-                        state_matches: true,
-                        divergences: vec![],
-                    },
+                    prompt: prompt_result,
+                    memory: memory_result,
+                    tools: tool_result,
+                    policy: policy_result,
+                    patch: patch_result,
+                    explain: explain_result,
+                    rebuild: rebuild_result,
                     score: EvalScore::from_dimensions(vec![]),
                 };
 

@@ -115,6 +115,28 @@ enum EvalCommands {
         #[arg(long)]
         fail_on_regression: bool,
     },
+
+    /// Compare two evaluation reports
+    Compare {
+        /// Path to current report
+        #[arg(long)]
+        current: String,
+
+        /// Path to baseline report
+        #[arg(long)]
+        baseline: String,
+    },
+
+    /// Summarize latest evaluation results
+    Summarize {
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Filter to a specific scenario
+        #[arg(long)]
+        scenario: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -575,6 +597,174 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
 
             if fail_on_regression && any_regression {
                 anyhow::bail!("Regression detected — failing eval run");
+            }
+        }
+
+        EvalCommands::Compare { current, baseline } => {
+            let store = openwand_app::eval_reports::EvalReportStore::new(
+                std::path::PathBuf::from(".")
+            );
+            let current_report = store.load_report(std::path::Path::new(&current))
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let baseline_report = store.load_report(std::path::Path::new(&baseline))
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let thresholds = openwand_app::eval_compare::RegressionThresholds::default();
+            let comparison = openwand_app::eval_compare::compare_reports(
+                &current_report, Some(&baseline_report), &thresholds,
+            );
+
+            println!("╔══════════════════════════════════════════╗");
+            println!("║       OpenWand Eval Compare              ║");
+            println!("╚══════════════════════════════════════════╝");
+            println!();
+            println!("Scenario: {}", comparison.scenario_id);
+            println!();
+
+            // Score
+            if let Some(delta) = comparison.score_delta.delta {
+                let sign = if delta >= 0 { "+" } else { "" };
+                println!("Score: {}/{} ({}{})",
+                    comparison.score_delta.current_total,
+                    comparison.score_delta.baseline_total.unwrap_or(0),
+                    sign, delta);
+            } else {
+                println!("Score: {}/{} (no baseline)",
+                    comparison.score_delta.current_total,
+                    current_report.score.max);
+            }
+
+            // Pass rate
+            println!("Pass rate: {:.1}%",
+                comparison.score_delta.current_pass_rate * 100.0);
+
+            // Dimensions
+            if !comparison.dimension_deltas.is_empty() {
+                println!();
+                println!("Dimensions:");
+                for dd in &comparison.dimension_deltas {
+                    if let Some(bs) = dd.baseline_score {
+                        let delta = dd.delta.unwrap_or(0);
+                        let sign = if delta >= 0 { "+" } else { "" };
+                        let status = if delta < 0 { "⚠" } else if delta > 0 { "✓" } else { "=" };
+                        println!("  {} {:20} {:3}  {}{}",
+                            status, dd.dimension, dd.current_score, sign, delta);
+                    } else {
+                        println!("  · {:20} {:3}", dd.dimension, dd.current_score);
+                    }
+                }
+            }
+
+            // Provider changes
+            if comparison.provider_delta.provider_changed || comparison.provider_delta.model_changed {
+                println!();
+                println!("Provider changes:");
+                if comparison.provider_delta.provider_changed {
+                    println!("  Provider: {} → {}",
+                        comparison.provider_delta.baseline_provider.as_deref().unwrap_or("?"),
+                        comparison.provider_delta.current_provider);
+                }
+                if comparison.provider_delta.model_changed {
+                    println!("  Model: {} → {}",
+                        comparison.provider_delta.baseline_model.as_deref().unwrap_or("?"),
+                        comparison.provider_delta.current_model);
+                }
+            }
+
+            // Regressions
+            if !comparison.regressions.is_empty() {
+                println!();
+                println!("Regressions ({}):", comparison.regressions.len());
+                for r in &comparison.regressions {
+                    println!("  ⚠ {}", r.description);
+                }
+            }
+
+            // Improvements
+            if !comparison.improvements.is_empty() {
+                println!();
+                println!("Improvements ({}):", comparison.improvements.len());
+                for i in &comparison.improvements {
+                    println!("  ✓ {}", i.description);
+                }
+            }
+        }
+
+        EvalCommands::Summarize { output_dir, scenario } => {
+            let store = openwand_app::eval_reports::EvalReportStore::new(
+                std::path::PathBuf::from(&output_dir)
+            );
+
+            let filter = openwand_app::eval_reports::ReportFilter {
+                scenario_id: scenario.clone(),
+            };
+            let reports = store.list_reports(&filter)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            println!("╔══════════════════════════════════════════╗");
+            println!("║       OpenWand Eval Summary              ║");
+            println!("╚══════════════════════════════════════════╝");
+            println!();
+
+            if reports.is_empty() {
+                println!("No reports found in: {}", output_dir);
+                if let Some(ref s) = scenario {
+                    println!("  (filtered by scenario: {})", s);
+                }
+                return Ok(());
+            }
+
+            // Group by scenario
+            let mut by_scenario: std::collections::BTreeMap<String, Vec<&openwand_app::eval_reports::StoredEvalReport>> = std::collections::BTreeMap::new();
+            for r in &reports {
+                by_scenario.entry(r.report.scenario_id.clone())
+                    .or_default()
+                    .push(r);
+            }
+
+            println!("Total reports: {}", reports.len());
+            println!("Scenarios:     {}", by_scenario.len());
+            println!();
+
+            for (id, scenario_reports) in &by_scenario {
+                let latest = scenario_reports.first().unwrap(); // sorted newest-first
+                let run_count = scenario_reports.len();
+
+                println!("  {}", id);
+                println!("    Runs: {}", run_count);
+                println!("    Latest: {}/{} ({:.0}%)",
+                    latest.report.score.total,
+                    latest.report.score.max,
+                    latest.report.score.pass_rate * 100.0);
+                println!("    Provider: {} / {}",
+                    latest.report.provider.provider,
+                    latest.report.provider.model);
+                println!("    At: {}", latest.report.provider.observed_at.format("%Y-%m-%d %H:%M UTC"));
+                println!();
+            }
+
+            // Regressions across latest reports
+            let mut all_regressions = 0;
+            for (id, scenario_reports) in &by_scenario {
+                if scenario_reports.len() >= 2 {
+                    let current = &scenario_reports[0].report;
+                    let baseline = &scenario_reports[1].report;
+                    let thresholds = openwand_app::eval_compare::RegressionThresholds::default();
+                    let comparison = openwand_app::eval_compare::compare_reports(
+                        current, Some(baseline), &thresholds,
+                    );
+                    all_regressions += comparison.regressions.len();
+                    if !comparison.regressions.is_empty() {
+                        println!("⚠ {} has {} regression(s)", id, comparison.regressions.len());
+                        for r in &comparison.regressions {
+                            println!("    - {}", r.description);
+                        }
+                    }
+                }
+            }
+
+            if all_regressions == 0 {
+                println!("✓ No regressions detected.");
             }
         }
     }

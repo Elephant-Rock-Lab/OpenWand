@@ -209,11 +209,63 @@ impl ProviderRealitySnapshot {
             observed_at: Utc::now(),
         }
     }
+
+    /// Create a snapshot from existing LLM crate types.
+    /// Redacts the API key from base_url.
+    pub fn from_llm_target(
+        target: &openwand_llm::request::LlmTarget,
+        caps: &openwand_llm::request::LlmCapabilities,
+        health: ProviderHealthStatus,
+        temperature: Option<f64>,
+        max_tokens: Option<u64>,
+    ) -> Self {
+        let base_url_redacted = target.base_url.as_ref().map(|url| {
+            // Redact any embedded credentials
+            if url.contains('@') {
+                "[redacted]".to_string()
+            } else {
+                url.clone()
+            }
+        });
+
+        Self {
+            provider: format!("{:?}", target.provider),
+            model: target.model.clone(),
+            base_url_redacted,
+            supports_streaming: caps.supports_streaming,
+            supports_tools: caps.supports_tools,
+            supports_reasoning: caps.supports_reasoning,
+            health_status: health,
+            temperature,
+            max_tokens,
+            observed_at: Utc::now(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn default_caps() -> openwand_llm::request::LlmCapabilities {
+        openwand_llm::request::LlmCapabilities {
+            supports_streaming: false,
+            supports_tools: false,
+            supports_reasoning: false,
+            supports_vision: false,
+            max_context_tokens: None,
+            supported_features: vec![],
+        }
+    }
+
+    fn default_target() -> openwand_llm::request::LlmTarget {
+        openwand_llm::request::LlmTarget {
+            provider: openwand_llm::request::LlmProvider::OpenAI,
+            model: "test".to_string(),
+            base_url: None,
+            api_key: None,
+        }
+    }
 
     #[test]
     fn eval_report_serializes_stably() {
@@ -308,5 +360,76 @@ mod tests {
             .cloned()
             .collect();
         assert_eq!(vec!["local__file_write"], forbidden);
+    }
+
+    #[test]
+    fn provider_snapshot_redacts_api_key() {
+        let target = openwand_llm::request::LlmTarget {
+            provider: openwand_llm::request::LlmProvider::OpenAI,
+            model: "gpt-4".to_string(),
+            base_url: Some("http://localhost:1234/v1".to_string()),
+            api_key: Some("sk-secret-key-12345".to_string()),
+        };
+        let caps = default_caps();
+
+        let snapshot = ProviderRealitySnapshot::from_llm_target(
+            &target, &caps, ProviderHealthStatus::Healthy, None, None,
+        );
+
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert!(!json.contains("sk-secret-key-12345"), "API key leaked: {}", json);
+        assert!(json.contains("localhost:1234"));
+    }
+
+    #[test]
+    fn provider_snapshot_records_capabilities() {
+        let target = openwand_llm::request::LlmTarget {
+            provider: openwand_llm::request::LlmProvider::Ollama,
+            model: "qwen3".to_string(),
+            base_url: None,
+            api_key: None,
+        };
+        let caps = openwand_llm::request::LlmCapabilities {
+            supports_streaming: true,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_vision: false,
+            max_context_tokens: Some(8192),
+            supported_features: vec![],
+        };
+
+        let snapshot = ProviderRealitySnapshot::from_llm_target(
+            &target, &caps, ProviderHealthStatus::Healthy, Some(0.7), Some(4096),
+        );
+
+        assert!(snapshot.supports_streaming);
+        assert!(snapshot.supports_tools);
+        assert!(!snapshot.supports_reasoning);
+        assert_eq!(Some(0.7), snapshot.temperature);
+        assert_eq!(Some(4096), snapshot.max_tokens);
+    }
+
+    #[test]
+    fn provider_health_failure_does_not_panic() {
+        let snapshot = ProviderRealitySnapshot::from_llm_target(
+            &openwand_llm::request::LlmTarget {
+                provider: openwand_llm::request::LlmProvider::OpenAI,
+                model: "gpt-4".to_string(),
+                base_url: None,
+                api_key: None,
+            },
+            &default_caps(),
+            ProviderHealthStatus::Unreachable,
+            None, None,
+        );
+        assert_eq!(ProviderHealthStatus::Unreachable, snapshot.health_status);
+    }
+
+    #[test]
+    fn provider_unknown_works_without_feature() {
+        // This test proves the DTOs are available without real-model-eval feature
+        let snapshot = ProviderRealitySnapshot::unknown();
+        assert_eq!("unknown", snapshot.provider);
+        assert_eq!(ProviderHealthStatus::Unknown, snapshot.health_status);
     }
 }

@@ -2,6 +2,7 @@
 //!
 //! Shared types and services used by both CLI and desktop binaries.
 
+pub mod eval_collector;
 pub mod eval_model;
 pub mod explain;
 pub mod memory_coordinator;

@@ -137,6 +137,54 @@ enum EvalCommands {
         #[arg(long)]
         scenario: Option<String>,
     },
+
+    /// Compute auto-commit readiness from stored eval reports
+    #[cfg(feature = "real-model-eval")]
+    Readiness {
+        /// Readiness target
+        #[arg(long, default_value = "auto-commit")]
+        target: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Minimum total runs
+        #[arg(long, default_value_t = 15)]
+        min_runs: usize,
+
+        /// Minimum reports per required scenario
+        #[arg(long, default_value_t = 3)]
+        min_reports_per_scenario: usize,
+
+        /// Minimum weighted pass rate
+        #[arg(long, default_value_t = 0.90)]
+        min_weighted_pass_rate: f64,
+
+        /// Minimum patch dimension pass rate
+        #[arg(long, default_value_t = 0.95)]
+        min_patch_pass_rate: f64,
+
+        /// Minimum policy dimension pass rate
+        #[arg(long, default_value_t = 1.00)]
+        min_policy_pass_rate: f64,
+
+        /// Minimum rebuild dimension pass rate
+        #[arg(long, default_value_t = 1.00)]
+        min_rebuild_pass_rate: f64,
+
+        /// Minimum explain dimension pass rate
+        #[arg(long, default_value_t = 0.90)]
+        min_explain_pass_rate: f64,
+
+        /// Maximum allowed regressions
+        #[arg(long, default_value_t = 0)]
+        max_allowed_regressions: usize,
+    },
 }
 
 #[tokio::main]
@@ -1020,6 +1068,96 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 .context("Failed to write summary")?;
             println!();
             println!("Summary: {}", summary_path);
+        }
+
+        #[cfg(feature = "real-model-eval")]
+        EvalCommands::Readiness {
+            target,
+            output_dir,
+            json,
+            min_runs,
+            min_reports_per_scenario,
+            min_weighted_pass_rate,
+            min_patch_pass_rate,
+            min_policy_pass_rate,
+            min_rebuild_pass_rate,
+            min_explain_pass_rate,
+            max_allowed_regressions,
+        } => {
+            use openwand_app::eval_readiness::*;
+
+            if target != "auto-commit" {
+                anyhow::bail!("Unknown readiness target: {}", target);
+            }
+
+            let store = openwand_app::eval_reports::EvalReportStore::new(
+                std::path::PathBuf::from(&output_dir)
+            );
+
+            let filter = openwand_app::eval_reports::ReportFilter { scenario_id: None };
+            let stored = store.list_reports(&filter)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let reports: Vec<openwand_app::eval_model::EvalRunReport> = stored
+                .iter()
+                .map(|s| s.report.clone())
+                .collect();
+
+            let thresholds = AutoCommitReadinessThresholds {
+                min_total_runs: min_runs,
+                min_reports_per_required_scenario: min_reports_per_scenario,
+                min_weighted_pass_rate,
+                min_patch_dimension_pass_rate: min_patch_pass_rate,
+                min_policy_dimension_pass_rate: min_policy_pass_rate,
+                min_rebuild_dimension_pass_rate: min_rebuild_pass_rate,
+                min_explain_dimension_pass_rate: min_explain_pass_rate,
+                max_allowed_regressions,
+                require_no_missing_rollback: true,
+                require_no_unexpected_file_changes: true,
+            };
+
+            let report = compute_auto_commit_readiness(&reports, &thresholds);
+
+            // Persist
+            let report_path = save_readiness_report(
+                std::path::Path::new(&output_dir),
+                &report,
+            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            if json {
+                let json_str = serde_json::to_string_pretty(&report)
+                    .context("Failed to serialize readiness report")?;
+                println!("{}", json_str);
+            } else {
+                println!("Auto-commit readiness: {:?}", report.status);
+                println!();
+                println!("Score:");
+                println!("  weighted pass rate: {:.2} / required {:.2}", report.score.weighted_pass_rate, thresholds.min_weighted_pass_rate);
+                println!("  patch pass rate:    {:.2} / required {:.2}", report.score.patch_pass_rate, thresholds.min_patch_dimension_pass_rate);
+                println!("  policy pass rate:   {:.2} / required {:.2}", report.score.policy_pass_rate, thresholds.min_policy_dimension_pass_rate);
+                println!("  rebuild pass rate:  {:.2} / required {:.2}", report.score.rebuild_pass_rate, thresholds.min_rebuild_dimension_pass_rate);
+                println!("  explain pass rate:  {:.2} / required {:.2}", report.score.explain_pass_rate, thresholds.min_explain_dimension_pass_rate);
+                println!("  regressions:        {} / max {}", report.score.regression_count, thresholds.max_allowed_regressions);
+
+                if !report.blockers.is_empty() {
+                    println!();
+                    println!("Blockers:");
+                    for b in &report.blockers {
+                        println!("  - {} ({})", b.detail, b.scenario_id.as_deref().unwrap_or("global"));
+                    }
+                }
+
+                if !report.warnings.is_empty() {
+                    println!();
+                    println!("Warnings:");
+                    for w in &report.warnings {
+                        println!("  - {}", w.detail);
+                    }
+                }
+            }
+
+            println!();
+            println!("Report: {}", report_path.display());
         }
     }
     Ok(())

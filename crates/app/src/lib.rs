@@ -5,6 +5,7 @@
 pub mod eval_collector;
 pub mod eval_compare;
 pub mod eval_model;
+pub mod eval_proposal;
 pub mod eval_readiness;
 pub mod eval_reports;
 pub mod eval_summary;

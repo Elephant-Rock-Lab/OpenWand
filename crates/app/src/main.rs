@@ -766,6 +766,25 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
             if all_regressions == 0 {
                 println!("✓ No regressions detected.");
             }
+
+            // Generate and save summary report
+            let summary = openwand_app::eval_summary::generate_summary(
+                &openwand_app::eval_reports::EvalReportStore::new(
+                    std::path::PathBuf::from(&output_dir)
+                )
+            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let summaries_dir = format!("{}/summaries", output_dir);
+            std::fs::create_dir_all(&summaries_dir)?;
+            let summary_path = format!("{}/{}_summary.json",
+                summaries_dir,
+                chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ"));
+            let json = serde_json::to_string_pretty(&summary)
+                .context("Failed to serialize summary")?;
+            std::fs::write(&summary_path, json)
+                .context("Failed to write summary")?;
+            println!();
+            println!("Summary: {}", summary_path);
         }
     }
     Ok(())

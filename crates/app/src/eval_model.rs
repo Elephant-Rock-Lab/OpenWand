@@ -87,12 +87,39 @@ pub enum ProviderHealthStatus {
     Unknown,
 }
 
+/// Prompt/inference evaluation result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptEvalResult {
+    pub prompt_seen: bool,
+    pub system_prompt_hash: Option<String>,
+    pub message_count: usize,
+    pub tool_count: u8,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub evidence_missing: bool,
+}
+
+impl Default for PromptEvalResult {
+    fn default() -> Self {
+        Self {
+            prompt_seen: false,
+            system_prompt_hash: None,
+            message_count: 0,
+            tool_count: 0,
+            model: None,
+            provider: None,
+            evidence_missing: true,
+        }
+    }
+}
+
 /// Complete report from a single evaluation run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalRunReport {
     pub report_schema_version: u16,
     pub scenario_id: String,
     pub provider: ProviderRealitySnapshot,
+    pub prompt: PromptEvalResult,
     pub memory: MemoryEvalResult,
     pub tools: ToolEvalResult,
     pub policy: PolicyEvalResult,
@@ -309,6 +336,7 @@ mod tests {
             report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
             scenario_id: "test".to_string(),
             provider: ProviderRealitySnapshot::unknown(),
+            prompt: PromptEvalResult::default(),
             memory: MemoryEvalResult {
                 included_claims_seen: vec![],
                 excluded_claims_seen: vec![],

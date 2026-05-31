@@ -201,6 +201,7 @@ mod tests {
                 max_tokens: None,
                 observed_at: chrono::Utc::now(),
             },
+            prompt: PromptEvalResult::default(),
             memory: MemoryEvalResult {
                 included_claims_seen: vec![], excluded_claims_seen: vec![],
                 missing_required: vec![], unexpected_included: vec![],

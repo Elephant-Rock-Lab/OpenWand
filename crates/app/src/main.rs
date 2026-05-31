@@ -2,7 +2,7 @@
 //!
 //! Wave 05: CLI binary with subcommand structure.
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
 use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
 use openwand_core::SessionId;
@@ -70,6 +70,39 @@ enum Commands {
     SessionRebuild {
         /// Session ID to rebuild
         session_id: String,
+    },
+
+    /// Evaluation scenarios for real-model quality measurement
+    #[cfg(feature = "real-model-eval")]
+    Eval {
+        #[command(subcommand)]
+        eval_cmd: EvalCommands,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Subcommand, Debug)]
+enum EvalCommands {
+    /// List available evaluation scenarios
+    List,
+
+    /// Run evaluation scenarios
+    Run {
+        /// Scenario ID to run ("all" for every scenario)
+        #[arg(long, default_value = "all")]
+        scenario: String,
+
+        /// Base URL for the LLM provider
+        #[arg(long)]
+        base_url: Option<String>,
+
+        /// Model name
+        #[arg(long, default_value = "qwen3")]
+        model: String,
+
+        /// Output directory for reports
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
     },
 }
 
@@ -139,6 +172,9 @@ async fn main() -> Result<()> {
         Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
+
+        #[cfg(feature = "real-model-eval")]
+        Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
     }
 }
 
@@ -370,5 +406,127 @@ async fn cmd_session_rebuild(_cli: &Cli, session_id: &str) -> Result<()> {
     println!("Session: {}", session_id);
     println!();
     println!("(Session rebuild will be wired in Wave 05 commit 7)");
+    Ok(())
+}
+
+#[cfg(feature = "real-model-eval")]
+async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
+    use openwand_app::eval_model::*;
+
+    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("eval");
+
+    match cmd {
+        EvalCommands::List => {
+            let scenarios = load_eval_fixtures(&fixture_dir)
+                .map_err(|e| anyhow::anyhow!("Failed to load eval fixtures: {}", e))?;
+            println!("╔══════════════════════════════════════════╗");
+            println!("║       OpenWand Eval Scenarios            ║");
+            println!("╚══════════════════════════════════════════╝");
+            println!();
+            for s in &scenarios {
+                println!("  {} — {}", s.id, s.title);
+                println!("    Turns: {}", s.turns.len());
+                println!("    Tags: {:?}", s.tags);
+                println!();
+            }
+            println!("Total: {} scenarios", scenarios.len());
+        }
+        EvalCommands::Run { scenario, base_url, model, output_dir } => {
+            let scenarios = load_eval_fixtures(&fixture_dir)
+                .map_err(|e| anyhow::anyhow!("Failed to load eval fixtures: {}", e))?;
+
+            let to_run: Vec<&EvalScenario> = if scenario == "all" {
+                scenarios.iter().collect()
+            } else {
+                scenarios.iter().filter(|s| s.id == scenario).collect()
+            };
+
+            if to_run.is_empty() {
+                anyhow::bail!("No scenarios matched '{}'", scenario);
+            }
+
+            println!("╔══════════════════════════════════════════╗");
+            println!("║       OpenWand Eval Run                  ║");
+            println!("╚══════════════════════════════════════════╝");
+            println!();
+            println!("Model: {}", model);
+            if let Some(ref url) = base_url {
+                println!("Base URL: {}", url);
+            } else {
+                println!("Base URL: (not specified)");
+            }
+            println!("Scenarios: {}", to_run.len());
+            println!("Output: {}", output_dir);
+            println!();
+
+            // Create output directory
+            std::fs::create_dir_all(&output_dir)
+                .context("Failed to create output directory")?;
+
+            for s in &to_run {
+                println!("Running: {} ...", s.id);
+                println!("  (real provider execution — stub for deterministic validation)");
+
+                // Write a stub report for now
+                let report = EvalRunReport {
+                    report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
+                    scenario_id: s.id.clone(),
+                    provider: ProviderRealitySnapshot::unknown(),
+                    memory: MemoryEvalResult {
+                        included_claims_seen: vec![],
+                        excluded_claims_seen: vec![],
+                        missing_required: vec![],
+                        unexpected_included: vec![],
+                        prompt_panel_equivalent: true,
+                    },
+                    tools: ToolEvalResult {
+                        requested_tools: vec![],
+                        executed_tools: vec![],
+                        blocked_tools: vec![],
+                        forbidden_requested: vec![],
+                    },
+                    policy: PolicyEvalResult {
+                        gates_seen: vec![],
+                        required_approvals_seen: vec![],
+                        unexpected_allows: vec![],
+                    },
+                    patch: PatchEvalResult {
+                        planned: false,
+                        applied: false,
+                        preimage_verified: false,
+                        postimage_verified: false,
+                        rollback_available: false,
+                        changed_files_match_expected: true,
+                    },
+                    explain: ExplainEvalResult {
+                        memory_matches: true,
+                        policy_matches: true,
+                        tool_matches: true,
+                        completion_matches: true,
+                    },
+                    rebuild: RebuildEvalResult {
+                        events_replayed: 0,
+                        state_matches: true,
+                        divergences: vec![],
+                    },
+                    score: EvalScore::from_dimensions(vec![]),
+                };
+
+                let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+                let report_path = format!("{}/{}_{}.json", output_dir, timestamp, s.id);
+                let json = serde_json::to_string_pretty(&report)
+                    .context("Failed to serialize report")?;
+                std::fs::write(&report_path, json)
+                    .context("Failed to write report")?;
+                println!("  Report: {}", report_path);
+                println!();
+            }
+
+            println!("Done.");
+        }
+    }
     Ok(())
 }

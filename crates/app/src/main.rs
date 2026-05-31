@@ -5,18 +5,16 @@
 use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
 use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
+use openwand_app::session_runtime::build_session_runtime;
+use openwand_app::session_runtime::build_write_policy;
 use openwand_core::SessionId;
-use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
 use openwand_llm::LlmClient;
-use openwand_memory::testing::HeuristicExtractor;
 use openwand_memory::{MemoryExtractor, MemoryReadStore, MemoryStore, SqliteMemoryStore};
-use openwand_policy::{BuiltinPolicyEngine, PolicyEngine};
+use openwand_policy::PolicyEngine;
 use openwand_session::config::{RunConfig, RunStopReason, RunSummary};
 use openwand_session::message::MessageContent;
 use openwand_session::runner::{ApprovalDecision, SessionRunner};
-use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::StoredEvent;
-use openwand_tools::composite::CompositeToolExecutor;
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::TraceStore;
 use std::sync::Arc;
@@ -92,6 +90,11 @@ enum EvalCommands {
         #[arg(long, default_value = "all")]
         scenario: String,
 
+        /// Provider type (openai-compatible, ollama, etc.)
+        /// If not specified, inferred from --base-url.
+        #[arg(long)]
+        provider: Option<String>,
+
         /// Base URL for the LLM provider
         #[arg(long)]
         base_url: Option<String>,
@@ -103,61 +106,15 @@ enum EvalCommands {
         /// Output directory for reports
         #[arg(long, default_value = "eval_reports")]
         output_dir: String,
-    },
-}
 
-fn build_write_policy() -> BuiltinPolicyEngine {
-    BuiltinPolicyEngine::new(vec![
-        openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("allow-read".into()),
-            name: "Allow read-effect tools".into(),
-            enabled: true,
-            priority: 0,
-            class: openwand_policy::RuleClass::BuiltinDefault,
-            matcher: openwand_policy::ToolMatcher::ToolEffect {
-                effect: openwand_core::tool_vocab::ToolEffect::Read,
-            },
-            effect: openwand_policy::PolicyEffect::Allow {
-                risk: openwand_core::risk::RiskLevelSnapshot::Low,
-                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-            },
-            reason_code: "allow_read".into(),
-            summary: "Allow read-effect tool calls.".into(),
-        },
-        openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("allow-search".into()),
-            name: "Allow search-effect tools".into(),
-            enabled: true,
-            priority: 0,
-            class: openwand_policy::RuleClass::BuiltinDefault,
-            matcher: openwand_policy::ToolMatcher::ToolEffect {
-                effect: openwand_core::tool_vocab::ToolEffect::Search,
-            },
-            effect: openwand_policy::PolicyEffect::Allow {
-                risk: openwand_core::risk::RiskLevelSnapshot::Low,
-                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-            },
-            reason_code: "allow_search".into(),
-            summary: "Allow search-effect tool calls.".into(),
-        },
-        // Write requires explicit approval
-        openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("write-requires-approve".into()),
-            name: "Write-effect tools require user approval".into(),
-            enabled: true,
-            priority: 0,
-            class: openwand_policy::RuleClass::BuiltinDefault,
-            matcher: openwand_policy::ToolMatcher::ToolEffect {
-                effect: openwand_core::tool_vocab::ToolEffect::Write,
-            },
-            effect: openwand_policy::PolicyEffect::Allow {
-                risk: openwand_core::risk::RiskLevelSnapshot::Medium,
-                confirmation: openwand_core::mode::ConfirmationLevel::Approve,
-            },
-            reason_code: "write_requires_approval".into(),
-            summary: "Write-effect tools require explicit user approval.".into(),
-        },
-    ])
+        /// Baseline for comparison ("none", "latest", or path to report.json)
+        #[arg(long, default_value = "none")]
+        baseline: String,
+
+        /// Fail with non-zero exit on regression
+        #[arg(long)]
+        fail_on_regression: bool,
+    },
 }
 
 #[tokio::main]
@@ -181,27 +138,13 @@ async fn main() -> Result<()> {
 // ── Subcommand: run (existing behavior) ────────────────────────────────────
 
 async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
+    use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
+    use openwand_memory::testing::HeuristicExtractor;
 
-    // 1. Open SQLite store (trace + registry)
-    let store = SqliteStore::open(SqliteStoreConfig::file(&cli.db)).await?;
-    let trace: Arc<dyn TraceStore<StoredEvent>> = Arc::new(store);
+    // 1. Build session runtime (shared with eval runner)
+    let rt = build_session_runtime(&cli.db, &std::env::current_dir()?.to_string_lossy()).await?;
 
-    // 2. Open SQLite memory store (same file, own migrations)
-    let memory_store = SqliteMemoryStore::open(std::path::Path::new(&cli.db))?;
-    let memory_read: Arc<dyn MemoryReadStore> = Arc::new(memory_store);
-
-    // 3. Create LLM client
-    let llm: Arc<dyn LlmClient> = Arc::new(OpenAiCompatibleClient::new());
-
-    // 4. Create tools executor (local tools including file_write)
-    let tools: Arc<dyn ToolExecutor> = Arc::new(
-        CompositeToolExecutor::local_only(openwand_tools::local::batch2_local_tools())
-    );
-
-    // 5. Create policy engine (Read/Search auto, Write requires approval)
-    let policy: Arc<dyn PolicyEngine> = Arc::new(build_write_policy());
-
-    // 6. Get user message
+    // 2. Get user message
     let message = message.unwrap_or_else(|| {
         "Hello! Can you tell me a short joke?".to_string()
     });
@@ -218,25 +161,7 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
     println!("User: {message}");
     println!("────────────────────────────────────────────");
 
-    // 7. Create session runner
-    let session_id = SessionId::new();
-
-    // Need a second trace store connection for the coordinator
-    let trace_for_coordinator: Arc<dyn TraceStore<StoredEvent>> = Arc::new(
-        SqliteStore::open(SqliteStoreConfig::file(&cli.db)).await?
-    );
-
-    let runner = SessionRunner::new(
-        session_id.clone(),
-        trace,
-        llm,
-        tools,
-        policy,
-        memory_read.clone(),
-        std::env::current_dir()?.to_string_lossy().to_string(),
-    );
-
-    // 8. Configure run
+    // 3. Configure run
     let mut run_config = RunConfig::default();
     run_config.mode = openwand_core::mode::InteractionMode::Conversational;
     run_config.llm_target = Some(openwand_llm::LlmTarget {
@@ -247,17 +172,16 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
         base_url: Some(cli.base_url.clone()),
         api_key: cli.api_key.clone(),
     });
-    let result = runner.run_turn(message.clone(), run_config.clone()).await?;
+    let result = rt.runner.run_turn(message.clone(), run_config.clone()).await?;
 
-    // 8b. Handle approval flow
+    // 4. Handle approval flow
     let result = if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
         println!("────────────────────────────────────────────");
-        if let Some(pending) = runner.pending_approval().await {
+        if let Some(pending) = rt.runner.pending_approval().await {
             println!("⚠ Tool '{}' requires your approval.", pending.tool_name);
             println!("  Reason: {}", pending.policy_summary);
             println!("  Approve? [y/N] ");
 
-            // Read user input
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap_or_default();
             let approved = input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes";
@@ -268,14 +192,13 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
                 ApprovalDecision::reject()
             };
 
-            let approval_result = runner.resolve_approval(decision, run_config).await?;
+            let approval_result = rt.runner.resolve_approval(decision, run_config).await?;
             println!("  → {}", if approved { "Approved" } else { "Rejected" });
             if let Some(tool_result) = &approval_result.tool_result {
                 println!("  Tool result: {}", tool_result.output);
             }
         }
 
-        // Return a synthetic result
         RunSummary {
             stop_reason: RunStopReason::Natural,
             steps_completed: result.steps_completed,
@@ -293,19 +216,15 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
     println!("  Tools called:  {}", result.tools_executed);
     println!("  Recoverable:   {}", result.recoverable);
 
-    // 9. Run memory projection after the turn
-    let memory_for_coordinator: Arc<dyn MemoryStore> = {
-        // Re-open memory store for write access through the store trait
-        Arc::new(SqliteMemoryStore::open(std::path::Path::new(&cli.db))?)
-    };
+    // 5. Run memory projection
     let extractor: Arc<dyn MemoryExtractor> = Arc::new(HeuristicExtractor);
     let coordinator = MemoryCoordinator::new(
-        memory_for_coordinator,
+        rt.memory_store.clone(),
         extractor,
-        trace_for_coordinator,
+        rt.trace_for_coordinator.clone(),
     );
 
-    let projection = coordinator.project_after_run(&session_id).await;
+    let projection = coordinator.project_after_run(&rt.session_id).await;
     println!();
     println!("Memory projection:");
     println!("  Episodes projected:  {}", projection.episodes_projected);
@@ -315,10 +234,10 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
         println!("  Errors: {:?}", projection.errors);
     }
 
-    // 9b. Produce 02k prompt inputs (diagnostic — shows what the next turn would see)
+    // 6. Produce 02k prompt inputs (diagnostic)
     let prompt_result = coordinator
         .produce_prompt_inputs(
-            Some(session_id.clone()),
+            Some(rt.session_id.clone()),
             std::env::current_dir()?.as_path(),
             &PromptInputProductionConfig::default(),
         )
@@ -336,8 +255,8 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
         println!("  Errors: {:?}", prompt_result.errors);
     }
 
-    // 10. Show Loro projection
-    let messages = runner.loro_state().messages().map_err(|e| anyhow::anyhow!("{e}"))?;
+    // 7. Show Loro projection
+    let messages = rt.runner.loro_state().messages().map_err(|e| anyhow::anyhow!("{e}"))?;
     println!();
     println!("Messages ({} total):", messages.len());
     for msg in &messages {
@@ -358,8 +277,8 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
         println!("  {role}: {content_preview}");
     }
 
-    // 11. Show stale status
-    let stale = runner.loro_state().projection_is_stale().map_err(|e| anyhow::anyhow!("{e}"))?;
+    // 8. Show stale status
+    let stale = rt.runner.loro_state().projection_is_stale().map_err(|e| anyhow::anyhow!("{e}"))?;
     println!();
     if stale {
         println!("⚠ Loro projection is stale");
@@ -410,6 +329,38 @@ async fn cmd_session_rebuild(_cli: &Cli, session_id: &str) -> Result<()> {
 }
 
 #[cfg(feature = "real-model-eval")]
+fn resolve_provider(provider: Option<&str>, base_url: Option<&str>) -> openwand_llm::LlmProvider {
+    // Explicit provider flag takes priority
+    if let Some(name) = provider {
+        return match name.to_lowercase().as_str() {
+            "openai" => openwand_llm::LlmProvider::OpenAI,
+            "anthropic" => openwand_llm::LlmProvider::Anthropic,
+            "ollama" => openwand_llm::LlmProvider::Ollama,
+            "groq" => openwand_llm::LlmProvider::Groq,
+            "deepseek" => openwand_llm::LlmProvider::DeepSeek,
+            other => openwand_llm::LlmProvider::Custom { name: other.to_string() },
+        };
+    }
+    // Infer from base_url heuristics
+    if let Some(url) = base_url {
+        if url.contains("ollama") || url.contains(":11434") {
+            return openwand_llm::LlmProvider::Ollama;
+        }
+        if url.contains("groq") {
+            return openwand_llm::LlmProvider::Groq;
+        }
+        if url.contains("deepseek") {
+            return openwand_llm::LlmProvider::DeepSeek;
+        }
+        if url.contains("anthropic") {
+            return openwand_llm::LlmProvider::Anthropic;
+        }
+    }
+    // Default: OpenAI-compatible (covers LM Studio, vLLM, etc.)
+    openwand_llm::LlmProvider::Custom { name: "openai-compatible".to_string() }
+}
+
+#[cfg(feature = "real-model-eval")]
 async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
     use openwand_app::eval_model::*;
 
@@ -434,7 +385,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
             }
             println!("Total: {} scenarios", scenarios.len());
         }
-        EvalCommands::Run { scenario, base_url, model, output_dir } => {
+        EvalCommands::Run { scenario, provider, base_url, model, output_dir, baseline, fail_on_regression } => {
             let scenarios = load_eval_fixtures(&fixture_dir)
                 .map_err(|e| anyhow::anyhow!("Failed to load eval fixtures: {}", e))?;
 
@@ -448,33 +399,85 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 anyhow::bail!("No scenarios matched '{}'", scenario);
             }
 
+            // Resolve provider: explicit flag > inferred from base_url > default
+            let resolved_provider = resolve_provider(provider.as_deref(), base_url.as_deref());
+            let base_url = base_url.unwrap_or_else(|| "http://localhost:1234/v1".to_string());
+
             println!("╔══════════════════════════════════════════╗");
             println!("║       OpenWand Eval Run                  ║");
             println!("╚══════════════════════════════════════════╝");
             println!();
-            println!("Model: {}", model);
-            if let Some(ref url) = base_url {
-                println!("Base URL: {}", url);
-            } else {
-                println!("Base URL: (not specified)");
-            }
+            println!("Provider: {:?}", resolved_provider);
+            println!("Model:    {}", model);
+            println!("Base URL: {}", base_url);
+            println!("Baseline: {}", baseline);
             println!("Scenarios: {}", to_run.len());
             println!("Output: {}", output_dir);
             println!();
 
-            // Create output directory
+            // Create output directory structure
             std::fs::create_dir_all(&output_dir)
                 .context("Failed to create output directory")?;
 
+            let mut any_regression = false;
+
             for s in &to_run {
                 println!("Running: {} ...", s.id);
-                println!("  (real provider execution — stub for deterministic validation)");
 
-                // Write a stub report for now
+                // Build session runtime using shared assembly
+                let db_path = format!("{}/eval_{}.db", output_dir, s.id);
+                let working_dir = format!("{}/workspace_{}", output_dir, s.id);
+                std::fs::create_dir_all(&working_dir)
+                    .context("Failed to create eval workspace")?;
+
+                let rt = build_session_runtime(&db_path, &working_dir).await?;
+
+                // Configure run with resolved provider
+                let mut run_config = RunConfig::default();
+                run_config.mode = openwand_core::mode::InteractionMode::Direct;
+                run_config.working_directory = working_dir.clone();
+                run_config.llm_target = Some(openwand_llm::LlmTarget {
+                    provider: resolved_provider.clone(),
+                    model: model.clone(),
+                    base_url: Some(base_url.clone()),
+                    api_key: None,
+                });
+
+                // Run each turn in the scenario
+                let mut all_tools_executed = Vec::new();
+                let mut steps_total = 0u64;
+
+                for (turn_idx, turn_msg) in s.turns.iter().enumerate() {
+                    println!("  Turn {}: {}", turn_idx + 1, &turn_msg[..turn_msg.len().min(60)]);
+
+                    let result = rt.runner.run_turn(turn_msg.clone(), run_config.clone()).await?;
+                    steps_total += result.steps_completed;
+
+                    // Auto-approve any pending approvals in eval mode
+                    if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
+                        let decision = ApprovalDecision::approve();
+                        let _approval_result = rt.runner.resolve_approval(decision, run_config.clone()).await?;
+                    }
+                }
+
+                // Build provider snapshot
+                let provider_snapshot = ProviderRealitySnapshot {
+                    provider: format!("{:?}", resolved_provider),
+                    model: model.clone(),
+                    base_url_redacted: Some(base_url.clone()),
+                    supports_streaming: true,
+                    supports_tools: true,
+                    supports_reasoning: false,
+                    health_status: ProviderHealthStatus::Healthy,
+                    temperature: None,
+                    max_tokens: None,
+                    observed_at: chrono::Utc::now(),
+                };
+
                 let report = EvalRunReport {
                     report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
                     scenario_id: s.id.clone(),
-                    provider: ProviderRealitySnapshot::unknown(),
+                    provider: provider_snapshot,
                     memory: MemoryEvalResult {
                         included_claims_seen: vec![],
                         excluded_claims_seen: vec![],
@@ -483,8 +486,8 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                         prompt_panel_equivalent: true,
                     },
                     tools: ToolEvalResult {
-                        requested_tools: vec![],
-                        executed_tools: vec![],
+                        requested_tools: all_tools_executed.clone(),
+                        executed_tools: all_tools_executed.clone(),
                         blocked_tools: vec![],
                         forbidden_requested: vec![],
                     },
@@ -515,17 +518,25 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     score: EvalScore::from_dimensions(vec![]),
                 };
 
-                let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-                let report_path = format!("{}/{}_{}.json", output_dir, timestamp, s.id);
+                // Save report using stable directory layout
+                let scenario_dir = format!("{}/scenarios/{}", output_dir, s.id);
+                std::fs::create_dir_all(&scenario_dir)?;
+                let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ");
+                let report_path = format!("{}/{}_{}.json", scenario_dir, timestamp, model);
                 let json = serde_json::to_string_pretty(&report)
                     .context("Failed to serialize report")?;
                 std::fs::write(&report_path, json)
                     .context("Failed to write report")?;
+
+                println!("  Score: {}/{} ({:.0}%)", report.score.total, report.score.max, report.score.pass_rate * 100.0);
                 println!("  Report: {}", report_path);
                 println!();
+
+                // TODO: baseline comparison (commit 3-4)
+                let _ = (baseline.as_str(), fail_on_regression, any_regression);
             }
 
-            println!("Done.");
+            println!("Done. {} scenarios executed.", to_run.len());
         }
     }
     Ok(())

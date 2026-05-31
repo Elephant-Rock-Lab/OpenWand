@@ -8,4 +8,5 @@ pub mod explain;
 pub mod memory_coordinator;
 pub mod memory_evaluation_model;
 pub mod memory_evaluation;
+pub mod session_runtime;
 pub mod ui;

@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Current report schema version. Increment when report shape changes.
-pub const EVAL_REPORT_SCHEMA_VERSION: u16 = 1;
+pub const EVAL_REPORT_SCHEMA_VERSION: u16 = 2;
 
 /// A single evaluation scenario with deterministic expected outcomes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,12 +138,34 @@ pub struct EvalScore {
     pub dimensions: Vec<DimensionScore>,
 }
 
+/// Source of evaluation evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EvalEvidenceSource {
+    Trace,
+    GovernedReport,
+    Rebuild,
+    Explanation,
+}
+
+/// A reference to evaluation evidence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalEvidenceRef {
+    pub source: EvalEvidenceSource,
+    pub event_kind: Option<String>,
+    pub summary: String,
+}
+
 /// Score for a single evaluation dimension.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DimensionScore {
     pub name: String,
     pub passed: u32,
     pub total: u32,
+    /// Evidence references backing this score.
+    /// A passing dimension must have non-empty evidence.
+    #[serde(default)]
+    pub evidence_refs: Vec<EvalEvidenceRef>,
 }
 
 /// Memory evaluation result.
@@ -386,8 +408,8 @@ mod tests {
     #[test]
     fn eval_score_is_deterministic() {
         let dims = vec![
-            DimensionScore { name: "memory".into(), passed: 3, total: 4 },
-            DimensionScore { name: "tools".into(), passed: 2, total: 2 },
+            DimensionScore { name: "memory".into(), passed: 3, total: 4, evidence_refs: vec![] },
+            DimensionScore { name: "tools".into(), passed: 2, total: 2, evidence_refs: vec![] },
         ];
         let score = EvalScore::from_dimensions(dims);
         assert_eq!(5, score.total);
@@ -538,5 +560,58 @@ mod tests {
         // It may parse as valid YAML but fail deserialization
         // The important thing is it doesn't panic
         let _ = result;
+    }
+
+    #[test]
+    fn eval_dimension_score_with_evidence() {
+        let dim = DimensionScore {
+            name: "memory".to_string(),
+            passed: 10,
+            total: 10,
+            evidence_refs: vec![EvalEvidenceRef {
+                source: EvalEvidenceSource::GovernedReport,
+                event_kind: None,
+                summary: "Governed report with 10 findings".to_string(),
+            }],
+        };
+        assert_eq!(10, dim.passed);
+        assert_eq!(1, dim.evidence_refs.len());
+    }
+
+    #[test]
+    fn eval_evidence_source_serializes() {
+        let source = EvalEvidenceSource::Trace;
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("trace"));
+    }
+
+    #[test]
+    fn eval_report_schema_version_bumped() {
+        assert_eq!(2, EVAL_REPORT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn eval_report_backward_compat_loads_v1() {
+        // A v1 report (without evidence_refs) should still load
+        // because evidence_refs has #[serde(default)]
+        let v1_json = r#"{
+            "report_schema_version": 1,
+            "scenario_id": "v1_compat",
+            "provider": { "provider": "test", "model": "test", "base_url_redacted": null, "supports_streaming": false, "supports_tools": false, "supports_reasoning": false, "health_status": "unknown", "temperature": null, "max_tokens": null, "observed_at": "2026-01-01T00:00:00Z" },
+            "prompt": { "prompt_seen": false, "system_prompt_hash": null, "message_count": 0, "tool_count": 0, "model": null, "provider": null, "evidence_missing": true },
+            "memory": { "included_claims_seen": [], "excluded_claims_seen": [], "missing_required": [], "unexpected_included": [], "prompt_panel_equivalent": true },
+            "tools": { "requested_tools": [], "executed_tools": [], "blocked_tools": [], "forbidden_requested": [] },
+            "policy": { "gates_seen": [], "required_approvals_seen": [], "unexpected_allows": [] },
+            "patch": { "planned": false, "applied": false, "preimage_verified": false, "postimage_verified": false, "rollback_available": false, "changed_files_match_expected": true },
+            "explain": { "memory_matches": true, "policy_matches": true, "tool_matches": true, "completion_matches": true },
+            "rebuild": { "events_replayed": 0, "state_matches": true, "divergences": [] },
+            "score": { "total": 0, "max": 0, "pass_rate": 0.0, "dimensions": [] }
+        }"#;
+        let report: EvalRunReport = serde_json::from_str(v1_json).unwrap();
+        assert_eq!(1, report.report_schema_version);
+        // dimensions should have empty evidence_refs (default)
+        for dim in &report.score.dimensions {
+            assert!(dim.evidence_refs.is_empty());
+        }
     }
 }

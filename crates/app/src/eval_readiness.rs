@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::eval_compare::{compare_reports, RegressionThresholds};
 use crate::eval_model::EvalRunReport;
 
 // ── Readiness target ──────────────────────────────────────────────────────
@@ -439,7 +440,7 @@ pub fn compute_auto_commit_readiness(
     let mut warnings: Vec<ReadinessWarning> = Vec::new();
 
     // Extract trends (groups by scenario, computes pass rates)
-    let trends = extract_patch_trends(reports);
+    let mut trends = extract_patch_trends(reports);
     let trend_map: std::collections::HashMap<String, &PatchTrendSummary> = trends
         .iter()
         .map(|t| (t.scenario_id.clone(), t))
@@ -710,6 +711,61 @@ pub fn compute_auto_commit_readiness(
         }
     }
 
+    // Step 6.5: Regression detection
+    let regression_thresholds = RegressionThresholds {
+        max_score_drop: 0,
+        max_pass_rate_drop: 0.0,
+        required_dimensions: vec![
+            "patch".to_string(),
+            "policy".to_string(),
+            "rebuild".to_string(),
+            "explain".to_string(),
+        ],
+    };
+
+    // Compare chronologically adjacent reports per scenario
+    let mut scenario_ids_sorted: Vec<String> = reports.iter().map(|r| r.scenario_id.clone()).collect();
+    scenario_ids_sorted.sort();
+    scenario_ids_sorted.dedup();
+
+    let mut total_regressions = 0usize;
+    for sid in &scenario_ids_sorted {
+        let mut scenario_reports: Vec<&EvalRunReport> = reports
+            .iter()
+            .filter(|r| r.scenario_id == *sid)
+            .collect();
+
+        // Sort by provider observation time (earliest first)
+        scenario_reports.sort_by_key(|r| r.provider.observed_at);
+
+        // Compare adjacent pairs
+        for window in scenario_reports.windows(2) {
+            let current = window[1];
+            let baseline = window[0];
+            let comparison = compare_reports(current, Some(baseline), &regression_thresholds);
+
+            if !comparison.regressions.is_empty() {
+                total_regressions += comparison.regressions.len();
+
+                // Update trend regression count
+                if let Some(trend) = trends.iter_mut().find(|t| t.scenario_id == *sid) {
+                    trend.regressions += comparison.regressions.len();
+                }
+            }
+        }
+    }
+
+    if total_regressions > thresholds.max_allowed_regressions {
+        blockers.push(ReadinessBlocker {
+            kind: ReadinessBlockerKind::RegressionDetected,
+            scenario_id: None,
+            detail: format!(
+                "Detected {} regressions across all scenarios, max allowed: {}",
+                total_regressions, thresholds.max_allowed_regressions
+            ),
+        });
+    }
+
     // Determine status
     let has_insufficient = blockers.iter().any(|b| matches!(
         b.kind,
@@ -766,7 +822,7 @@ pub fn compute_auto_commit_readiness(
             policy_pass_rate,
             rebuild_pass_rate,
             explain_pass_rate,
-            regression_count: 0, // Populated in Commit 5
+            regression_count: total_regressions,
         },
         thresholds: thresholds.clone(),
         evidence_window: EvidenceWindow {

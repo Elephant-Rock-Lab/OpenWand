@@ -554,3 +554,78 @@ fn readiness_store_handles_empty_dir() {
     let result = load_latest_readiness_report(dir.path()).unwrap();
     assert!(result.is_none());
 }
+
+// ── Commit 5: Regression integration tests ─────────────────────────────────
+
+#[test]
+fn readiness_blocks_on_required_dimension_regression() {
+    let mut reports = make_passing_report_set();
+
+    // Add a later report with a regression in patch dimension
+    let mut regressed = make_report_with_patch("patch_plan_then_apply", false, true);
+    regressed.provider.observed_at = chrono::Utc::now() + chrono::Duration::hours(1);
+    // Ensure it has evidence refs
+    for d in &mut regressed.score.dimensions {
+        if d.name == "patch" {
+            d.passed = 0;
+            d.total = 1;
+        }
+    }
+    reports.push(regressed);
+
+    let report = compute_auto_commit_readiness(&reports, &AutoCommitReadinessThresholds::default());
+    // Should have either a regression blocker or a patch rate blocker
+    assert!(
+        report.blockers.iter().any(|b| matches!(b.kind, ReadinessBlockerKind::RegressionDetected))
+            || report.blockers.iter().any(|b| matches!(b.kind, ReadinessBlockerKind::PatchPassRateBelowThreshold)),
+        "Should block on regression or patch rate decline"
+    );
+}
+
+#[test]
+fn readiness_blocks_on_patch_score_decline() {
+    let mut reports = vec![];
+    let scenarios = ["patch_plan_then_apply", "preimage_mismatch_recovery",
+        "policy_blocks_forbidden_write", "trace_rebuild_after_eval", "multi_turn_user_correction"];
+    for scenario in scenarios {
+        for i in 0..3 {
+            let mut r = make_report_with_patch(scenario, true, true);
+            r.provider.observed_at = chrono::Utc::now() + chrono::Duration::hours(i);
+            reports.push(r);
+        }
+    }
+
+    // Add a regressed later report for patch scenario
+    let mut later = make_report_with_patch("patch_plan_then_apply", false, true);
+    later.provider.observed_at = chrono::Utc::now() + chrono::Duration::hours(10);
+    for d in &mut later.score.dimensions {
+        if d.name == "patch" { d.passed = 0; }
+    }
+    reports.push(later);
+
+    let report = compute_auto_commit_readiness(&reports, &AutoCommitReadinessThresholds::default());
+    assert!(report.score.regression_count > 0, "Should detect regressions");
+}
+
+#[test]
+fn readiness_respects_max_allowed_regressions() {
+    let mut thresholds = AutoCommitReadinessThresholds::default();
+    thresholds.max_allowed_regressions = 1;
+
+    let reports = make_passing_report_set();
+    let report = compute_auto_commit_readiness(&reports, &thresholds);
+    // No regressions in passing set, should be eligible
+    assert_eq!(AutoCommitReadinessStatus::Eligible, report.status);
+    assert_eq!(0, report.score.regression_count);
+}
+
+#[test]
+fn readiness_noops_regression_check_with_insufficient_history() {
+    // Single report per scenario — no adjacent pairs to compare
+    let reports = vec![
+        make_report_with_patch("patch_plan_then_apply", true, true),
+    ];
+    let report = compute_auto_commit_readiness(&reports, &AutoCommitReadinessThresholds::default());
+    // Should be InsufficientEvidence for missing scenarios, but no regression blocker
+    assert!(!report.blockers.iter().any(|b| matches!(b.kind, ReadinessBlockerKind::RegressionDetected)));
+}

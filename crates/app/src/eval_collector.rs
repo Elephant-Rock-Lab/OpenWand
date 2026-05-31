@@ -126,43 +126,108 @@ pub fn collect_memory_eval(
 }
 
 /// Collect tool evaluation from tool results.
+/// Collect tool evaluation from trace evidence.
+/// Reads tool.called/completed/failed/suspended events.
 pub fn collect_tool_eval(
-    executed_tools: &[String],
+    trace: &EvalTraceEvidence,
     expectations: &EvalExpectations,
 ) -> ToolEvalResult {
+    let mut requested_tools = Vec::new();
+    let mut executed_tools = Vec::new();
+    let mut blocked_tools = Vec::new();
+    let mut failed_tools = Vec::new();
+
+    // tool.called → requested
+    for entry in trace.tool_events_by_kind("tool.called") {
+        let tool_name = extract_tool_name(&entry.payload);
+        if let Some(name) = tool_name {
+            requested_tools.push(name);
+        }
+    }
+
+    // tool.completed → executed
+    for entry in trace.tool_events_by_kind("tool.completed") {
+        let tool_name = extract_tool_name(&entry.payload);
+        if let Some(name) = tool_name {
+            executed_tools.push(name);
+        }
+    }
+
+    // tool.failed → failed
+    for entry in trace.tool_events_by_kind("tool.failed") {
+        let tool_name = extract_tool_name(&entry.payload);
+        if let Some(name) = tool_name {
+            failed_tools.push(name);
+        }
+    }
+
+    // tool.suspended/tool.denied → blocked
+    for entry in trace.tool_events_by_kind("tool.suspended") {
+        let tool_name = extract_tool_name(&entry.payload);
+        if let Some(name) = tool_name {
+            blocked_tools.push(name);
+        }
+    }
+    for entry in trace.tool_events_by_kind("tool.denied") {
+        let tool_name = extract_tool_name(&entry.payload);
+        if let Some(name) = tool_name {
+            blocked_tools.push(name);
+        }
+    }
+
+    // Detect forbidden tools
     let forbidden_requested: Vec<String> = expectations
         .forbidden_tool_calls
         .iter()
-        .filter(|forbidden| executed_tools.iter().any(|t| t.contains(forbidden.as_str())))
+        .filter(|forbidden| requested_tools.iter().any(|t| t.contains(forbidden.as_str())))
         .cloned()
         .collect();
 
-    let blocked_tools = vec![]; // Would be populated from trace events
-
     ToolEvalResult {
-        requested_tools: executed_tools.to_vec(),
-        executed_tools: executed_tools.to_vec(),
+        requested_tools,
+        executed_tools,
         blocked_tools,
         forbidden_requested,
     }
 }
 
-/// Collect policy evaluation from gate events.
+/// Collect policy evaluation from trace evidence.
+/// Reads gate.evaluated and gate.output_screened events.
 pub fn collect_policy_eval(
-    gates_seen: &[String],
+    trace: &EvalTraceEvidence,
     expectations: &EvalExpectations,
 ) -> PolicyEvalResult {
-    let required_approvals_seen: Vec<String> = expectations
-        .policy_events
-        .iter()
-        .filter(|expected| gates_seen.iter().any(|g| g.contains(expected.as_str())))
-        .cloned()
-        .collect();
+    let mut gates_seen = Vec::new();
+    let mut required_approvals_seen = Vec::new();
+    let mut denials = Vec::new();
+    let mut unexpected_allows = Vec::new();
+
+    for entry in trace.gate_events_by_kind("gate.evaluated") {
+        let evaluated = entry.payload.get("payload").and_then(|p| p.get("Evaluated"));
+        if let Some(ev) = evaluated {
+            let gate_kind = ev.get("gate_kind").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let passed = ev.get("passed").and_then(|v| v.as_bool()).unwrap_or(false);
+            let risk = ev.get("risk_level").and_then(|v| v.as_str()).unwrap_or("Unknown");
+            let reason = ev.get("reason_code").and_then(|v| v.as_str()).unwrap_or("");
+
+            gates_seen.push(format!("{}:{}:{}", gate_kind, if passed { "pass" } else { "block" }, risk));
+
+            // Track required approvals
+            if expectations.policy_events.iter().any(|e| gate_kind.contains(e.as_str())) {
+                required_approvals_seen.push(gate_kind.to_string());
+            }
+
+            // Track denials
+            if !passed {
+                denials.push(format!("{}: {}", gate_kind, reason));
+            }
+        }
+    }
 
     PolicyEvalResult {
-        gates_seen: gates_seen.to_vec(),
+        gates_seen,
         required_approvals_seen,
-        unexpected_allows: vec![],
+        unexpected_allows,
     }
 }
 
@@ -259,6 +324,19 @@ pub fn check_evidence_presence(
     }
 }
 
+/// Extract tool name from a tool event payload.
+fn extract_tool_name(payload: &serde_json::Value) -> Option<String> {
+    let payload_obj = payload.get("payload")?;
+    for variant in &["Called", "Completed", "Failed", "Suspended", "Resumed", "Denied"] {
+        if let Some(v) = payload_obj.get(variant) {
+            if let Some(name) = v.get("tool_name").and_then(|n| n.as_str()) {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,24 +410,67 @@ mod tests {
 
     #[test]
     fn eval_tool_detects_forbidden_request() {
-        let executed = vec!["local__file_read".to_string(), "local__file_write".to_string()];
+        let mut trace = EvalTraceEvidence::default();
+        // Add a tool.called for a forbidden tool
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t1".to_string(),
+            event_kind: "tool.called".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.called file_write".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Called": { "tool_call_id": "tc1", "tool_name": "local__file_write", "args_hash": "h1", "invoker": "Llm" } }
+            }),
+        });
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t2".to_string(),
+            event_kind: "tool.called".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.called file_read".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Called": { "tool_call_id": "tc2", "tool_name": "local__file_read", "args_hash": "h2", "invoker": "Llm" } }
+            }),
+        });
+
         let expectations = EvalExpectations {
             forbidden_tool_calls: vec!["local__file_write".to_string()],
             ..Default::default()
         };
-        let result = collect_tool_eval(&executed, &expectations);
+        let result = collect_tool_eval(&trace, &expectations);
         assert_eq!(vec!["local__file_write"], result.forbidden_requested);
     }
 
     #[test]
     fn eval_tool_allows_expected_only() {
-        let executed = vec!["local__file_patch".to_string()];
+        let mut trace = EvalTraceEvidence::default();
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t1".to_string(),
+            event_kind: "tool.called".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.called file_patch".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Called": { "tool_call_id": "tc1", "tool_name": "local__file_patch", "args_hash": "h1", "invoker": "Llm" } }
+            }),
+        });
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t2".to_string(),
+            event_kind: "tool.completed".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.completed file_patch".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Completed": { "tool_call_id": "tc1", "tool_name": "local__file_patch", "status": "Success", "result_summary": "ok", "duration_ms": 100 } }
+            }),
+        });
+
         let expectations = EvalExpectations {
             tool_calls: vec!["local__file_patch".to_string()],
             forbidden_tool_calls: vec!["local__file_write".to_string()],
             ..Default::default()
         };
-        let result = collect_tool_eval(&executed, &expectations);
+        let result = collect_tool_eval(&trace, &expectations);
         assert!(result.forbidden_requested.is_empty());
         assert!(result.executed_tools.contains(&"local__file_patch".to_string()));
     }
@@ -547,5 +668,124 @@ mod tests {
         // Hard rule: no inference event → prompt dimension cannot pass
         assert!(!result.prompt_seen, "Should not pass without inference evidence");
         assert!(result.evidence_missing);
+    }
+
+    // ── Tool/Policy trace-backed tests ──
+
+    #[test]
+    fn eval_tool_collector_reads_tool_completed() {
+        let mut trace = EvalTraceEvidence::default();
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t1".to_string(),
+            event_kind: "tool.called".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.called file_read".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Called": { "tool_call_id": "tc1", "tool_name": "local__file_read", "args_hash": "h1", "invoker": "Llm" } }
+            }),
+        });
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t2".to_string(),
+            event_kind: "tool.completed".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.completed file_read".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Completed": { "tool_call_id": "tc1", "tool_name": "local__file_read", "status": "Success", "result_summary": "ok", "duration_ms": 50 } }
+            }),
+        });
+
+        let result = collect_tool_eval(&trace, &EvalExpectations::default());
+        assert!(result.requested_tools.contains(&"local__file_read".to_string()));
+        assert!(result.executed_tools.contains(&"local__file_read".to_string()));
+    }
+
+    #[test]
+    fn eval_tool_collector_reads_tool_failed() {
+        let mut trace = EvalTraceEvidence::default();
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t1".to_string(),
+            event_kind: "tool.failed".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.failed file_write".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Failed": { "tool_call_id": "tc1", "tool_name": "local__file_write", "error": "disk full" } }
+            }),
+        });
+
+        let result = collect_tool_eval(&trace, &EvalExpectations::default());
+        // Failed tools don't appear in executed but do appear as having been attempted
+        // (they appear via tool.called if that was also emitted)
+        assert_eq!(0, result.executed_tools.len());
+    }
+
+    #[test]
+    fn eval_tool_collector_detects_blocked_tools() {
+        let mut trace = EvalTraceEvidence::default();
+        trace.tool_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "t1".to_string(),
+            event_kind: "tool.suspended".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "tool.suspended file_write".to_string(),
+            payload: serde_json::json!({
+                "family": "tool",
+                "payload": { "Suspended": { "tool_call_id": "tc1", "tool_name": "local__file_write", "reason": "requires approval" } }
+            }),
+        });
+
+        let result = collect_tool_eval(&trace, &EvalExpectations::default());
+        assert!(result.blocked_tools.contains(&"local__file_write".to_string()));
+    }
+
+    #[test]
+    fn eval_policy_collector_reads_gate_evaluated() {
+        let mut trace = EvalTraceEvidence::default();
+        trace.gate_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "g1".to_string(),
+            event_kind: "gate.evaluated".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "gate.evaluated (passed)".to_string(),
+            payload: serde_json::json!({
+                "family": "gate",
+                "payload": { "Evaluated": { "gate_id": "g1", "gate_kind": "risk", "passed": true, "risk_level": "Low", "reason_code": null, "summary": "ok" } }
+            }),
+        });
+
+        let result = collect_policy_eval(&trace, &EvalExpectations::default());
+        assert_eq!(1, result.gates_seen.len());
+        assert!(result.gates_seen[0].contains("pass"));
+    }
+
+    #[test]
+    fn eval_policy_collector_detects_required_confirmation() {
+        let mut trace = EvalTraceEvidence::default();
+        trace.gate_events.push(crate::eval_trace::TraceEvidenceEntry {
+            trace_id: "g1".to_string(),
+            event_kind: "gate.evaluated".to_string(),
+            occurred_at: chrono::Utc::now(),
+            summary: "gate.evaluated (blocked)".to_string(),
+            payload: serde_json::json!({
+                "family": "gate",
+                "payload": { "Evaluated": { "gate_id": "g1", "gate_kind": "write_gate", "passed": false, "risk_level": "Medium", "reason_code": "requires_approval", "summary": "blocked" } }
+            }),
+        });
+
+        let expectations = EvalExpectations {
+            policy_events: vec!["write_gate".to_string()],
+            ..Default::default()
+        };
+        let result = collect_policy_eval(&trace, &expectations);
+        assert!(result.required_approvals_seen.contains(&"write_gate".to_string()));
+    }
+
+    #[test]
+    fn eval_tool_collector_empty_trace_produces_empty_results() {
+        let trace = EvalTraceEvidence::default();
+        let result = collect_tool_eval(&trace, &EvalExpectations::default());
+        assert!(result.requested_tools.is_empty());
+        assert!(result.executed_tools.is_empty());
+        assert!(result.blocked_tools.is_empty());
     }
 }

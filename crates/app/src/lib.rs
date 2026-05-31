@@ -4,6 +4,7 @@
 
 pub mod eval_collector;
 pub mod eval_model;
+pub mod eval_reports;
 pub mod explain;
 pub mod memory_coordinator;
 pub mod memory_evaluation_model;

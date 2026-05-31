@@ -518,18 +518,15 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     score: EvalScore::from_dimensions(vec![]),
                 };
 
-                // Save report using stable directory layout
-                let scenario_dir = format!("{}/scenarios/{}", output_dir, s.id);
-                std::fs::create_dir_all(&scenario_dir)?;
-                let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ");
-                let report_path = format!("{}/{}_{}.json", scenario_dir, timestamp, model);
-                let json = serde_json::to_string_pretty(&report)
-                    .context("Failed to serialize report")?;
-                std::fs::write(&report_path, json)
-                    .context("Failed to write report")?;
+                // Save report using EvalReportStore
+                let store = openwand_app::eval_reports::EvalReportStore::new(
+                    std::path::PathBuf::from(&output_dir)
+                );
+                let report_path = store.save_report(&report)
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
 
                 println!("  Score: {}/{} ({:.0}%)", report.score.total, report.score.max, report.score.pass_rate * 100.0);
-                println!("  Report: {}", report_path);
+                println!("  Report: {}", report_path.display());
                 println!();
 
                 // TODO: baseline comparison (commit 3-4)

@@ -215,6 +215,98 @@ enum AutoCommitCommands {
         #[arg(long, default_value = "eval_reports")]
         output_dir: String,
     },
+
+    /// Review a proposal
+    #[command(subcommand)]
+    Review(AutoCommitReviewCommands),
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum AutoCommitReviewCommands {
+    /// Approve a proposal
+    Approve {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Rationale for approval
+        #[arg(long)]
+        rationale: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Reject a proposal
+    Reject {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Rationale for rejection
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback for next iteration
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Request changes on a proposal
+    #[command(name = "request-changes")]
+    RequestChanges {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Rationale for change request
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback describing required changes
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a specific review
+    ShowReview {
+        /// Review ID
+        review_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest review
+    LatestReview {
+        /// Filter by proposal ID
+        #[arg(long)]
+        proposal_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
 }
 
 #[tokio::main]
@@ -1336,6 +1428,198 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                         }
                         None => {
                             println!("Proposal not found: {}", proposal_id);
+                        }
+                    }
+                }
+
+                AutoCommitCommands::Review(review_cmd) => {
+                    use openwand_app::eval_proposal_review::*;
+
+                    match review_cmd {
+                        AutoCommitReviewCommands::Approve { proposal_id, rationale, output_dir, json } => {
+                            let pid = AutoCommitProposalId(proposal_id.clone());
+                            let proposal = load_proposal(
+                                std::path::Path::new(&output_dir), &pid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let proposal = match proposal {
+                                Some(p) => p,
+                                None => anyhow::bail!("Proposal not found: {}", proposal_id),
+                            };
+
+                            let review = build_proposal_review(
+                                &proposal,
+                                AutoCommitProposalReviewDecision::Approved,
+                                AutoCommitProposalReviewer::User,
+                                rationale.clone(),
+                                vec![], None,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let path = save_proposal_review(
+                                std::path::Path::new(&output_dir), &review,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                let json_str = serde_json::to_string_pretty(&review)
+                                    .context("Failed to serialize review")?;
+                                println!("{}", json_str);
+                            } else {
+                                println!("Review: {}", review.review_id.0);
+                                println!("Decision: {:?}", review.decision);
+                                println!("Proposal: {}", proposal_id);
+                                println!();
+                                println!("No commit was executed.");
+                                println!("No execution grant was created.");
+                            }
+                            println!();
+                            println!("Report: {}", path.display());
+                        }
+
+                        AutoCommitReviewCommands::Reject { proposal_id, rationale, feedback, output_dir, json } => {
+                            let pid = AutoCommitProposalId(proposal_id.clone());
+                            let proposal = load_proposal(
+                                std::path::Path::new(&output_dir), &pid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let proposal = match proposal {
+                                Some(p) => p,
+                                None => anyhow::bail!("Proposal not found: {}", proposal_id),
+                            };
+
+                            let fb = ProposalRejectionFeedback {
+                                feedback_id: format!("pfb_{}", pid.0),
+                                proposal_id: pid.clone(),
+                                review_id: AutoCommitProposalReviewId("pending".to_string()),
+                                workspace_hash: proposal.workspace_snapshot_id.clone(),
+                                summary: feedback.clone(),
+                                required_changes: vec![RequiredProposalChange {
+                                    category: ProposalFeedbackCategory::Other,
+                                    description: feedback.clone(),
+                                    evidence_ref: None,
+                                }],
+                                blocked_dimensions: vec![],
+                                suggested_next_eval_focus: vec![],
+                                severity: ProposalFeedbackSeverity::Blocking,
+                            };
+
+                            let review = build_proposal_review(
+                                &proposal,
+                                AutoCommitProposalReviewDecision::Rejected,
+                                AutoCommitProposalReviewer::User,
+                                rationale.clone(),
+                                vec![], Some(fb),
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let path = save_proposal_review(
+                                std::path::Path::new(&output_dir), &review,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                let json_str = serde_json::to_string_pretty(&review)
+                                    .context("Failed to serialize review")?;
+                                println!("{}", json_str);
+                            } else {
+                                println!("Review: {}", review.review_id.0);
+                                println!("Decision: {:?}", review.decision);
+                                println!("Proposal: {}", proposal_id);
+                                println!();
+                                println!("No commit was executed.");
+                                println!("No execution grant was created.");
+                            }
+                            println!();
+                            println!("Report: {}", path.display());
+                        }
+
+                        AutoCommitReviewCommands::RequestChanges { proposal_id, rationale, feedback, output_dir, json } => {
+                            let pid = AutoCommitProposalId(proposal_id.clone());
+                            let proposal = load_proposal(
+                                std::path::Path::new(&output_dir), &pid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let proposal = match proposal {
+                                Some(p) => p,
+                                None => anyhow::bail!("Proposal not found: {}", proposal_id),
+                            };
+
+                            let fb = ProposalRejectionFeedback {
+                                feedback_id: format!("pfb_{}", pid.0),
+                                proposal_id: pid.clone(),
+                                review_id: AutoCommitProposalReviewId("pending".to_string()),
+                                workspace_hash: proposal.workspace_snapshot_id.clone(),
+                                summary: feedback.clone(),
+                                required_changes: vec![RequiredProposalChange {
+                                    category: ProposalFeedbackCategory::Other,
+                                    description: feedback.clone(),
+                                    evidence_ref: None,
+                                }],
+                                blocked_dimensions: vec![],
+                                suggested_next_eval_focus: vec![],
+                                severity: ProposalFeedbackSeverity::Advisory,
+                            };
+
+                            let review = build_proposal_review(
+                                &proposal,
+                                AutoCommitProposalReviewDecision::ChangesRequested,
+                                AutoCommitProposalReviewer::User,
+                                rationale.clone(),
+                                vec![], Some(fb),
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let path = save_proposal_review(
+                                std::path::Path::new(&output_dir), &review,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                let json_str = serde_json::to_string_pretty(&review)
+                                    .context("Failed to serialize review")?;
+                                println!("{}", json_str);
+                            } else {
+                                println!("Review: {}", review.review_id.0);
+                                println!("Decision: {:?}", review.decision);
+                                println!("Proposal: {}", proposal_id);
+                                println!();
+                                println!("No commit was executed.");
+                                println!("No execution grant was created.");
+                            }
+                            println!();
+                            println!("Report: {}", path.display());
+                        }
+
+                        AutoCommitReviewCommands::ShowReview { review_id, output_dir } => {
+                            let rid = AutoCommitProposalReviewId(review_id.clone());
+                            let review = load_proposal_review(
+                                std::path::Path::new(&output_dir), &rid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match review {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize review")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("Review not found: {}", review_id),
+                            }
+                        }
+
+                        AutoCommitReviewCommands::LatestReview { proposal_id, output_dir } => {
+                            let review = match proposal_id {
+                                Some(pid) => load_latest_review_for_proposal(
+                                    std::path::Path::new(&output_dir),
+                                    &AutoCommitProposalId(pid),
+                                ),
+                                None => load_latest_proposal_review(
+                                    std::path::Path::new(&output_dir),
+                                ),
+                            }.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match review {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize review")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("No reviews found."),
+                            }
                         }
                     }
                 }

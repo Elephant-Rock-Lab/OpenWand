@@ -286,7 +286,7 @@ mod tests {
 
     fn make_scored_report(scenario: &str, total: u32, max: u32, dims: Vec<(&str, u32, u32)>) -> EvalRunReport {
         let dimensions: Vec<DimensionScore> = dims.into_iter()
-            .map(|(n, p, t)| DimensionScore { name: n.to_string(), passed: p, total: t })
+            .map(|(n, p, t)| DimensionScore { name: n.to_string(), passed: p, total: t, evidence_refs: vec![] })
             .collect();
         EvalRunReport {
             report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
@@ -345,10 +345,10 @@ mod tests {
         // Recalculate score properly
         let mut current = current;
         current.score = EvalScore::from_dimensions(vec![
-            DimensionScore { name: "memory".into(), passed: 15, total: 20 },
-            DimensionScore { name: "policy".into(), passed: 20, total: 20 },
-            DimensionScore { name: "rebuild".into(), passed: 20, total: 20 },
-            DimensionScore { name: "tools".into(), passed: 15, total: 20 },
+            DimensionScore { name: "memory".into(), passed: 15, total: 20, evidence_refs: vec![] },
+            DimensionScore { name: "policy".into(), passed: 20, total: 20, evidence_refs: vec![] },
+            DimensionScore { name: "rebuild".into(), passed: 20, total: 20, evidence_refs: vec![] },
+            DimensionScore { name: "tools".into(), passed: 15, total: 20, evidence_refs: vec![] },
         ]);
 
         let thresholds = RegressionThresholds {
@@ -380,7 +380,7 @@ mod tests {
     fn eval_compare_handles_no_baseline() {
         let mut current = make_scored_report("test", 80, 100, vec![]);
         current.score = EvalScore::from_dimensions(vec![
-            DimensionScore { name: "memory".into(), passed: 10, total: 10 },
+            DimensionScore { name: "memory".into(), passed: 10, total: 10, evidence_refs: vec![] },
         ]);
         let report = compare_reports(&current, None, &Default::default());
         assert!(report.regressions.is_empty());
@@ -436,15 +436,15 @@ mod tests {
     fn eval_compare_detects_required_dimension_regression() {
         let baseline = EvalRunReport {
             score: EvalScore::from_dimensions(vec![
-                DimensionScore { name: "rebuild".into(), passed: 10, total: 10 },
-                DimensionScore { name: "policy".into(), passed: 10, total: 10 },
+                DimensionScore { name: "rebuild".into(), passed: 10, total: 10, evidence_refs: vec![] },
+                DimensionScore { name: "policy".into(), passed: 10, total: 10, evidence_refs: vec![] },
             ]),
             ..make_scored_report("test", 0, 0, vec![])
         };
         let current = EvalRunReport {
             score: EvalScore::from_dimensions(vec![
-                DimensionScore { name: "rebuild".into(), passed: 5, total: 10 },
-                DimensionScore { name: "policy".into(), passed: 10, total: 10 },
+                DimensionScore { name: "rebuild".into(), passed: 5, total: 10, evidence_refs: vec![] },
+                DimensionScore { name: "policy".into(), passed: 10, total: 10, evidence_refs: vec![] },
             ]),
             ..make_scored_report("test", 0, 0, vec![])
         };

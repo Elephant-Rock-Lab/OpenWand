@@ -228,7 +228,7 @@ mod tests {
                 events_replayed: 0, state_matches: true, divergences: vec![],
             },
             score: EvalScore::from_dimensions(vec![
-                DimensionScore { name: "memory".into(), passed: score, total: 100 },
+                DimensionScore { name: "memory".into(), passed: score, total: 100, evidence_refs: vec![] },
             ]),
         }
     }

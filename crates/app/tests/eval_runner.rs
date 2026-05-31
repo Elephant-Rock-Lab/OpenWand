@@ -134,8 +134,8 @@ fn eval_report_schema_version_is_present() {
     };
 
     let json = serde_json::to_string(&report).unwrap();
-    assert!(json.contains("\"report_schema_version\":1"), "Schema version missing");
-    assert_eq!(1, report.report_schema_version);
+    assert!(json.contains("\"report_schema_version\":2"), "Schema version missing or wrong");
+    assert_eq!(2, report.report_schema_version);
 }
 
 #[test]

@@ -529,11 +529,53 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 println!("  Report: {}", report_path.display());
                 println!();
 
-                // TODO: baseline comparison (commit 3-4)
-                let _ = (baseline.as_str(), fail_on_regression, any_regression);
+                // Baseline comparison
+                let baseline_selection = match baseline.as_str() {
+                    "none" => openwand_app::eval_compare::EvalBaselineSelection::None,
+                    "latest" => openwand_app::eval_compare::EvalBaselineSelection::Latest,
+                    path => openwand_app::eval_compare::EvalBaselineSelection::Path(
+                        std::path::PathBuf::from(path)
+                    ),
+                };
+                let store = openwand_app::eval_reports::EvalReportStore::new(
+                    std::path::PathBuf::from(&output_dir)
+                );
+                let baseline_report = openwand_app::eval_compare::resolve_baseline(
+                    &baseline_selection, &store, &s.id,
+                ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                let thresholds = openwand_app::eval_compare::RegressionThresholds::default();
+                let comparison = openwand_app::eval_compare::compare_reports(
+                    &report, baseline_report.as_ref(), &thresholds,
+                );
+
+                // Print comparison summary
+                if let Some(bt) = comparison.score_delta.baseline_total {
+                    let delta = comparison.score_delta.delta.unwrap_or(0);
+                    let sign = if delta >= 0 { "+" } else { "" };
+                    println!("  vs Baseline: {} {} ({:?})", sign, delta,
+                        comparison.score_delta.baseline_pass_rate);
+                }
+                if !comparison.regressions.is_empty() {
+                    println!("  ⚠ Regressions:");
+                    for r in &comparison.regressions {
+                        println!("    - {}", r.description);
+                    }
+                    any_regression = true;
+                }
+                if !comparison.improvements.is_empty() {
+                    println!("  ✓ Improvements:");
+                    for i in &comparison.improvements {
+                        println!("    - {}", i.description);
+                    }
+                }
             }
 
             println!("Done. {} scenarios executed.", to_run.len());
+
+            if fail_on_regression && any_regression {
+                anyhow::bail!("Regression detected — failing eval run");
+            }
         }
     }
     Ok(())

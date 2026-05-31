@@ -44,6 +44,7 @@ dioxus = { version = "=0.7.9", optional = true, features = ["desktop"] }
 dioxus-desktop = { version = "=0.7.9", optional = true }
 
 [features]
+real-model-eval = []
 default = []
 desktop = ["dioxus", "dioxus-desktop"]
 memory-regression = []

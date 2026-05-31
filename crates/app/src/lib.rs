@@ -3,6 +3,7 @@
 //! Shared types and services used by both CLI and desktop binaries.
 
 pub mod eval_collector;
+pub mod eval_compare;
 pub mod eval_model;
 pub mod eval_reports;
 pub mod explain;

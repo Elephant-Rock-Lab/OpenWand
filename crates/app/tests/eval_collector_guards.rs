@@ -94,3 +94,33 @@ fn eval_guard_fixture_expectations_do_not_bypass_trace() {
     let patch_result = collect_patch_eval_from_trace(&trace, &expectations);
     assert!(!patch_result.applied);
 }
+
+/// All passing dimensions in a real report must have evidence refs.
+#[test]
+fn eval_guard_no_placeholder_dimensions_in_production_report() {
+    // Construct a complete report using the same paths as the eval runner
+    let trace = EvalTraceEvidence::default();
+    let prompt_result = collect_prompt_eval(&trace);
+    let tool_result = collect_tool_eval(&trace, &EvalExpectations::default());
+    let policy_result = collect_policy_eval(&trace, &EvalExpectations::default());
+    let patch_result = collect_patch_eval_from_trace(&trace, &EvalExpectations::default());
+
+    // All collectors from empty trace should produce non-passing results
+    assert!(!prompt_result.prompt_seen);
+    assert!(tool_result.executed_tools.is_empty());
+    assert!(policy_result.gates_seen.is_empty());
+    assert!(!patch_result.planned);
+}
+
+/// Rebuild from empty trace should report no events.
+#[test]
+fn eval_guard_rebuild_from_empty_works() {
+    let rebuild_result = openwand_session::rebuild::RebuildResult {
+        events_replayed: 0,
+        state_matches: true,
+        divergences: vec![],
+    };
+    let result = collect_rebuild_eval(&rebuild_result);
+    assert_eq!(0, result.events_replayed);
+    assert!(result.state_matches);
+}

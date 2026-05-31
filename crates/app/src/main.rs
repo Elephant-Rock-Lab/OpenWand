@@ -643,6 +643,124 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     observed_at: chrono::Utc::now(),
                 };
 
+                // Build dimension scores with evidence refs
+                let mut dimensions = vec![];
+
+                // Prompt dimension
+                if !prompt_result.evidence_missing {
+                    dimensions.push(DimensionScore {
+                        name: "prompt".to_string(),
+                        passed: if prompt_result.prompt_seen { 1 } else { 0 },
+                        total: 1,
+                        evidence_refs: vec![EvalEvidenceRef {
+                            source: EvalEvidenceSource::Trace,
+                            event_kind: Some("inference.called".to_string()),
+                            summary: format!("Model: {}",
+                                prompt_result.model.as_deref().unwrap_or("unknown")),
+                        }],
+                    });
+                }
+
+                // Tool dimension
+                if trace_evidence.has_tool_events() {
+                    let tool_passed = tool_result.executed_tools.len() as u32;
+                    let tool_total = tool_result.requested_tools.len().max(tool_result.executed_tools.len()) as u32;
+                    dimensions.push(DimensionScore {
+                        name: "tool".to_string(),
+                        passed: tool_passed,
+                        total: tool_total.max(1),
+                        evidence_refs: trace_evidence.tool_events.iter().take(3).map(|e| EvalEvidenceRef {
+                            source: EvalEvidenceSource::Trace,
+                            event_kind: Some(e.event_kind.clone()),
+                            summary: e.summary.clone(),
+                        }).collect(),
+                    });
+                }
+
+                // Policy dimension
+                if trace_evidence.has_gate_events() {
+                    let gate_count = policy_result.gates_seen.len() as u32;
+                    dimensions.push(DimensionScore {
+                        name: "policy".to_string(),
+                        passed: gate_count,
+                        total: gate_count.max(1),
+                        evidence_refs: trace_evidence.gate_events.iter().take(3).map(|e| EvalEvidenceRef {
+                            source: EvalEvidenceSource::Trace,
+                            event_kind: Some(e.event_kind.clone()),
+                            summary: e.summary.clone(),
+                        }).collect(),
+                    });
+                }
+
+                // Patch dimension
+                if patch_result.planned || patch_result.applied {
+                    let patch_score = if patch_result.planned && patch_result.applied { 2 } else { 1 };
+                    dimensions.push(DimensionScore {
+                        name: "patch".to_string(),
+                        passed: patch_score,
+                        total: 2,
+                        evidence_refs: trace_evidence.file_events.iter().take(2).map(|e| EvalEvidenceRef {
+                            source: EvalEvidenceSource::Trace,
+                            event_kind: Some(e.event_kind.clone()),
+                            summary: e.summary.clone(),
+                        }).collect(),
+                    });
+                }
+
+                // Memory dimension
+                if !memory_result.included_claims_seen.is_empty() || !s.expected.included_claims.is_empty() {
+                    let mem_total = s.expected.included_claims.len().max(1) as u32;
+                    let mem_passed = (mem_total - memory_result.missing_required.len() as u32).min(mem_total);
+                    dimensions.push(DimensionScore {
+                        name: "memory".to_string(),
+                        passed: mem_passed,
+                        total: mem_total,
+                        evidence_refs: vec![EvalEvidenceRef {
+                            source: EvalEvidenceSource::GovernedReport,
+                            event_kind: None,
+                            summary: format!("Included: {}, Excluded: {}",
+                                memory_result.included_claims_seen.len(),
+                                memory_result.excluded_claims_seen.len()),
+                        }],
+                    });
+                }
+
+                // Explain dimension
+                if explain_result.memory_matches || explain_result.tool_matches {
+                    let explain_score =
+                        (explain_result.memory_matches as u32)
+                        + (explain_result.policy_matches as u32)
+                        + (explain_result.tool_matches as u32)
+                        + (explain_result.completion_matches as u32);
+                    dimensions.push(DimensionScore {
+                        name: "explain".to_string(),
+                        passed: explain_score,
+                        total: 4,
+                        evidence_refs: vec![EvalEvidenceRef {
+                            source: EvalEvidenceSource::Explanation,
+                            event_kind: None,
+                            summary: format!("Memory={}, Policy={}, Tool={}, Completion={}",
+                                explain_result.memory_matches, explain_result.policy_matches,
+                                explain_result.tool_matches, explain_result.completion_matches),
+                        }],
+                    });
+                }
+
+                // Rebuild dimension (always present)
+                dimensions.push(DimensionScore {
+                    name: "rebuild".to_string(),
+                    passed: if rebuild_result.state_matches { 1 } else { 0 },
+                    total: 1,
+                    evidence_refs: vec![EvalEvidenceRef {
+                        source: EvalEvidenceSource::Rebuild,
+                        event_kind: Some("session.rebuild".to_string()),
+                        summary: format!("Replayed {} events; state_matches={}",
+                            rebuild_result.events_replayed, rebuild_result.state_matches),
+                    }],
+                });
+
+                let score = EvalScore::from_dimensions(dimensions);
+
                 let report = EvalRunReport {
                     report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
                     scenario_id: s.id.clone(),
@@ -654,7 +772,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     patch: patch_result,
                     explain: explain_result,
                     rebuild: rebuild_result,
-                    score: EvalScore::from_dimensions(vec![]),
+                    score,
                 };
 
                 // Save report using EvalReportStore

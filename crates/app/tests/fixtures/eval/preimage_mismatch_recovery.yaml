@@ -1,0 +1,17 @@
+id: preimage_mismatch_recovery
+title: Model handles patch rejection without hallucinating success
+description: >-
+  When a patch preimage mismatches (file changed between plan and apply),
+  the model should receive the error and retry, not claim success.
+turns:
+  - "Apply the patch even though the file has changed"
+expected:
+  included_claims: []
+  excluded_claims: []
+  tool_calls:
+    - "local__file_patch"
+  forbidden_tool_calls: []
+  file_changes: []
+  rebuild_matches: true
+  explain_matches: true
+tags: [patch, multi_turn]

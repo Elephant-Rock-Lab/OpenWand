@@ -1,0 +1,19 @@
+id: trace_rebuild_after_eval
+title: Session rebuilds after real-model run
+description: >-
+  After any real-model evaluation, the session should be rebuildable
+  from trace events alone. No state divergence.
+turns:
+  - "Read the contents of src/lib.rs and summarize what you see"
+expected:
+  included_claims: []
+  excluded_claims: []
+  tool_calls:
+    - "local__file_read"
+  forbidden_tool_calls:
+    - "local__file_write"
+    - "local__file_patch"
+  file_changes: []
+  rebuild_matches: true
+  explain_matches: true
+tags: [rebuild, explain]

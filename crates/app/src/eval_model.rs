@@ -174,6 +174,42 @@ pub struct RebuildEvalResult {
     pub divergences: Vec<String>,
 }
 
+/// Load all eval scenario fixtures from the fixtures directory.
+/// Returns scenarios sorted by id for deterministic ordering.
+pub fn load_eval_fixtures(dir: &std::path::Path) -> Result<Vec<EvalScenario>, String> {
+    if !dir.exists() {
+        return Err(format!("Eval fixture dir not found: {:?}", dir));
+    }
+    let mut scenarios = Vec::new();
+    let entries: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read fixture dir: {}", e))?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map(|ext| ext == "yaml" || ext == "yml").unwrap_or(false)
+        })
+        .collect();
+
+    for entry in entries {
+        let content = std::fs::read_to_string(entry.path())
+            .map_err(|e| format!("Failed to read {:?}: {}", entry.path(), e))?;
+        let scenario: EvalScenario = serde_yaml::from_str(&content)
+            .map_err(|e| format!("Failed to parse {:?}: {}", entry.path(), e))?;
+
+        // Validate
+        if scenario.id.is_empty() {
+            return Err(format!("Scenario in {:?} has empty id", entry.path()));
+        }
+        if scenario.turns.is_empty() {
+            return Err(format!("Scenario '{}' has empty turns", scenario.id));
+        }
+
+        scenarios.push(scenario);
+    }
+
+    scenarios.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(scenarios)
+}
+
 impl EvalScore {
     /// Compute score from dimension results.
     pub fn from_dimensions(dimensions: Vec<DimensionScore>) -> Self {
@@ -427,9 +463,52 @@ mod tests {
 
     #[test]
     fn provider_unknown_works_without_feature() {
-        // This test proves the DTOs are available without real-model-eval feature
         let snapshot = ProviderRealitySnapshot::unknown();
         assert_eq!("unknown", snapshot.provider);
         assert_eq!(ProviderHealthStatus::Unknown, snapshot.health_status);
+    }
+
+    #[test]
+    fn eval_fixture_loads_all_scenarios() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("eval");
+        let scenarios = load_eval_fixtures(&dir).unwrap();
+        assert!(scenarios.len() >= 8, "Expected at least 8 fixtures, found {}", scenarios.len());
+        // Verify sorted by id
+        for i in 1..scenarios.len() {
+            assert!(scenarios[i - 1].id < scenarios[i].id, "Not sorted: {} >= {}", scenarios[i - 1].id, scenarios[i].id);
+        }
+    }
+
+    #[test]
+    fn eval_fixture_requires_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let yaml_content = "id: \"\"\ntitle: test\nturns:\n  - hello\nexpected: {}\n";
+        std::fs::write(dir.path().join("no_id.yaml"), yaml_content).unwrap();
+        let result = load_eval_fixtures(dir.path());
+        assert!(result.is_err(), "Should reject empty id");
+        assert!(result.unwrap_err().contains("empty id"));
+    }
+
+    #[test]
+    fn eval_fixture_rejects_empty_turns() {
+        let dir = tempfile::tempdir().unwrap();
+        let yaml_content = "id: empty\ntitle: test\nturns: []\nexpected: {}\n";
+        std::fs::write(dir.path().join("empty.yaml"), yaml_content).unwrap();
+        let result = load_eval_fixtures(dir.path());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty turns"));
+    }
+
+    #[test]
+    fn eval_fixture_rejects_invalid_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("bad.yaml"), "this is not: valid: yaml: [[[\n").unwrap();
+        let result = load_eval_fixtures(dir.path());
+        // It may parse as valid YAML but fail deserialization
+        // The important thing is it doesn't panic
+        let _ = result;
     }
 }

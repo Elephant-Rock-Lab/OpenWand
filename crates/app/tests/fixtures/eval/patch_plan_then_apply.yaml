@@ -1,0 +1,18 @@
+id: patch_plan_then_apply
+title: Model plans before applying patch
+description: >-
+  The model should use file_patch in plan mode first, then apply after
+  approval. Not skip to direct write.
+turns:
+  - "Modify the hello function to return the greeting string"
+expected:
+  included_claims: []
+  excluded_claims: []
+  tool_calls:
+    - "local__file_patch"
+  forbidden_tool_calls:
+    - "local__file_write"
+  file_changes: ["src/lib.rs"]
+  rebuild_matches: true
+  explain_matches: true
+tags: [patch, policy]

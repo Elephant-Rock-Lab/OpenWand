@@ -288,6 +288,13 @@ enum AutoCommitCommands {
         #[command(subcommand)]
         command: PushProposalCommands,
     },
+
+    /// Governed remote push execution
+    #[cfg(feature = "real-model-eval")]
+    Push {
+        #[command(subcommand)]
+        command: PushExecutionCommands,
+    },
 }
 
 #[cfg(feature = "real-model-eval")]
@@ -612,6 +619,80 @@ enum PushProposalReviewCommands {
         /// Report store directory
         #[arg(long, default_value = "eval_reports")]
         output_dir: String,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum PushExecutionCommands {
+    /// Execute a governed remote push
+    Execute {
+        /// Proposal ID
+        #[arg(long)]
+        proposal_id: String,
+
+        /// Review ID
+        #[arg(long)]
+        review_id: String,
+
+        /// Idempotency key
+        #[arg(long)]
+        idempotency_key: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show push execution subcommands
+    Execution {
+        #[command(subcommand)]
+        command: PushExecutionQueryCommands,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum PushExecutionQueryCommands {
+    /// Show a push execution record
+    Show {
+        /// Execution ID
+        execution_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show latest push execution
+    Latest {
+        /// Filter by proposal ID
+        #[arg(long)]
+        proposal_id: Option<String>,
+
+        /// Filter by review ID
+        #[arg(long)]
+        review_id: Option<String>,
+
+        /// Filter by commit hash
+        #[arg(long)]
+        commit: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -2417,6 +2498,102 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                                     match load_latest_push_review_for_proposal(std::path::Path::new(&output_dir), &pid).map_err(|e| anyhow::anyhow!("{}", e))? {
                                         Some(r) => println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?),
                                         None => println!("No reviews found for proposal: {}", proposal_id),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::Push { command } => {
+                    use openwand_app::eval_remote_push_execution::*;
+                    use openwand_app::eval_remote_push_proposal::{RemotePushProposalId, RemotePushProposalReviewId, load_push_proposal, load_push_proposal_review};
+                    use openwand_app::eval_remote_push_readiness::load_readiness_record;
+
+                    match command {
+                        PushExecutionCommands::Execute { proposal_id, review_id, idempotency_key, output_dir, json } => {
+                            let pid = RemotePushProposalId(proposal_id.clone());
+                            let rid = RemotePushProposalReviewId(review_id.clone());
+                            let ikey = idempotency_key.unwrap_or_else(|| format!("exe_{}_{}", proposal_id, review_id));
+
+                            // Load proposal and review
+                            let proposal = load_push_proposal(std::path::Path::new(&output_dir), &pid)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?
+                                .ok_or_else(|| anyhow::anyhow!("Proposal not found: {}", proposal_id))?;
+                            let review = load_push_proposal_review(std::path::Path::new(&output_dir), &rid)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?
+                                .ok_or_else(|| anyhow::anyhow!("Review not found: {}", review_id))?;
+
+                            // Load linked records
+                            let readiness = load_readiness_record(std::path::Path::new(&output_dir), &proposal.readiness_id)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let req = RemotePushExecutionRequest {
+                                proposal_id: pid, review_id: rid,
+                                requested_by: "cli".into(),
+                                requested_at: chrono::Utc::now(),
+                                idempotency_key: ikey,
+                            };
+
+                            // Use local backend
+                            let backend = LocalPushExecutionBackend;
+                            let repo = std::path::Path::new(".");
+
+                            // Load existing executions
+                            let existing = list_push_executions(std::path::Path::new(&output_dir))
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let record = execute_push(
+                                &backend, repo, std::path::Path::new(&output_dir), &req,
+                                Some(&proposal), Some(&review), readiness.as_ref(),
+                                None, None, None, &existing, true, true,
+                            );
+
+                            save_push_execution(std::path::Path::new(&output_dir), &record)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+                            } else {
+                                println!("Push Execution: {}", record.execution_id.0);
+                                println!("Status: {:?}", record.status);
+                                println!("Target: {}/{}", record.target_remote, record.target_branch);
+                            }
+                        }
+
+                        PushExecutionCommands::Execution { command } => {
+                            match command {
+                                PushExecutionQueryCommands::Show { execution_id, output_dir, json } => {
+                                    let eid = RemotePushExecutionId(execution_id.clone());
+                                    match load_push_execution(std::path::Path::new(&output_dir), &eid).map_err(|e| anyhow::anyhow!("{}", e))? {
+                                        Some(r) => {
+                                            if json {
+                                                println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?);
+                                            } else {
+                                                println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?);
+                                            }
+                                        }
+                                        None => println!("Execution not found: {}", execution_id),
+                                    }
+                                }
+
+                                PushExecutionQueryCommands::Latest { proposal_id, review_id, commit, output_dir, json } => {
+                                    let result = match (proposal_id, review_id, commit) {
+                                        (Some(pid), _, _) => load_push_execution_by_proposal(std::path::Path::new(&output_dir), &RemotePushProposalId(pid)),
+                                        (_, Some(rid), _) => load_push_execution_by_review(std::path::Path::new(&output_dir), &RemotePushProposalReviewId(rid)),
+                                        (_, _, Some(c)) => load_push_execution_by_commit(std::path::Path::new(&output_dir), &c),
+                                        _ => load_latest_push_execution(std::path::Path::new(&output_dir)),
+                                    }.map_err(|e| anyhow::anyhow!("{}", e))?;
+                                    match result {
+                                        Some(r) => {
+                                            if json {
+                                                println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?);
+                                            } else {
+                                                println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?);
+                                            }
+                                        }
+                                        None => println!("No push executions found."),
                                     }
                                 }
                             }

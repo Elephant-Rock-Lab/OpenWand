@@ -248,6 +248,32 @@ enum AutoCommitCommands {
         #[command(subcommand)]
         command: ExecutionCommands,
     },
+
+    /// Verify a post-commit execution
+    #[cfg(feature = "real-model-eval")]
+    Verify {
+        /// Execution ID to verify
+        execution_id: String,
+
+        /// Idempotency key
+        #[arg(long)]
+        idempotency_key: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show verification records
+    #[cfg(feature = "real-model-eval")]
+    Verification {
+        #[command(subcommand)]
+        command: VerificationCommands,
+    },
 }
 
 #[cfg(feature = "real-model-eval")]
@@ -356,6 +382,31 @@ enum ExecutionCommands {
         /// Filter by proposal ID
         #[arg(long)]
         proposal_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum VerificationCommands {
+    /// Show a specific verification record
+    Show {
+        /// Verification ID
+        verification_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest verification record
+    Latest {
+        /// Filter by execution ID
+        #[arg(long)]
+        execution_id: Option<String>,
 
         /// Report store directory
         #[arg(long, default_value = "eval_reports")]
@@ -1820,6 +1871,139 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                                     println!("{}", json_str);
                                 }
                                 None => println!("No executions found."),
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::Verify { execution_id, idempotency_key, output_dir, json } => {
+                    use openwand_app::eval_post_commit_verify::*;
+                    use openwand_app::eval_proposal::*;
+                    use openwand_app::eval_proposal_execution::*;
+                    use openwand_app::eval_proposal_review::*;
+
+                    let exec_id = AutoCommitExecutionId(execution_id.clone());
+                    let exec_record = load_execution_record(
+                        std::path::Path::new(&output_dir), &exec_id,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let exec_record = match exec_record {
+                        Some(r) => r,
+                        None => anyhow::bail!("Execution not found: {}", execution_id),
+                    };
+
+                    let proposal = load_proposal(
+                        std::path::Path::new(&output_dir), &exec_record.proposal_id,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let review = load_proposal_review(
+                        std::path::Path::new(&output_dir), &exec_record.review_id,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let existing = list_verification_records(
+                        std::path::Path::new(&output_dir),
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let ikey = idempotency_key.unwrap_or_else(|| format!("vkey_{}", execution_id));
+                    let req = PostCommitVerificationRequest {
+                        execution_id: exec_id,
+                        requested_by: "cli".to_string(),
+                        requested_at: chrono::Utc::now(),
+                        idempotency_key: ikey,
+                    };
+
+                    let repo = std::env::current_dir()
+                        .context("Cannot determine working directory")?;
+
+                    let checks = LocalVerifierBackend::default_checks();
+                    let backend = LocalVerifierBackend { default_checks: checks.clone() };
+
+                    let record = verify_execution(
+                        &backend, &repo, &req,
+                        Some(&exec_record), proposal.as_ref(), review.as_ref(),
+                        &existing, &checks,
+                    );
+
+                    let path = save_verification_record(
+                        std::path::Path::new(&output_dir), &record,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    if json {
+                        let json_str = serde_json::to_string_pretty(&record)
+                            .context("Failed to serialize")?;
+                        println!("{}", json_str);
+                    } else {
+                        println!("Verification: {}", record.verification_id.0);
+                        println!("Status: {:?}", record.status);
+                        println!("Execution: {}", execution_id);
+                        println!();
+
+                        let passed: Vec<_> = record.predicates.iter().filter(|p| p.passed).collect();
+                        let failed: Vec<_> = record.predicates.iter().filter(|p| !p.passed).collect();
+                        println!("Predicates: {}/{} passed", passed.len(), record.predicates.len());
+
+                        if !failed.is_empty() {
+                            println!("Failed predicates:");
+                            for f in &failed {
+                                println!("  - {:?}: {}", f.predicate, f.reason);
+                            }
+                        }
+
+                        if let Some(ref evidence) = record.commit_evidence {
+                            println!();
+                            println!("Commit: {}", evidence.commit_hash);
+                        }
+
+                        if let Some(ref drill) = record.rollback_drill {
+                            println!();
+                            println!("Rollback drill: {}", if drill.clean { "clean" } else { "conflicts" });
+                        }
+                    }
+                    println!();
+                    println!("Report: {}", path.display());
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::Verification { command } => {
+                    use openwand_app::eval_post_commit_verify::*;
+                    use openwand_app::eval_proposal_execution::AutoCommitExecutionId;
+
+                    match command {
+                        VerificationCommands::Show { verification_id, output_dir } => {
+                            let vid = PostCommitVerificationId(verification_id.clone());
+                            let record = load_verification_record(
+                                std::path::Path::new(&output_dir), &vid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match record {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("Verification not found: {}", verification_id),
+                            }
+                        }
+
+                        VerificationCommands::Latest { execution_id, output_dir } => {
+                            let record = match execution_id {
+                                Some(eid) => load_latest_verification_for_execution(
+                                    std::path::Path::new(&output_dir),
+                                    &AutoCommitExecutionId(eid),
+                                ),
+                                None => load_latest_verification(
+                                    std::path::Path::new(&output_dir),
+                                ),
+                            }.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match record {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("No verifications found."),
                             }
                         }
                     }

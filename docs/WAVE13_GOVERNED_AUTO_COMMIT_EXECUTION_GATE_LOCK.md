@@ -3,7 +3,7 @@
 **Commit:** `b4fbd21`  
 **Date:** 2026-06-02  
 **Status:** LOCKED  
-**Tests:** 1188 total, zero failures
+**Tests:** 1192 total, zero failures
 
 ## Scope
 
@@ -117,7 +117,7 @@ openwand eval auto-commit execution latest [--proposal-id <id>]
 
 All execution commands feature-gated behind `real-model-eval`.
 
-## Test Coverage (36 tests)
+## Test Coverage (40 tests)
 
 ### Commit 1: DTO and Builder (10 tests)
 - Execution request roundtrip serialization
@@ -172,6 +172,12 @@ All execution commands feature-gated behind `real-model-eval`.
 - Latest execution returns expected
 - Latest execution for proposal returns expected
 - List execution records returns sorted by date
+
+### CLI Surface (4 tests)
+- cli_execute_blocked_outputs_predicates: blocked record carries predicate list for CLI display
+- cli_execute_blocked_prints_no_commit_executed: blocked record has no resulting_commit; CLI won't falsely print commit hash
+- cli_execution_show_roundtrips_record: load by execution_id roundtrips all fields including resulting_commit
+- cli_execution_latest_returns_latest: unfiltered latest returns newest; proposal-filtered returns correct per-proposal record
 
 ## Doctrines Enforced
 

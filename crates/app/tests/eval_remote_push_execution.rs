@@ -8,6 +8,7 @@ use openwand_app::eval_proposal::*;
 use openwand_app::eval_proposal_execution::*;
 use openwand_app::eval_proposal_review::*;
 use openwand_app::eval_readiness::*;
+use std::path::{Path, PathBuf};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -966,4 +967,497 @@ fn run_execute(
         assert!(record.pre_push_remote.is_some());
         // post_push_remote may or may not be present depending on test backend
     }
+}
+
+// ── Bare-Remote Runtime Helpers ──────────────────────────────────────────────
+//
+// Test fixture helpers may invoke git commands required to construct isolated
+// local repositories. These fixture commands are not part of the governed
+// backend command surface. The production backend command-surface guard applies
+// only to LocalPushExecutionBackend.
+
+fn run_git_raw(dir: &Path, args: &[&str]) -> String {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("git command failed to start");
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!("git {} failed: {}", args.join(" "), stderr);
+    }
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+struct BareFixture {
+    _tmpdir: tempfile::TempDir,
+    work: PathBuf,
+    remote: PathBuf,
+    initial_commit: String,
+    second_commit: String,
+    old_remote_commit: String,
+}
+
+impl BareFixture {
+    fn new() -> Self {
+        Self::new_with_branches(&["main"])
+    }
+
+    fn new_with_branches(branches: &[&str]) -> Self {
+        let tmpdir = tempfile::tempdir().expect("tempdir");
+        let base = tmpdir.path().to_path_buf();
+        let work = base.join("work");
+        let remote = base.join("remote.git");
+
+        // Create bare remote
+        run_git_raw(&base, &["init", "--bare", "remote.git"]);
+
+        // Create working repo
+        run_git_raw(&base, &["init", "-b", "main", "work"]);
+        run_git_raw(&work, &["config", "user.name", "Test"]);
+        run_git_raw(&work, &["config", "user.email", "test@test.com"]);
+
+        // Create initial commit
+        std::fs::write(work.join("hello.txt"), "initial").unwrap();
+        run_git_raw(&work, &["add", "hello.txt"]);
+        run_git_raw(&work, &["commit", "-m", "initial commit"]);
+        let initial_commit = run_git_raw(&work, &["rev-parse", "HEAD"]);
+
+        // Verify branch is main
+        let branch = run_git_raw(&work, &["symbolic-ref", "--short", "HEAD"]);
+        assert_eq!("main", branch, "Initial branch must be main");
+
+        // Add remote
+        let remote_url = if cfg!(windows) {
+            // Windows: use absolute path with forward slashes for git
+            let url = remote.to_string_lossy().replace('\\', "/");
+            if url.starts_with('/') { url } else { format!("/{}", url) }
+        } else {
+            remote.to_string_lossy().to_string()
+        };
+        run_git_raw(&work, &["remote", "add", "origin", &remote_url]);
+
+        // Push initial branch to remote
+        run_git_raw(&work, &["push", "-u", "origin", "main"]);
+
+        // Set up additional branches on remote
+        for branch in branches.iter() {
+            if *branch != "main" {
+                // Create branch, push it, then switch back to main
+                run_git_raw(&work, &["checkout", "-b", branch]);
+                std::fs::write(work.join(format!("{}.txt", branch)), branch).unwrap();
+                run_git_raw(&work, &["add", &format!("{}.txt", branch)]);
+                run_git_raw(&work, &["commit", "-m", &format!("{} commit", branch)]);
+                run_git_raw(&work, &["push", "-u", "origin", branch]);
+                run_git_raw(&work, &["checkout", "main"]);
+            }
+        }
+
+        // Record the remote commit (what's on the bare remote now for main)
+        let old_remote_commit = remote_ref(&remote, "main")
+            .expect("main branch should exist on remote after setup");
+
+        // Create second commit locally (the push candidate)
+        std::fs::write(work.join("second.txt"), "second content").unwrap();
+        run_git_raw(&work, &["add", "second.txt"]);
+        run_git_raw(&work, &["commit", "-m", "second commit"]);
+        let second_commit = run_git_raw(&work, &["rev-parse", "HEAD"]);
+
+        Self {
+            _tmpdir: tmpdir,
+            work,
+            remote,
+            initial_commit,
+            second_commit,
+            old_remote_commit,
+        }
+    }
+}
+
+fn remote_ref(remote: &Path, branch: &str) -> Option<String> {
+    let output = run_git_raw(remote, &["show-ref"]);
+    let ref_name = format!("refs/heads/{}", branch);
+    for line in output.lines() {
+        let parts: Vec<&str> = line.splitn(2, ' ').collect();
+        if parts.len() == 2 && parts[1] == ref_name {
+            return Some(parts[0].to_string());
+        }
+    }
+    None
+}
+
+fn remote_heads(remote: &Path) -> std::collections::BTreeMap<String, String> {
+    let mut heads = std::collections::BTreeMap::new();
+    let output = run_git_raw(remote, &["show-ref"]);
+    for line in output.lines() {
+        let parts: Vec<&str> = line.splitn(2, ' ').collect();
+        if parts.len() == 2 && parts[1].starts_with("refs/heads/") {
+            heads.insert(parts[1].to_string(), parts[0].to_string());
+        }
+    }
+    heads
+}
+
+fn remote_tags(remote: &Path) -> std::collections::BTreeMap<String, String> {
+    let mut tags = std::collections::BTreeMap::new();
+    let output = run_git_raw(remote, &["show-ref"]);
+    for line in output.lines() {
+        let parts: Vec<&str> = line.splitn(2, ' ').collect();
+        if parts.len() == 2 && parts[1].starts_with("refs/tags/") {
+            tags.insert(parts[1].to_string(), parts[0].to_string());
+        }
+    }
+    tags
+}
+
+struct LocalState {
+    head: String,
+    porcelain: String,
+}
+
+fn local_state(work: &Path) -> LocalState {
+    let head = run_git_raw(work, &["rev-parse", "HEAD"]);
+    let porcelain = run_git_raw(work, &["status", "--porcelain"]);
+    LocalState { head, porcelain }
+}
+
+fn make_bare_chain_proposal(fixture: &BareFixture) -> (RemotePushProposal, RemotePushProposalReview, RemotePushReadinessRecord) {
+    // Build a minimal readiness + proposal + review chain using the fixture commits
+    let readiness = RemotePushReadinessRecord {
+        readiness_id: readiness_id_for("fake_verification", "origin", "main", "rkey"),
+        verification_id: PostCommitVerificationId("fake_v".into()),
+        execution_id: AutoCommitExecutionId("fake_e".into()),
+        proposal_id: AutoCommitProposalId("fake_p".into()),
+        review_id: AutoCommitProposalReviewId("fake_r".into()),
+        commit_hash: fixture.second_commit.clone(),
+        target_remote: "origin".into(),
+        target_branch: "main".into(),
+        status: RemotePushReadinessStatus::Ready,
+        decision: RemotePushReadinessDecision::Ready,
+        predicates: vec![],
+        local_branch: Some(LocalBranchPushSnapshot {
+            current_head: fixture.second_commit.clone(),
+            current_branch: "main".into(),
+            target_remote: "origin".into(),
+            target_branch: "main".into(),
+            upstream_ref: Some("refs/remotes/origin/main".into()),
+            remote_tracking_ref: Some("refs/remotes/origin/main".into()),
+            ahead_count: 1, behind_count: 0, diverged: false,
+            worktree_clean: true, index_clean: true,
+        }),
+        remote_tracking: Some(RemoteTrackingSnapshot {
+            remote_name: "origin".into(),
+            tracking_ref: "refs/remotes/origin/main".into(),
+            tracking_commit: Some(fixture.old_remote_commit.clone()),
+            observed_from_local_refs_only: true,
+        }),
+        branch_policy: Some(BranchProtectionPolicySnapshot {
+            branch: "main".into(), direct_push_allowed: true,
+            requires_verified_commit: false, requires_clean_rollback_drill: false,
+            requires_post_commit_checks: false, requires_no_behind_remote: false,
+            requires_no_divergence: false, requires_protected_branch_approval: false,
+            protected_branch: false, policy_source: "test".into(),
+        }),
+        check_evidence: PushCheckEvidenceSnapshot {
+            verification_status: PostCommitVerificationStatus::Verified,
+            post_commit_checks_passed: true, failed_checks: vec![], skipped_required_checks: vec![],
+        },
+        rollback_evidence: PushRollbackEvidenceSnapshot {
+            rollback_drill_present: true, rollback_drill_clean: true,
+            live_repo_unchanged_during_drill: true,
+        },
+        created_at: chrono::Utc::now(),
+    };
+
+    let push_req = RemotePushProposalRequest {
+        readiness_id: readiness.readiness_id.clone(),
+        requested_by: "test".into(),
+        requested_at: chrono::Utc::now(),
+        idempotency_key: "pkey".into(),
+    };
+    let proposal = build_push_proposal(&push_req, Some(&readiness), &[]).unwrap();
+
+    let review_req = RemotePushProposalReviewRequest {
+        proposal_id: proposal.proposal_id.clone(),
+        decision: RemotePushProposalReviewDecision::Approved,
+        reviewer: "alice".into(),
+        rationale: "LGTM".into(),
+        feedback: None,
+        idempotency_key: "rvkey".into(),
+    };
+    let review = build_push_proposal_review(&proposal, &review_req, &[]).unwrap();
+
+    (proposal, review, readiness)
+}
+
+fn execute_bare_push(
+    fixture: &BareFixture,
+    proposal: &RemotePushProposal,
+    review: &RemotePushProposalReview,
+    readiness: &RemotePushReadinessRecord,
+) -> RemotePushExecutionRecord {
+    // Create mock verification and execution records for predicate satisfaction
+    let verified = PostCommitVerificationRecord {
+        verification_id: readiness.verification_id.clone(),
+        execution_id: readiness.execution_id.clone(),
+        proposal_id: readiness.proposal_id.clone(),
+        review_id: readiness.review_id.clone(),
+        status: PostCommitVerificationStatus::Verified,
+        decision: PostCommitVerificationDecision::Verified,
+        predicates: vec![],
+        commit_evidence: None,
+        post_commit_checks: vec![],
+        rollback_drill: None,
+        created_at: chrono::Utc::now(),
+    };
+
+    let exec = AutoCommitExecutionRecord {
+        execution_id: readiness.execution_id.clone(),
+        proposal_id: readiness.proposal_id.clone(),
+        review_id: readiness.review_id.clone(),
+        status: AutoCommitExecutionStatus::Executed,
+        decision: openwand_app::eval_proposal_execution::AutoCommitExecutionDecision {
+            decision: openwand_app::eval_proposal_execution::ExecutionGateDecision::Allow,
+            proposal_id: readiness.proposal_id.clone(),
+            review_id: readiness.review_id.clone(),
+            predicates: vec![],
+            git_state_snapshot: openwand_app::eval_proposal_execution::GitStateSnapshot {
+                head: fixture.old_remote_commit.clone(),
+                branch: "main".into(),
+                index_hash: "idx".into(),
+                worktree_hash: "wt".into(),
+                porcelain: String::new(),
+            },
+            rollback_plan: None,
+        },
+        resulting_commit: Some(openwand_app::eval_proposal_execution::GitCommitSnapshot {
+            commit_hash: fixture.second_commit.clone(),
+            parent_hash: fixture.old_remote_commit.clone(),
+            branch: "main".into(),
+            message_hash: "msghash".into(),
+            committed_at: chrono::Utc::now(),
+        }),
+        created_at: chrono::Utc::now(),
+    };
+
+    let req = RemotePushExecutionRequest {
+        proposal_id: proposal.proposal_id.clone(),
+        review_id: review.review_id.clone(),
+        requested_by: "test".into(),
+        requested_at: chrono::Utc::now(),
+        idempotency_key: "ekey".into(),
+    };
+    let backend = LocalPushExecutionBackend;
+    execute_push(
+        &backend, &fixture.work, &fixture.work.join("store"), &req,
+        Some(proposal), Some(review), Some(readiness),
+        Some(&verified), Some(&exec), readiness.branch_policy.as_ref(), &[], true, true,
+    )
+}
+
+// ── Bare-Remote Runtime Tests (9) ───────────────────────────────────────────
+
+#[test] fn successful_push_updates_existing_bare_remote_branch() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let before = remote_ref(&fixture.remote, "main");
+    assert_eq!(Some(fixture.old_remote_commit.clone()), before);
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status, "Push should succeed");
+
+    let after = remote_ref(&fixture.remote, "main");
+    assert_eq!(Some(fixture.second_commit.clone()), after, "Remote ref should be the pushed commit");
+    assert_ne!(before, after, "Remote ref must change");
+
+    // Push result reflects old→new
+    let pr = record.push_result.as_ref().expect("push result");
+    assert_eq!(fixture.old_remote_commit, pr.old_commit);
+    assert_eq!(fixture.second_commit, pr.new_commit);
+}
+
+#[test] fn successful_push_does_not_create_new_remote_branch() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let heads_before = remote_heads(&fixture.remote);
+    assert!(heads_before.contains_key("refs/heads/main"));
+    assert!(!heads_before.contains_key("refs/heads/unexpected"));
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status);
+
+    let heads_after = remote_heads(&fixture.remote);
+    // Same number of branches, no new ones
+    assert_eq!(heads_before.len(), heads_after.len(), "No new branches created");
+    for key in heads_before.keys() {
+        if key == "refs/heads/main" {
+            // main changed — expected
+        } else {
+            assert_eq!(heads_before.get(key), heads_after.get(key), "Unchanged branch: {}", key);
+        }
+    }
+}
+
+#[test] fn successful_push_does_not_create_tag() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let tags_before = remote_tags(&fixture.remote);
+    assert!(tags_before.is_empty(), "No tags before push");
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status);
+
+    let tags_after = remote_tags(&fixture.remote);
+    assert!(tags_after.is_empty(), "No tags after push");
+}
+
+#[test] fn successful_push_does_not_change_unrelated_remote_branch() {
+    let fixture = BareFixture::new_with_branches(&["main", "other-branch"]);
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let other_before = remote_ref(&fixture.remote, "other-branch")
+        .expect("other-branch should exist");
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status);
+
+    let other_after = remote_ref(&fixture.remote, "other-branch")
+        .expect("other-branch should still exist");
+    assert_eq!(other_before, other_after, "Unrelated branch must not change");
+
+    // But main did change
+    let main_after = remote_ref(&fixture.remote, "main").expect("main should exist");
+    assert_eq!(fixture.second_commit, main_after, "main should be updated");
+}
+
+#[test] fn blocked_push_does_not_change_bare_remote_ref() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    // Dirty the worktree to trigger WorktreeClean predicate failure
+    std::fs::write(fixture.work.join("dirty.txt"), "dirty").unwrap();
+
+    let local_before = local_state(&fixture.work);
+    let remote_before = remote_ref(&fixture.remote, "main");
+
+    // We can't use execute_bare_push because it uses the real backend which will see dirty worktree
+    // Instead, use the real backend but with the dirty state
+    let req = RemotePushExecutionRequest {
+        proposal_id: proposal.proposal_id.clone(),
+        review_id: review.review_id.clone(),
+        requested_by: "test".into(),
+        requested_at: chrono::Utc::now(),
+        idempotency_key: "ekey".into(),
+    };
+    let backend = LocalPushExecutionBackend;
+    let record = execute_push(
+        &backend, &fixture.work, &fixture.work.join("store"), &req,
+        Some(&proposal), Some(&review), Some(&readiness),
+        None, None, readiness.branch_policy.as_ref(), &[], true, true,
+    );
+    assert_eq!(RemotePushExecutionStatus::Blocked, record.status, "Should block on dirty worktree");
+
+    let remote_after = remote_ref(&fixture.remote, "main");
+    assert_eq!(remote_before, remote_after, "Remote ref must not change on blocked push");
+
+    // Local HEAD unchanged
+    let local_after = local_state(&fixture.work);
+    assert_eq!(local_before.head, local_after.head, "Local HEAD unchanged");
+}
+
+#[test] fn missing_remote_branch_blocks_without_creation() {
+    let fixture = BareFixture::new();
+    let (proposal, _review, readiness) = make_bare_chain_proposal(&fixture);
+
+    // Create a proposal targeting a nonexistent branch
+    let mut proposal_missing = proposal.clone();
+    proposal_missing.target_branch = "nonexistent-branch".into();
+    proposal_missing.ref_update.branch = "nonexistent-branch".into();
+    proposal_missing.ref_update.ref_name = "refs/heads/nonexistent-branch".into();
+
+    let review_req = RemotePushProposalReviewRequest {
+        proposal_id: proposal_missing.proposal_id.clone(),
+        decision: RemotePushProposalReviewDecision::Approved,
+        reviewer: "alice".into(),
+        rationale: "LGTM".into(),
+        feedback: None,
+        idempotency_key: "rv2".into(),
+    };
+    let review_missing = build_push_proposal_review(&proposal_missing, &review_req, &[]).unwrap();
+
+    assert!(remote_ref(&fixture.remote, "nonexistent-branch").is_none(),
+        "Branch should not exist before");
+
+    let record = execute_bare_push(&fixture, &proposal_missing, &review_missing, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Blocked, record.status, "Should block on missing branch");
+
+    assert!(remote_ref(&fixture.remote, "nonexistent-branch").is_none(),
+        "Branch must not be created by blocked push");
+}
+
+#[test] fn non_fast_forward_bare_remote_blocks() {
+    let fixture = BareFixture::new();
+
+    // Advance the bare remote independently — push a different commit
+    // Create a seed clone, commit to it, push to bare remote
+    let seed = fixture.work.parent().unwrap().join("seed");
+    run_git_raw(fixture.work.parent().unwrap(), &["clone", &fixture.remote.to_string_lossy(), "seed"]);
+    run_git_raw(&seed, &["config", "user.name", "Test"]);
+    run_git_raw(&seed, &["config", "user.email", "test@test.com"]);
+    // Ensure we're on main branch
+    run_git_raw(&seed, &["checkout", "-b", "main", "origin/main"]);
+    std::fs::write(seed.join("diverge.txt"), "diverged").unwrap();
+    run_git_raw(&seed, &["add", "diverge.txt"]);
+    run_git_raw(&seed, &["commit", "-m", "diverge"]);
+    run_git_raw(&seed, &["push", "origin", "main"]);
+
+    // Now remote has moved past our local commit
+    let diverged_remote = remote_ref(&fixture.remote, "main")
+        .expect("main should exist after diverge");
+    assert_ne!(fixture.old_remote_commit, diverged_remote, "Remote should have advanced");
+
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Blocked, record.status, "Non-FF should block");
+
+    // Remote ref unchanged from diverged state
+    let after = remote_ref(&fixture.remote, "main").expect("main should exist");
+    assert_eq!(diverged_remote, after, "Remote ref unchanged after blocked non-FF");
+}
+
+#[test] fn post_push_ls_remote_confirms_new_commit() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status);
+
+    // The backend should have observed post-push remote state
+    // The post_push_remote field may or may not be populated depending on
+    // whether the backend's observe_remote_ref succeeds after push
+    // But the definitive proof is ls-remote directly
+    let backend = LocalPushExecutionBackend;
+    let observed = backend.observe_remote_ref(
+        &fixture.work, "origin", "main",
+    ).expect("ls-remote should work");
+    assert_eq!(Some(fixture.second_commit.clone()), observed.observed_commit,
+        "Post-push ls-remote must confirm new commit");
+}
+
+#[test] fn successful_push_leaves_local_head_index_worktree_unchanged() {
+    let fixture = BareFixture::new();
+    let (proposal, review, readiness) = make_bare_chain_proposal(&fixture);
+
+    let before = local_state(&fixture.work);
+
+    let record = execute_bare_push(&fixture, &proposal, &review, &readiness);
+    assert_eq!(RemotePushExecutionStatus::Executed, record.status);
+
+    let after = local_state(&fixture.work);
+    assert_eq!(before.head, after.head, "HEAD must not change");
+    assert_eq!(before.porcelain, after.porcelain, "Worktree/index status must not change");
 }

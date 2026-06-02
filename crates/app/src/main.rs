@@ -219,6 +219,35 @@ enum AutoCommitCommands {
     /// Review a proposal
     #[command(subcommand)]
     Review(AutoCommitReviewCommands),
+
+    /// Execute an approved proposal
+    #[cfg(feature = "real-model-eval")]
+    Execute {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Review ID
+        review_id: String,
+
+        /// Idempotency key (prevents double execution)
+        #[arg(long)]
+        idempotency_key: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show execution record
+    #[cfg(feature = "real-model-eval")]
+    Execution {
+        #[command(subcommand)]
+        command: ExecutionCommands,
+    },
 }
 
 #[cfg(feature = "real-model-eval")]
@@ -299,6 +328,31 @@ enum AutoCommitReviewCommands {
 
     /// Show latest review
     LatestReview {
+        /// Filter by proposal ID
+        #[arg(long)]
+        proposal_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum ExecutionCommands {
+    /// Show a specific execution record
+    Show {
+        /// Execution ID
+        execution_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest execution record
+    Latest {
         /// Filter by proposal ID
         #[arg(long)]
         proposal_id: Option<String>,
@@ -1619,6 +1673,153 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                                     println!("{}", json_str);
                                 }
                                 None => println!("No reviews found."),
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::Execute { proposal_id, review_id, idempotency_key, output_dir, json } => {
+                    use openwand_app::eval_proposal::*;
+                    use openwand_app::eval_proposal_execution::*;
+                    use openwand_app::eval_proposal_review::*;
+
+                    let pid = AutoCommitProposalId(proposal_id.clone());
+                    let rid = AutoCommitProposalReviewId(review_id.clone());
+
+                    let proposal = load_proposal(
+                        std::path::Path::new(&output_dir), &pid,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let proposal = match proposal {
+                        Some(p) => p,
+                        None => anyhow::bail!("Proposal not found: {}", proposal_id),
+                    };
+
+                    let review = load_proposal_review(
+                        std::path::Path::new(&output_dir), &rid,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let review = match review {
+                        Some(r) => r,
+                        None => anyhow::bail!("Review not found: {}", review_id),
+                    };
+
+                    let latest_review = load_latest_review_for_proposal(
+                        std::path::Path::new(&output_dir), &pid,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let existing = list_execution_records(
+                        std::path::Path::new(&output_dir),
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    let ikey = idempotency_key.unwrap_or_else(|| format!("auto_{}_{}", proposal_id, review_id));
+
+                    let request = AutoCommitExecutionRequest {
+                        proposal_id: pid.clone(),
+                        review_id: rid.clone(),
+                        requested_by: "cli".to_string(),
+                        requested_at: chrono::Utc::now(),
+                        idempotency_key: ikey.clone(),
+                    };
+
+                    let repo = std::env::current_dir()
+                        .context("Cannot determine working directory")?;
+
+                    let rollback_plan = {
+                        let backend = LocalGitBackend;
+                        let state = backend.observe_state(&repo)
+                            .map_err(|e| anyhow::anyhow!("{}", e.0))?;
+                        Some(RollbackPlanSnapshot {
+                            pre_commit_head: state.head.clone(),
+                            branch: state.branch.clone(),
+                            index_status_hash: state.index_hash.clone(),
+                            worktree_status_hash: state.worktree_hash.clone(),
+                            recovery_command: format!("git reset --hard {}", state.head),
+                            notes: vec!["Auto-generated rollback plan".to_string()],
+                        })
+                    };
+
+                    let record = execute_proposal(
+                        &LocalGitBackend, &repo, &request,
+                        Some(&proposal), Some(&review), latest_review.as_ref(),
+                        &existing, true, rollback_plan,
+                    );
+
+                    let path = save_execution_record(
+                        std::path::Path::new(&output_dir), &record,
+                    ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                    if json {
+                        let json_str = serde_json::to_string_pretty(&record)
+                            .context("Failed to serialize execution record")?;
+                        println!("{}", json_str);
+                    } else {
+                        println!("Execution: {}", record.execution_id.0);
+                        println!("Status: {:?}", record.status);
+                        println!("Proposal: {}", proposal_id);
+                        println!("Review: {}", review_id);
+                        println!();
+
+                        let passed: Vec<_> = record.decision.predicates.iter().filter(|p| p.passed).collect();
+                        let failed: Vec<_> = record.decision.predicates.iter().filter(|p| !p.passed).collect();
+                        println!("Predicates: {}/{} passed", passed.len(), record.decision.predicates.len());
+
+                        if !failed.is_empty() {
+                            println!("Failed predicates:");
+                            for f in &failed {
+                                println!("  - {:?}: {}", f.predicate, f.reason);
+                            }
+                        }
+
+                        if let Some(ref commit) = record.resulting_commit {
+                            println!();
+                            println!("Commit: {}", commit.commit_hash);
+                        }
+                    }
+                    println!();
+                    println!("Report: {}", path.display());
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::Execution { command } => {
+                    use openwand_app::eval_proposal_execution::*;
+
+                    match command {
+                        ExecutionCommands::Show { execution_id, output_dir } => {
+                            let eid = AutoCommitExecutionId(execution_id.clone());
+                            let record = load_execution_record(
+                                std::path::Path::new(&output_dir), &eid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match record {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("Execution not found: {}", execution_id),
+                            }
+                        }
+
+                        ExecutionCommands::Latest { proposal_id, output_dir } => {
+                            let record = match proposal_id {
+                                Some(pid) => load_latest_execution_for_proposal(
+                                    std::path::Path::new(&output_dir),
+                                    &AutoCommitProposalId(pid),
+                                ),
+                                None => load_latest_execution(
+                                    std::path::Path::new(&output_dir),
+                                ),
+                            }.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            match record {
+                                Some(r) => {
+                                    let json_str = serde_json::to_string_pretty(&r)
+                                        .context("Failed to serialize")?;
+                                    println!("{}", json_str);
+                                }
+                                None => println!("No executions found."),
                             }
                         }
                     }

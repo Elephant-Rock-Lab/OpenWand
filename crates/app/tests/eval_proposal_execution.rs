@@ -785,3 +785,169 @@ fn make_eval_report() -> EvalRunReport {
         },
     }
 }
+
+// ── CLI surface tests ───────────────────────────────────────────────────────
+
+/// Verify that executing via the same code path the CLI uses, with a blocked
+/// proposal (rejected review), outputs predicate results in the record.
+#[test]
+fn cli_execute_blocked_outputs_predicates() {
+    let proposal = make_eligible_proposal();
+    let review = make_rejected_review(&proposal);
+    let backend = TestGitBackend::new("abc123", "main");
+    let req = make_execution_request(&proposal, &review);
+
+    // Same call chain as CLI handler (without the feature gate)
+    let record = execute_proposal(
+        &backend, std::path::Path::new("/tmp"), &req,
+        Some(&proposal), Some(&review), Some(&review),
+        &[], true, Some(make_rollback_plan()),
+    );
+
+    assert_eq!(AutoCommitExecutionStatus::Blocked, record.status);
+    // CLI handler prints predicates; verify they exist and are non-empty
+    assert!(!record.decision.predicates.is_empty(),
+        "Blocked execution must carry predicate list for CLI output");
+
+    // At least one must have failed (the rejected review)
+    let failed: Vec<_> = record.decision.predicates.iter().filter(|p| !p.passed).collect();
+    assert!(!failed.is_empty(), "Blocked record must show which predicates failed");
+
+    // Each predicate has a non-empty reason string (CLI prints these)
+    for p in &record.decision.predicates {
+        assert!(!p.reason.is_empty(), "Predicate {:?} must have reason for CLI display", p.predicate);
+    }
+}
+
+/// Verify that a blocked execution record never claims a commit was executed.
+#[test]
+fn cli_execute_blocked_prints_no_commit_executed() {
+    let proposal = make_eligible_proposal();
+    let review = make_rejected_review(&proposal);
+    let backend = TestGitBackend::new("abc123", "main");
+    let req = make_execution_request(&proposal, &review);
+
+    let record = execute_proposal(
+        &backend, std::path::Path::new("/tmp"), &req,
+        Some(&proposal), Some(&review), Some(&review),
+        &[], true, Some(make_rollback_plan()),
+    );
+
+    // CLI handler checks resulting_commit to decide whether to print commit hash
+    assert!(record.resulting_commit.is_none(),
+        "Blocked execution must not have a resulting_commit; CLI would falsely print commit hash");
+    assert_eq!(AutoCommitExecutionStatus::Blocked, record.status);
+
+    // Decision must be Block, not Allow
+    match &record.decision.decision {
+        ExecutionGateDecision::Block { reason_code, summary } => {
+            assert!(!reason_code.is_empty());
+            assert!(!summary.is_empty());
+        }
+        ExecutionGateDecision::Allow => {
+            panic!("Blocked execution must not have Allow decision");
+        }
+    }
+}
+
+/// Verify that `execution show` code path loads and roundtrips the record.
+#[test]
+fn cli_execution_show_roundtrips_record() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Create and execute a record (same as CLI execute handler does)
+    let proposal = make_eligible_proposal();
+    let review = make_approved_review(&proposal);
+    let backend = TestGitBackend::new("abc123", "main");
+    let req = make_execution_request(&proposal, &review);
+    let record = execute_proposal(
+        &backend, std::path::Path::new("/tmp"), &req,
+        Some(&proposal), Some(&review), Some(&review),
+        &[], true, Some(make_rollback_plan()),
+    );
+    save_execution_record(dir.path(), &record).unwrap();
+
+    // Same code path as `execution show <execution_id>` CLI handler
+    let loaded = load_execution_record(dir.path(), &record.execution_id)
+        .expect("load should not error")
+        .expect("record should exist");
+
+    // Verify full roundtrip
+    assert_eq!(record.execution_id, loaded.execution_id);
+    assert_eq!(record.status, loaded.status);
+    assert_eq!(record.proposal_id, loaded.proposal_id);
+    assert_eq!(record.review_id, loaded.review_id);
+    // resulting_commit must roundtrip correctly
+    assert_eq!(record.resulting_commit.is_some(), loaded.resulting_commit.is_some());
+    if let (Some(original), Some(loaded_commit)) = (&record.resulting_commit, &loaded.resulting_commit) {
+        assert_eq!(original.commit_hash, loaded_commit.commit_hash);
+        assert_eq!(original.parent_hash, loaded_commit.parent_hash);
+        assert_eq!(original.branch, loaded_commit.branch);
+    }
+}
+
+/// Verify that `execution latest` returns the most recent record, optionally
+/// filtered by proposal ID.
+#[test]
+fn cli_execution_latest_returns_latest() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Create two proposals with their own executions
+    let proposal1 = make_eligible_proposal();
+    let review1 = make_approved_review(&proposal1);
+    let backend = TestGitBackend::new("abc123", "main");
+    let req1 = make_execution_request(&proposal1, &review1);
+    let record1 = execute_proposal(
+        &backend, std::path::Path::new("/tmp"), &req1,
+        Some(&proposal1), Some(&review1), Some(&review1),
+        &[], true, Some(make_rollback_plan()),
+    );
+    save_execution_record(dir.path(), &record1).unwrap();
+
+    // Small delay so timestamps differ
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // Second proposal (different workspace hash to get a different proposal ID)
+    let inputs2 = AutoCommitProposalInputs {
+        readiness: &make_eligible_readiness(),
+        workspace_digest: &make_workspace_digest("hash_b"),
+        eval_report: &make_eval_report(),
+        comparison: None,
+    };
+    let proposal2 = build_auto_commit_proposal(inputs2);
+    let review2 = make_approved_review(&proposal2);
+    let req2 = AutoCommitExecutionRequest {
+        proposal_id: proposal2.proposal_id.clone(),
+        review_id: review2.review_id.clone(),
+        requested_by: "test_user".to_string(),
+        requested_at: chrono::Utc::now(),
+        idempotency_key: format!("key_{}", proposal2.proposal_id.0),
+    };
+    let record2 = execute_proposal(
+        &backend, std::path::Path::new("/tmp"), &req2,
+        Some(&proposal2), Some(&review2), Some(&review2),
+        &[], true, Some(make_rollback_plan()),
+    );
+    save_execution_record(dir.path(), &record2).unwrap();
+
+    // Same code path as `execution latest` (no proposal filter)
+    let latest = load_latest_execution(dir.path())
+        .expect("load should not error")
+        .expect("latest should exist");
+    assert_eq!(record2.execution_id, latest.execution_id,
+        "Latest should be the second (newer) execution");
+
+    // Same code path as `execution latest --proposal-id <proposal1_id>`
+    let latest_for_p1 = load_latest_execution_for_proposal(dir.path(), &proposal1.proposal_id)
+        .expect("load should not error")
+        .expect("should find execution for proposal1");
+    assert_eq!(record1.execution_id, latest_for_p1.execution_id,
+        "Latest for proposal1 should be record1, not record2");
+
+    // And for proposal2
+    let latest_for_p2 = load_latest_execution_for_proposal(dir.path(), &proposal2.proposal_id)
+        .expect("load should not error")
+        .expect("should find execution for proposal2");
+    assert_eq!(record2.execution_id, latest_for_p2.execution_id,
+        "Latest for proposal2 should be record2");
+}

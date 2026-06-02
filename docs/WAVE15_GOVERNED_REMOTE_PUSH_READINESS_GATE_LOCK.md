@@ -48,7 +48,7 @@ Wave 15: "Is this verified commit eligible to be proposed for remote push?"
 4. Equal specificity → block as ambiguous.
 ```
 
-### Patch 4: Three commits
+### Patch 4: Two commits
 
 1. Code + tests
 2. Lock doc (this file)

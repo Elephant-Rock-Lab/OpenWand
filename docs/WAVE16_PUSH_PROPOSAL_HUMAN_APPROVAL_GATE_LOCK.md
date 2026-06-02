@@ -28,7 +28,7 @@ Wave 17: "Was this exact approved push proposal still valid and safely pushed?"
 
 ## Patches Applied
 
-### Patch 1: 3 commits
+### Patch 1: 2 commits
 
 1. Code + tests
 2. Lock doc

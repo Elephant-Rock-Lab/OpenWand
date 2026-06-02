@@ -4,6 +4,9 @@
 //! never raw store internals.
 
 pub mod dto;
+pub mod governance_actions;
+pub mod governance_components;
+pub mod governance_state;
 pub mod memory_dto;
 pub mod memory_service;
 pub mod replay;

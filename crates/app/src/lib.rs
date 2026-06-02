@@ -6,6 +6,7 @@ pub mod eval_collector;
 pub mod eval_compare;
 pub mod eval_model;
 pub mod eval_proposal;
+pub mod eval_remote_push_readiness;
 pub mod eval_post_commit_verify;
 pub mod eval_proposal_execution;
 pub mod eval_proposal_review;

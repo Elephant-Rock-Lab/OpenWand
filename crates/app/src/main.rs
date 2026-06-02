@@ -274,6 +274,13 @@ enum AutoCommitCommands {
         #[command(subcommand)]
         command: VerificationCommands,
     },
+
+    /// Evaluate push readiness
+    #[cfg(feature = "real-model-eval")]
+    PushReadiness {
+        #[command(subcommand)]
+        command: PushReadinessCommands,
+    },
 }
 
 #[cfg(feature = "real-model-eval")]
@@ -407,6 +414,61 @@ enum VerificationCommands {
         /// Filter by execution ID
         #[arg(long)]
         execution_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum PushReadinessCommands {
+    /// Evaluate push readiness for a verified commit
+    Evaluate {
+        /// Verification ID
+        verification_id: String,
+
+        /// Target remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+
+        /// Target branch name
+        #[arg(long)]
+        branch: Option<String>,
+
+        /// Idempotency key
+        #[arg(long)]
+        idempotency_key: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a specific readiness record
+    Show {
+        /// Readiness ID
+        readiness_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest readiness record
+    Latest {
+        /// Filter by verification ID
+        #[arg(long)]
+        verification_id: Option<String>,
+
+        /// Filter by commit hash
+        #[arg(long)]
+        commit: Option<String>,
 
         /// Report store directory
         #[arg(long, default_value = "eval_reports")]
@@ -2004,6 +2066,78 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                                     println!("{}", json_str);
                                 }
                                 None => println!("No verifications found."),
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::PushReadiness { command } => {
+                    use openwand_app::eval_remote_push_readiness::*;
+                    use openwand_app::eval_post_commit_verify::*;
+                    use openwand_app::eval_proposal_execution::AutoCommitExecutionId;
+
+                    match command {
+                        PushReadinessCommands::Evaluate { verification_id, remote, branch, idempotency_key, output_dir, json } => {
+                            let vid = PostCommitVerificationId(verification_id.clone());
+                            let verification = load_verification_record(
+                                std::path::Path::new(&output_dir), &vid,
+                            ).map_err(|e| anyhow::anyhow!("{}", e))?.ok_or_else(|| anyhow::anyhow!("Verification not found: {}", verification_id))?;
+
+                            let target_branch = branch.unwrap_or_else(|| verification.commit_evidence.as_ref().map(|e| e.branch.clone()).unwrap_or("main".into()));
+                            let ikey = idempotency_key.unwrap_or_else(|| format!("rkey_{}_{}_{}", verification_id, remote, target_branch));
+
+                            let existing = list_readiness_records(std::path::Path::new(&output_dir)).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let req = RemotePushReadinessRequest {
+                                verification_id: vid, target_remote: remote.clone(), target_branch: target_branch.clone(),
+                                requested_by: "cli".into(), requested_at: chrono::Utc::now(), idempotency_key: ikey,
+                            };
+
+                            let repo = std::env::current_dir().context("Cannot determine working directory")?;
+                            let backend = LocalPushReadinessBackend { policy_rules: vec![] };
+
+                            let record = evaluate_push_readiness(&backend, &repo, &req, Some(&verification), &existing);
+
+                            let path = save_readiness_record(std::path::Path::new(&output_dir), &record).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                let json_str = serde_json::to_string_pretty(&record).context("Failed to serialize")?;
+                                println!("{}", json_str);
+                            } else {
+                                println!("Push Readiness: {}", record.readiness_id.0);
+                                println!("Status: {:?}", record.status);
+                                println!("Target: {}/{}", remote, target_branch);
+                                println!();
+                                let passed: Vec<_> = record.predicates.iter().filter(|p| p.passed).collect();
+                                let failed: Vec<_> = record.predicates.iter().filter(|p| !p.passed).collect();
+                                println!("Predicates: {}/{} passed", passed.len(), record.predicates.len());
+                                if !failed.is_empty() {
+                                    println!("Failed:");
+                                    for f in &failed { println!("  - {:?}: {}", f.predicate, f.reason); }
+                                }
+                            }
+                            println!();
+                            println!("Report: {}", path.display());
+                        }
+
+                        PushReadinessCommands::Show { readiness_id, output_dir } => {
+                            let rid = RemotePushReadinessId(readiness_id.clone());
+                            match load_readiness_record(std::path::Path::new(&output_dir), &rid).map_err(|e| anyhow::anyhow!("{}", e))? {
+                                Some(r) => { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); }
+                                None => println!("Readiness not found: {}", readiness_id),
+                            }
+                        }
+
+                        PushReadinessCommands::Latest { verification_id, commit, output_dir } => {
+                            let record = match (verification_id, commit) {
+                                (Some(vid), _) => load_latest_readiness_for_verification(std::path::Path::new(&output_dir), &PostCommitVerificationId(vid)),
+                                (_, Some(ch)) => load_latest_readiness_for_commit(std::path::Path::new(&output_dir), &ch),
+                                _ => load_latest_readiness(std::path::Path::new(&output_dir)),
+                            }.map_err(|e| anyhow::anyhow!("{}", e))?;
+                            match record {
+                                Some(r) => { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); }
+                                None => println!("No readiness records found."),
                             }
                         }
                     }

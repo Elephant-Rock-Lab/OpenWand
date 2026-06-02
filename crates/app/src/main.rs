@@ -281,6 +281,13 @@ enum AutoCommitCommands {
         #[command(subcommand)]
         command: PushReadinessCommands,
     },
+
+    /// Push proposal and review
+    #[cfg(feature = "real-model-eval")]
+    PushProposal {
+        #[command(subcommand)]
+        command: PushProposalCommands,
+    },
 }
 
 #[cfg(feature = "real-model-eval")]
@@ -469,6 +476,138 @@ enum PushReadinessCommands {
         /// Filter by commit hash
         #[arg(long)]
         commit: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum PushProposalCommands {
+    /// Create a push proposal from a readiness record
+    Create {
+        /// Readiness ID
+        readiness_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a push proposal
+    Show {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest push proposal
+    Latest {
+        /// Filter by readiness ID
+        #[arg(long)]
+        readiness_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Review a push proposal
+    Review {
+        #[command(subcommand)]
+        command: PushProposalReviewCommands,
+    },
+}
+
+#[cfg(feature = "real-model-eval")]
+#[derive(Debug, clap::Subcommand)]
+enum PushProposalReviewCommands {
+    /// Approve a push proposal
+    Approve {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Reject a push proposal
+    Reject {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Request changes on a push proposal
+    RequestChanges {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show a push proposal review
+    ShowReview {
+        /// Review ID
+        review_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
+    /// Show latest review for a proposal
+    LatestReview {
+        /// Proposal ID
+        #[arg(long)]
+        proposal_id: String,
 
         /// Report store directory
         #[arg(long, default_value = "eval_reports")]
@@ -2138,6 +2277,148 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                             match record {
                                 Some(r) => { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); }
                                 None => println!("No readiness records found."),
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "real-model-eval")]
+                AutoCommitCommands::PushProposal { command } => {
+                    use openwand_app::eval_remote_push_proposal::*;
+                    use openwand_app::eval_remote_push_readiness::*;
+
+                    match command {
+                        PushProposalCommands::Create { readiness_id, output_dir, json } => {
+                            let rid = RemotePushReadinessId(readiness_id.clone());
+                            let readiness = load_readiness_record(std::path::Path::new(&output_dir), &rid)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?
+                                .ok_or_else(|| anyhow::anyhow!("Readiness not found: {}", readiness_id))?;
+
+                            let req = RemotePushProposalRequest {
+                                readiness_id: rid, requested_by: "cli".into(),
+                                requested_at: chrono::Utc::now(), idempotency_key: format!("pkey_{}", readiness_id),
+                            };
+
+                            let proposal = build_push_proposal(&req, Some(&readiness), &[])
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            let path = save_push_proposal(std::path::Path::new(&output_dir), &proposal)
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                            if json {
+                                println!("{}", serde_json::to_string_pretty(&proposal).context("Serialize")?);
+                            } else {
+                                println!("Push Proposal: {}", proposal.proposal_id.0);
+                                println!("Status: {:?}", proposal.status);
+                                println!("Target: {}/{}", proposal.target_remote, proposal.target_branch);
+                                println!("Commit: {}", &proposal.commit_hash[..8.min(proposal.commit_hash.len())]);
+                            }
+                            println!("Report: {}", path.display());
+                        }
+
+                        PushProposalCommands::Show { proposal_id, output_dir } => {
+                            let pid = RemotePushProposalId(proposal_id.clone());
+                            match load_push_proposal(std::path::Path::new(&output_dir), &pid).map_err(|e| anyhow::anyhow!("{}", e))? {
+                                Some(p) => println!("{}", serde_json::to_string_pretty(&p).context("Serialize")?),
+                                None => println!("Proposal not found: {}", proposal_id),
+                            }
+                        }
+
+                        PushProposalCommands::Latest { readiness_id, output_dir } => {
+                            let result = match readiness_id {
+                                Some(rid) => load_push_proposal_by_readiness(std::path::Path::new(&output_dir), &RemotePushReadinessId(rid)),
+                                None => load_latest_push_proposal(std::path::Path::new(&output_dir)),
+                            }.map_err(|e| anyhow::anyhow!("{}", e))?;
+                            match result {
+                                Some(p) => println!("{}", serde_json::to_string_pretty(&p).context("Serialize")?),
+                                None => println!("No push proposals found."),
+                            }
+                        }
+
+                        PushProposalCommands::Review { command } => {
+                            match command {
+                                PushProposalReviewCommands::Approve { proposal_id, reviewer, rationale, output_dir } => {
+                                    let pid = RemotePushProposalId(proposal_id.clone());
+                                    let proposal = load_push_proposal(std::path::Path::new(&output_dir), &pid)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?
+                                        .ok_or_else(|| anyhow::anyhow!("Proposal not found: {}", proposal_id))?;
+
+                                    let req = RemotePushProposalReviewRequest {
+                                        proposal_id: pid, decision: RemotePushProposalReviewDecision::Approved,
+                                        reviewer, rationale, feedback: None, idempotency_key: format!("rv_{}", proposal_id),
+                                    };
+
+                                    let review = build_push_proposal_review(&proposal, &req, &[])
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+                                    save_push_proposal_review(std::path::Path::new(&output_dir), &review)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                                    println!("Review: {} ({:?})", review.review_id.0, review.decision);
+                                }
+
+                                PushProposalReviewCommands::Reject { proposal_id, reviewer, rationale, feedback, output_dir } => {
+                                    let pid = RemotePushProposalId(proposal_id.clone());
+                                    let proposal = load_push_proposal(std::path::Path::new(&output_dir), &pid)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?
+                                        .ok_or_else(|| anyhow::anyhow!("Proposal not found: {}", proposal_id))?;
+
+                                    let fb = RemotePushProposalFeedback {
+                                        summary: feedback.clone(), blocking_reasons: vec![feedback.clone()],
+                                        requested_changes: vec![], evidence_gaps: vec![], suggested_next_action: String::new(),
+                                    };
+
+                                    let req = RemotePushProposalReviewRequest {
+                                        proposal_id: pid, decision: RemotePushProposalReviewDecision::Rejected,
+                                        reviewer, rationale, feedback: Some(fb), idempotency_key: format!("rv_{}", proposal_id),
+                                    };
+
+                                    let review = build_push_proposal_review(&proposal, &req, &[])
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+                                    save_push_proposal_review(std::path::Path::new(&output_dir), &review)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                                    println!("Review: {} ({:?})", review.review_id.0, review.decision);
+                                }
+
+                                PushProposalReviewCommands::RequestChanges { proposal_id, reviewer, rationale, feedback, output_dir } => {
+                                    let pid = RemotePushProposalId(proposal_id.clone());
+                                    let proposal = load_push_proposal(std::path::Path::new(&output_dir), &pid)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?
+                                        .ok_or_else(|| anyhow::anyhow!("Proposal not found: {}", proposal_id))?;
+
+                                    let fb = RemotePushProposalFeedback {
+                                        summary: feedback.clone(), blocking_reasons: vec![],
+                                        requested_changes: vec![feedback.clone()], evidence_gaps: vec![], suggested_next_action: String::new(),
+                                    };
+
+                                    let req = RemotePushProposalReviewRequest {
+                                        proposal_id: pid, decision: RemotePushProposalReviewDecision::ChangesRequested,
+                                        reviewer, rationale, feedback: Some(fb), idempotency_key: format!("rv_{}", proposal_id),
+                                    };
+
+                                    let review = build_push_proposal_review(&proposal, &req, &[])
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+                                    save_push_proposal_review(std::path::Path::new(&output_dir), &review)
+                                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                                    println!("Review: {} ({:?})", review.review_id.0, review.decision);
+                                }
+
+                                PushProposalReviewCommands::ShowReview { review_id, output_dir } => {
+                                    let rid = RemotePushProposalReviewId(review_id.clone());
+                                    match load_push_proposal_review(std::path::Path::new(&output_dir), &rid).map_err(|e| anyhow::anyhow!("{}", e))? {
+                                        Some(r) => println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?),
+                                        None => println!("Review not found: {}", review_id),
+                                    }
+                                }
+
+                                PushProposalReviewCommands::LatestReview { proposal_id, output_dir } => {
+                                    let pid = RemotePushProposalId(proposal_id.clone());
+                                    match load_latest_push_review_for_proposal(std::path::Path::new(&output_dir), &pid).map_err(|e| anyhow::anyhow!("{}", e))? {
+                                        Some(r) => println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?),
+                                        None => println!("No reviews found for proposal: {}", proposal_id),
+                                    }
+                                }
                             }
                         }
                     }

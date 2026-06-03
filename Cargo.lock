@@ -4171,10 +4171,12 @@ dependencies = [
  "dioxus-desktop",
  "dirs",
  "openwand-core",
+ "openwand-goals",
  "openwand-llm",
  "openwand-memory",
  "openwand-policy",
  "openwand-session",
+ "openwand-skills",
  "openwand-store",
  "openwand-tools",
  "openwand-trace",
@@ -4230,15 +4232,11 @@ dependencies = [
 name = "openwand-goals"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "chrono",
- "openwand-memory",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "tokio",
+ "toml",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -4337,17 +4335,11 @@ dependencies = [
 name = "openwand-skills"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "chrono",
- "comrak",
  "serde",
  "serde_json",
- "serde_yaml",
  "thiserror 2.0.18",
- "tokio",
+ "toml",
  "tracing",
- "uuid",
- "walkdir",
 ]
 
 [[package]]
@@ -6768,9 +6760,7 @@ version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
- "getrandom 0.4.2",
  "js-sys",
- "serde_core",
  "wasm-bindgen",
 ]
 

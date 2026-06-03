@@ -42,6 +42,8 @@ openwand-policy = { path = "../policy" }
 openwand-llm = { path = "../llm", features = ["openai-compatible", "testing"] }
 openwand-memory = { path = "../memory", features = ["sqlite", "testing"] }
 openwand-trace = { path = "../trace", features = ["testing"] }
+openwand-skills = { path = "../skills" }
+openwand-goals = { path = "../goals" }
 
 # Desktop UI (feature-gated)
 dioxus = { version = "=0.7.9", optional = true, features = ["desktop"] }

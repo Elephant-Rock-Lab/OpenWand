@@ -19,6 +19,8 @@ pub mod run_dto;
 pub mod session_actions;
 pub mod session_components;
 pub mod service;
+pub mod skills_goals_components;
+pub mod skills_goals_state;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
 pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};

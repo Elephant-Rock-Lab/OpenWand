@@ -77,6 +77,13 @@ enum Commands {
         task_plan_cmd: TaskPlanCommands,
     },
 
+    /// Workflow proposal commands (no model required)
+    #[command(name = "workflow-proposal")]
+    WorkflowProposal {
+        #[command(subcommand)]
+        workflow_proposal_cmd: WorkflowProposalCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -853,6 +860,7 @@ async fn main() -> Result<()> {
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
+        Commands::WorkflowProposal { workflow_proposal_cmd } => { cmd_workflow_proposal(workflow_proposal_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -2910,6 +2918,330 @@ fn cmd_eval_task_plan(cmd: TaskPlanCommands) -> Result<()> {
                     };
                     validate_task_plan_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
                     save_plan_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: changes_requested");
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Workflow proposal commands
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowProposalCommands {
+    /// Create a workflow proposal from an approved task plan
+    Create {
+        /// Task plan ID to create proposal from
+        #[arg(long)]
+        task_plan_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a specific workflow proposal
+    Show {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the latest workflow proposal
+    Latest {
+        /// Filter by task plan ID
+        #[arg(long)]
+        task_plan_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Review a workflow proposal
+    #[command(subcommand)]
+    Review(WorkflowProposalReviewCommands),
+}
+
+/// Workflow proposal review commands
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowProposalReviewCommands {
+    /// Approve a workflow proposal
+    Approve {
+        /// Proposal ID to approve
+        #[arg(long)]
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Approval rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Reject a workflow proposal
+    Reject {
+        /// Proposal ID to reject
+        #[arg(long)]
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rejection rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback text
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Request changes to a workflow proposal
+    RequestChanges {
+        /// Proposal ID
+        #[arg(long)]
+        proposal_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rationale for changes
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback text
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn cmd_workflow_proposal(cmd: WorkflowProposalCommands) -> Result<()> {
+    use openwand_app::task_planning::*;
+    use openwand_app::workflow_proposal::*;
+    use openwand_workflow::plan::TaskPlanId;
+    use openwand_workflow::plan_review::{TaskPlanReviewDecision, task_review_id_for};
+    use openwand_workflow::workflow_proposal::WorkflowProposalId;
+    use openwand_workflow::workflow_proposal_builder::{WorkflowProposalInput, build_workflow_proposal};
+    use openwand_workflow::workflow_proposal_review::{
+        WorkflowProposalFeedback, WorkflowProposalReview, WorkflowProposalReviewDecision,
+        workflow_review_id_for, validate_workflow_proposal_review,
+    };
+    use chrono::Utc;
+
+    match cmd {
+        WorkflowProposalCommands::Create { task_plan_id, output_dir, json } => {
+            let plan = load_task_plan(std::path::Path::new(&output_dir), &TaskPlanId(task_plan_id))
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let latest_review = latest_plan_review(std::path::Path::new(&output_dir))
+                .map_err(|e| anyhow::anyhow!(e))?
+                .filter(|r| r.plan_id == plan.plan_id);
+
+            let input = WorkflowProposalInput {
+                task_plan: plan.clone(),
+                latest_task_plan_review: latest_review,
+                task_plan_hash: plan.plan_hash.clone(),
+            };
+            let proposal = build_workflow_proposal(input).map_err(|e| anyhow::anyhow!(e))?;
+            let path = save_workflow_proposal(std::path::Path::new(&output_dir), &proposal)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&proposal).context("Serialize")?);
+            } else {
+                println!("Proposal created: {}", proposal.proposal_id.0);
+                println!("  Title: {}", proposal.title);
+                println!("  Stages: {}", proposal.stages.len());
+                println!("  Source plan: {}", proposal.source_task_plan_id.0);
+                println!("  Saved: {}", path.display());
+            }
+        }
+
+        WorkflowProposalCommands::Show { proposal_id, output_dir, json } => {
+            let proposal = load_workflow_proposal(std::path::Path::new(&output_dir), &WorkflowProposalId(proposal_id))
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&proposal).context("Serialize")?);
+            } else {
+                println!("Proposal: {}", proposal.proposal_id.0);
+                println!("  Title: {}", proposal.title);
+                println!("  Status: {:?}", proposal.status);
+                println!("  Stages:");
+                for stage in &proposal.stages {
+                    println!("    {}: {:?} - {}", stage.stage_id, stage.kind, stage.title);
+                }
+            }
+        }
+
+        WorkflowProposalCommands::Latest { task_plan_id, output_dir, json } => {
+            let result = match task_plan_id {
+                Some(tp_id) => workflow_proposal_by_task_plan(
+                    std::path::Path::new(&output_dir), &TaskPlanId(tp_id),
+                ),
+                _ => latest_workflow_proposal(std::path::Path::new(&output_dir)),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(proposal) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&proposal).context("Serialize")?);
+                    } else {
+                        println!("Latest proposal: {}", proposal.proposal_id.0);
+                        println!("  Title: {}", proposal.title);
+                    }
+                }
+                None => println!("No workflow proposals found."),
+            }
+        }
+
+        WorkflowProposalCommands::Review(review_cmd) => {
+            match review_cmd {
+                WorkflowProposalReviewCommands::Approve { proposal_id, reviewer, rationale, output_dir, json } => {
+                    let proposal = load_workflow_proposal(std::path::Path::new(&output_dir), &WorkflowProposalId(proposal_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = workflow_review_id_for(
+                        &proposal.proposal_id,
+                        &WorkflowProposalReviewDecision::Approved,
+                        &rationale,
+                    );
+                    let review = WorkflowProposalReview {
+                        review_id,
+                        proposal_id: proposal.proposal_id.clone(),
+                        source_task_plan_id: proposal.source_task_plan_id.clone(),
+                        proposal_hash: proposal.proposal_hash.clone(),
+                        decision: WorkflowProposalReviewDecision::Approved,
+                        reviewer,
+                        rationale,
+                        feedback: None,
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_workflow_proposal_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_proposal_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: approved");
+                    }
+                }
+
+                WorkflowProposalReviewCommands::Reject { proposal_id, reviewer, rationale, feedback, output_dir, json } => {
+                    let proposal = load_workflow_proposal(std::path::Path::new(&output_dir), &WorkflowProposalId(proposal_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = workflow_review_id_for(
+                        &proposal.proposal_id,
+                        &WorkflowProposalReviewDecision::Rejected,
+                        &rationale,
+                    );
+                    let fb = WorkflowProposalFeedback {
+                        summary: feedback.clone(),
+                        blocking_reasons: vec![feedback],
+                        requested_changes: vec![],
+                        evidence_gaps: vec![],
+                    };
+                    let review = WorkflowProposalReview {
+                        review_id,
+                        proposal_id: proposal.proposal_id.clone(),
+                        source_task_plan_id: proposal.source_task_plan_id.clone(),
+                        proposal_hash: proposal.proposal_hash.clone(),
+                        decision: WorkflowProposalReviewDecision::Rejected,
+                        reviewer,
+                        rationale,
+                        feedback: Some(fb),
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_workflow_proposal_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_proposal_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: rejected");
+                    }
+                }
+
+                WorkflowProposalReviewCommands::RequestChanges { proposal_id, reviewer, rationale, feedback, output_dir, json } => {
+                    let proposal = load_workflow_proposal(std::path::Path::new(&output_dir), &WorkflowProposalId(proposal_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = workflow_review_id_for(
+                        &proposal.proposal_id,
+                        &WorkflowProposalReviewDecision::ChangesRequested,
+                        &rationale,
+                    );
+                    let fb = WorkflowProposalFeedback {
+                        summary: feedback.clone(),
+                        blocking_reasons: vec![],
+                        requested_changes: vec![feedback],
+                        evidence_gaps: vec![],
+                    };
+                    let review = WorkflowProposalReview {
+                        review_id,
+                        proposal_id: proposal.proposal_id.clone(),
+                        source_task_plan_id: proposal.source_task_plan_id.clone(),
+                        proposal_hash: proposal.proposal_hash.clone(),
+                        decision: WorkflowProposalReviewDecision::ChangesRequested,
+                        reviewer,
+                        rationale,
+                        feedback: Some(fb),
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_workflow_proposal_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_proposal_review(std::path::Path::new(&output_dir), &review)
                         .map_err(|e| anyhow::anyhow!(e))?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);

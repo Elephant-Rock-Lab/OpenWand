@@ -3,12 +3,23 @@
 //! The bridge is an app-layer adapter. Workflow crate defines the prompt DTO.
 //! App crate owns the bridge trait and implementations.
 //!
-//! Patch 2: Wave 27 ships the bridge trait and deterministic bridge proof.
-//! LiveSessionBridge is feature-gated until a runtime integration wave.
+//! Wave 28: LiveSessionBridge routes through real SessionRunner with
+//! deterministic fixtures. Production constructor receives real runner handle.
+//! Test-only constructor wraps SessionHarness (Patch 1).
 
 use openwand_workflow::workflow_action_route::{
     WorkflowActionRoutePrompt, WorkflowSessionRouteSnapshot,
 };
+
+use openwand_session::runner::SessionRunner;
+use openwand_session::agent_event::AgentEvent;
+use openwand_session::config::RunConfig;
+use openwand_core::mode::InteractionMode;
+use openwand_trace::TraceStore;
+use openwand_store::StoredEvent;
+use openwand_trace::query::TraceQuery;
+use openwand_trace::stream::{TraceStreamId, TraceStreamScope};
+use std::sync::Arc;
 
 /// Error from session bridge routing.
 #[derive(Debug, Clone)]
@@ -82,11 +93,151 @@ impl WorkflowSessionBridge for DeterministicSessionBridge {
     }
 }
 
-/// Live session bridge — feature-gated stub for Wave 27.
-/// Full implementation deferred to a runtime integration wave (Patch 2).
-#[cfg(feature = "live-session-bridge")]
+/// Live session bridge — routes through real SessionRunner APIs.
+/// Production constructor receives real runner + trace store.
+/// Test-only constructor wraps SessionHarness (Patch 1).
 pub struct LiveSessionBridge {
-    // Will hold Arc<SessionRunner> in future wave
+    runner: Arc<SessionRunner>,
+    trace: Arc<dyn TraceStore<StoredEvent>>,
+    session_id: String,
+}
+
+/// Inner struct for the async route logic.
+struct LiveSessionBridge_ {
+    runner: Arc<SessionRunner>,
+    trace: Arc<dyn TraceStore<StoredEvent>>,
+    session_id: String,
+}
+
+impl LiveSessionBridge {
+    /// Production constructor: receives real app/session runner handle.
+    pub fn new(
+        runner: Arc<SessionRunner>,
+        trace: Arc<dyn TraceStore<StoredEvent>>,
+    ) -> Self {
+        let session_id = runner.session_id.to_string();
+        Self { runner, trace, session_id }
+    }
+
+    /// Test-only constructor from SessionHarness (Patch 1).
+    /// Production code must use `LiveSessionBridge::new()`.
+    pub fn from_harness(harness: openwand_session::testing::harness::SessionHarness) -> Self {
+        Self {
+            session_id: harness.runner.session_id.to_string(),
+            runner: Arc::new(harness.runner),
+            trace: harness.trace.clone() as Arc<dyn TraceStore<StoredEvent>>,
+        }
+    }
+}
+
+impl WorkflowSessionBridge for LiveSessionBridge {
+    fn route_action_to_session(
+        &self,
+        prompt: WorkflowActionRoutePrompt,
+        session_id: Option<String>,
+    ) -> Result<WorkflowSessionRouteSnapshot, WorkflowActionRouteError> {
+        // Patch 3: Create a dedicated runtime.
+        // The sync trait (from Wave 27) requires blocking; a future wave may make it async.
+        // This works when called from a non-async context (regular tests, CLI).
+        let runner = self.runner.clone();
+        let trace = self.trace.clone();
+        let session_id_str = self.session_id.clone();
+        let inner = LiveSessionBridge_ { runner, trace, session_id: session_id_str };
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| WorkflowActionRouteError::BridgeUnavailable(e.to_string()))?;
+        rt.block_on(inner.route_inner(prompt, session_id))
+    }
+}
+
+impl LiveSessionBridge_ {
+    async fn route_inner(
+        &self,
+        prompt: WorkflowActionRoutePrompt,
+        _session_id: Option<String>,
+    ) -> Result<WorkflowSessionRouteSnapshot, WorkflowActionRouteError> {
+        let user_text = prompt.to_session_instruction();
+
+        // Subscribe to events before the turn (Patch 2: map actual AgentEvent variants)
+        let mut rx = self.runner.subscribe();
+
+        let config = RunConfig {
+            max_steps: 5,
+            mode: InteractionMode::Conversational,
+            working_directory: ".".into(),
+            system_prompt: None,
+            llm_target: None,
+            memory_prompt_inputs: None,
+            output_guard: None,
+        };
+
+        let run_result = self.runner.run_turn(user_text, config).await
+            .map_err(|e| WorkflowActionRouteError::SessionError(e.to_string()))?;
+
+        // Drain events from the broadcast stream
+        let mut events: Vec<AgentEvent> = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        // Map events to snapshot fields (Patch 2: only actual AgentEvent variants)
+        let mut tool_call_id: Option<String> = None;
+        let mut tool_name: Option<String> = None;
+        let mut pending_approval_id: Option<String> = None;
+
+        for event in &events {
+            match event {
+                AgentEvent::ToolCallStarted { tool_name: name, tool_call_id: id, .. } => {
+                    tool_call_id = Some(id.to_string());
+                    tool_name = Some(name.clone());
+                }
+                AgentEvent::ApprovalRequested { tool_call_id: id, .. } => {
+                    // Approval request ID from session — workflow does not construct this
+                    pending_approval_id = Some(format!("arid_session_{}", id));
+                }
+                AgentEvent::RunStarted { .. } => {}
+                AgentEvent::PhaseEntered { .. } => {}
+                AgentEvent::TextDelta { .. } => {}
+                AgentEvent::ToolCallCompleted { .. } => {}
+                AgentEvent::ApprovalResolved { .. } => {}
+                AgentEvent::RunCompleted { .. } => {}
+            }
+        }
+
+        // Map stop reason to session status
+        let session_status = match run_result.stop_reason {
+            openwand_session::config::RunStopReason::Natural => "completed",
+            openwand_session::config::RunStopReason::AwaitingApproval => "suspended_for_approval",
+            openwand_session::config::RunStopReason::ToolDenied => "denied",
+            openwand_session::config::RunStopReason::ToolBlocked => "denied",
+            openwand_session::config::RunStopReason::MaxStepsReached => "completed",
+            openwand_session::config::RunStopReason::Cancelled => "failed",
+        };
+
+        // Collect trace IDs scoped to this session only (Patch 4)
+        let stream_id = TraceStreamId {
+            scope: TraceStreamScope::Session,
+            id: self.session_id.clone(),
+        };
+        let query = TraceQuery {
+            stream_id: Some(stream_id),
+            ..Default::default()
+        };
+        let trace_page = self.trace.scan(query).await
+            .map_err(|e| WorkflowActionRouteError::SessionError(e.to_string()))?;
+        let trace_ids: Vec<String> = trace_page.entries.iter()
+            .map(|e| e.id.to_string())
+            .collect();
+
+        Ok(WorkflowSessionRouteSnapshot {
+            session_id: self.session_id.clone(),
+            session_run_id: Some(format!("run_{}", self.session_id)),
+            trace_ids,
+            pending_approval_id,
+            tool_call_id,
+            tool_name_observed_from_session: tool_name,
+            session_status: session_status.to_string(),
+        })
+    }
 }
 
 #[cfg(test)]

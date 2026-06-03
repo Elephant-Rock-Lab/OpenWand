@@ -30,3 +30,4 @@ pub mod workflow_execution;
 pub mod workflow_session_bridge;
 pub mod workflow_action_routing;
 pub mod workflow_approval_bridge;
+pub mod workflow_action_outcome;

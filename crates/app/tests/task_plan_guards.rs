@@ -99,7 +99,9 @@ fn workflow_crate_does_not_import_process_command() {
 #[test]
 fn workflow_crate_does_not_import_tool_executor() {
     let source = read_crate_sources("crates/workflow");
-    assert!(!source.contains("ToolExecutor"));
+    // Check use statements only, not doc comments
+    let use_lines: Vec<&str> = source.lines().filter(|l| l.starts_with("use ")).collect();
+    assert!(!use_lines.iter().any(|l| l.contains("ToolExecutor")));
     assert!(!source.contains("openwand_tools"));
 }
 

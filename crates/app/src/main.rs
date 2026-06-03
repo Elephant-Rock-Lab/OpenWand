@@ -105,6 +105,13 @@ enum Commands {
         workflow_action_cmd: WorkflowActionCommands,
     },
 
+    /// Workflow action outcome commands
+    #[command(name = "workflow-action-outcome")]
+    WorkflowActionOutcome {
+        #[command(subcommand)]
+        workflow_action_outcome_cmd: WorkflowActionOutcomeCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -889,6 +896,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowReadiness { workflow_readiness_cmd } => { cmd_workflow_readiness(workflow_readiness_cmd)?; Ok(()) },
         Commands::WorkflowExecution { workflow_execution_cmd } => { cmd_workflow_execution(workflow_execution_cmd)?; Ok(()) },
         Commands::WorkflowAction { workflow_action_cmd } => { cmd_workflow_action(workflow_action_cmd)?; Ok(()) },
+        Commands::WorkflowActionOutcome { workflow_action_outcome_cmd } => { cmd_workflow_action_outcome(workflow_action_outcome_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -3809,6 +3817,129 @@ fn cmd_workflow_action(cmd: WorkflowActionCommands) -> Result<()> {
                     }
                 }
                 None => println!("No workflow action routes found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowActionOutcomeCommands {
+    /// Resolve a workflow-routed pending approval
+    Resolve {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] route_id: String,
+        #[arg(long)] stage_id: String,
+        #[arg(long)] action_request_id: String,
+        #[arg(long)] session_id: String,
+        #[arg(long)] pending_approval_id: String,
+        #[arg(long)] expected_route_hash: String,
+        #[arg(long)] expected_workflow_run_hash: String,
+        #[arg(long)] approve: bool,
+        #[arg(long)] reject: bool,
+        #[arg(long)] rationale: String,
+        #[arg(long)] tool_call_id: Option<String>,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a specific outcome
+    Show {
+        outcome_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show the latest outcome
+    Latest {
+        #[arg(long)] route_id: Option<String>,
+        #[arg(long)] pending_approval_id: Option<String>,
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] session_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_action_outcome(cmd: WorkflowActionOutcomeCommands) -> Result<()> {
+    use openwand_app::workflow_action_outcome::*;
+    use openwand_app::workflow_approval_bridge::{DeterministicApprovalBridge, WorkflowApprovalBridge};
+    use openwand_workflow::workflow_action_outcome::*;
+    use openwand_workflow::workflow_action_outcome_gate::{WorkflowActionOutcomeContext, evaluate_action_outcome};
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_action_route::WorkflowActionRouteId;
+    use chrono::Utc;
+
+    match cmd {
+        WorkflowActionOutcomeCommands::Resolve {
+            workflow_execution_id, route_id, stage_id, action_request_id,
+            session_id, pending_approval_id, expected_route_hash, expected_workflow_run_hash,
+            approve, reject, rationale, tool_call_id, idempotency_key, output_dir, json,
+        } => {
+            if approve == reject {
+                anyhow::bail!("Must specify exactly one of --approve or --reject");
+            }
+            let resolution = if approve {
+                WorkflowApprovalResolution::Approve { rationale }
+            } else {
+                WorkflowApprovalResolution::Reject { rationale }
+            };
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowActionOutcomeRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                route_id: WorkflowActionRouteId(route_id),
+                stage_id, action_request_id, session_id, pending_approval_id,
+                tool_call_id, expected_route_hash, expected_workflow_run_hash,
+                resolution, requested_by: "cli".into(), requested_at: Utc::now(), idempotency_key,
+            };
+            let prior = list_workflow_action_outcomes(store).unwrap_or_default();
+            let prior_refs: Vec<&WorkflowActionOutcomeRecord> = prior.iter().collect();
+            let context = WorkflowActionOutcomeContext {
+                workflow_run: None, route_record: None, prior_outcomes: prior_refs,
+                approval_bridge_available: true,
+                workflow_run_hash: request.expected_workflow_run_hash.clone(),
+                route_hash: request.expected_route_hash.clone(),
+            };
+            let mut record = evaluate_action_outcome(&request, &context);
+            if record.status == WorkflowActionOutcomeStatus::ApprovalResolved {
+                let bridge = DeterministicApprovalBridge::approved();
+                let outcome = bridge.resolve_workflow_routed_approval(&request).unwrap();
+                record.session_outcome = Some(outcome);
+                record.status = WorkflowActionOutcomeStatus::ToolCompleted;
+                record.decision = WorkflowActionOutcomeDecision::ToolCompleted {
+                    summary: "Resolved via deterministic bridge".into(),
+                };
+                record.completed_at = Some(Utc::now());
+            }
+            let path = save_workflow_action_outcome(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Outcome: {}", record.outcome_id.0);
+                println!("  Status: {:?}", record.status);
+                if let Some(ref o) = record.session_outcome {
+                    println!("  Tool: {} ({})", o.tool_name_observed_from_session.as_deref().unwrap_or("-"), o.tool_status_observed_from_session.as_deref().unwrap_or("-"));
+                }
+                println!("  Saved: {}", path.display());
+            }
+        }
+        WorkflowActionOutcomeCommands::Show { outcome_id, output_dir, json } => {
+            let record = load_workflow_action_outcome(std::path::Path::new(&output_dir),
+                &WorkflowActionOutcomeId(outcome_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Outcome: {} — {:?}", record.outcome_id.0, record.status); }
+        }
+        WorkflowActionOutcomeCommands::Latest { route_id, pending_approval_id, workflow_execution_id, session_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (route_id, pending_approval_id, workflow_execution_id, session_id) {
+                (Some(rid), _, _, _) => outcome_by_route(store, &rid),
+                (_, Some(pid), _, _) => outcome_by_pending_approval(store, &pid),
+                (None, None, Some(eid), _) => outcome_by_workflow_run(store, &eid),
+                (None, None, None, Some(sid)) => outcome_by_session(store, &sid),
+                _ => latest_workflow_action_outcome(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.outcome_id.0, r.status); } }
+                None => println!("No outcomes found."),
             }
         }
     }

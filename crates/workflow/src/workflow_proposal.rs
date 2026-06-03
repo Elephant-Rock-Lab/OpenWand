@@ -179,6 +179,16 @@ pub fn is_valid_capability_category(capability: &str) -> Result<(), String> {
         }
     }
 
+    // Must not start with or be a forbidden tool name (exact prefix match)
+    for &forbidden in FORBIDDEN_TOOL_NAMES {
+        if lower == forbidden || lower.starts_with(&format!("{} ", forbidden)) || lower.starts_with(&format!("{}\t", forbidden)) {
+            return Err(format!(
+                "capability '{}' matches forbidden tool name '{}'",
+                capability, forbidden
+            ));
+        }
+    }
+
     // Must not contain executable markers
     let forbidden_patterns = [
         "--", " -c ", "&&", "||", "; ", "$(", "`", "|",

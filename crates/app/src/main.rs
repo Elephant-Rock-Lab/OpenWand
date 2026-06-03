@@ -98,6 +98,13 @@ enum Commands {
         workflow_execution_cmd: WorkflowExecutionCommands,
     },
 
+    /// Workflow action routing commands (no model required)
+    #[command(name = "workflow-action")]
+    WorkflowAction {
+        #[command(subcommand)]
+        workflow_action_cmd: WorkflowActionCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -733,6 +740,10 @@ enum TaskPlanCommands {
         #[arg(long)]
         intent: String,
 
+        /// Policy constraints (can be repeated)
+        #[arg(long)]
+        policy_constraints: Option<Vec<String>>,
+
         /// Report store directory
         #[arg(long, default_value = "eval_reports")]
         output_dir: String,
@@ -877,6 +888,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowProposal { workflow_proposal_cmd } => { cmd_workflow_proposal(workflow_proposal_cmd)?; Ok(()) },
         Commands::WorkflowReadiness { workflow_readiness_cmd } => { cmd_workflow_readiness(workflow_readiness_cmd)?; Ok(()) },
         Commands::WorkflowExecution { workflow_execution_cmd } => { cmd_workflow_execution(workflow_execution_cmd)?; Ok(()) },
+        Commands::WorkflowAction { workflow_action_cmd } => { cmd_workflow_action(workflow_action_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -2787,7 +2799,7 @@ fn cmd_eval_task_plan(cmd: TaskPlanCommands) -> Result<()> {
     use chrono::Utc;
 
     match cmd {
-        TaskPlanCommands::Create { intent, output_dir, json } => {
+        TaskPlanCommands::Create { intent, policy_constraints, output_dir, json } => {
             if intent.trim().is_empty() {
                 anyhow::bail!("intent must not be empty");
             }
@@ -2798,7 +2810,7 @@ fn cmd_eval_task_plan(cmd: TaskPlanCommands) -> Result<()> {
                 memory_summaries: vec![],
                 trace_summaries: vec![],
                 governance_summaries: vec![],
-                policy_constraints: vec![],
+                policy_constraints: policy_constraints.unwrap_or_default(),
             };
             let plan = build_task_plan(&input).map_err(|e| anyhow::anyhow!(e))?;
             let path = save_task_plan(std::path::Path::new(&output_dir), &plan)
@@ -3547,7 +3559,16 @@ fn cmd_workflow_execution(cmd: WorkflowExecutionCommands) -> Result<()> {
                 session_runtime_available: true,
                 existing_runs: vec![],
             };
-            let record = evaluate_workflow_execution(&request, &context);
+            let mut record = evaluate_workflow_execution(&request, &context);
+            // Advance stages through lifecycle
+            if record.status == openwand_workflow::workflow_run::WorkflowRunStatus::Suspended {
+                if let Some(ref proposal) = context.proposal {
+                    let (stages, events, action_requests) = openwand_workflow::workflow_run_lifecycle::advance_stages(proposal);
+                    record.stages = stages;
+                    record.lifecycle_events = events;
+                    record.action_requests = action_requests;
+                }
+            }
             let path = save_workflow_run(std::path::Path::new(&output_dir), &record)
                 .map_err(|e| anyhow::anyhow!(e))?;
             if json {
@@ -3600,6 +3621,194 @@ fn cmd_workflow_execution(cmd: WorkflowExecutionCommands) -> Result<()> {
                     }
                 }
                 None => println!("No workflow runs found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+
+/// Workflow action routing commands
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowActionCommands {
+    /// Route a prepared workflow action request into a session
+    Route {
+        #[arg(long)]
+        workflow_execution_id: String,
+        #[arg(long)]
+        readiness_id: String,
+        #[arg(long)]
+        proposal_id: String,
+        #[arg(long)]
+        stage_id: String,
+        #[arg(long)]
+        action_request_id: String,
+        #[arg(long)]
+        expected_workflow_run_hash: String,
+        #[arg(long)]
+        expected_action_request_hash: String,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "default")]
+        idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a specific workflow action route
+    Show {
+        route_id: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the latest workflow action route
+    Latest {
+        #[arg(long)]
+        workflow_execution_id: Option<String>,
+        #[arg(long)]
+        stage_id: Option<String>,
+        #[arg(long)]
+        action_request_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn cmd_workflow_action(cmd: WorkflowActionCommands) -> Result<()> {
+    use openwand_app::workflow_action_routing::*;
+    use openwand_app::workflow_execution::*;
+    use openwand_app::workflow_session_bridge::{DeterministicSessionBridge, WorkflowSessionBridge};
+    use openwand_workflow::workflow_action_route::*;
+    use openwand_workflow::workflow_action_route_gate::{WorkflowActionRouteContext, evaluate_action_route};
+    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowRunStatus, WorkflowActionRoutingStatus};
+    use openwand_workflow::workflow_readiness::WorkflowReadinessId;
+    use openwand_workflow::workflow_proposal::WorkflowProposalId;
+    use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
+    use chrono::Utc;
+
+    match cmd {
+        WorkflowActionCommands::Route {
+            workflow_execution_id, readiness_id, proposal_id, stage_id,
+            action_request_id, expected_workflow_run_hash, expected_action_request_hash,
+            session_id, idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let run = load_workflow_run(store, &WorkflowExecutionId(workflow_execution_id.clone())).ok();
+
+            let target_stage = run.as_ref().and_then(|r| r.stages.iter().find(|s| s.stage_id == stage_id));
+            let target_ar = run.as_ref().and_then(|r| r.action_requests.iter().find(|a| a.action_request_id == action_request_id));
+
+            let prior = list_workflow_action_routes(store).unwrap_or_default();
+            let prior_refs: Vec<&WorkflowActionRouteRecord> = prior.iter().collect();
+
+            let request = WorkflowActionRouteRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id.clone()),
+                readiness_id: WorkflowReadinessId(readiness_id),
+                proposal_id: WorkflowProposalId(proposal_id),
+                stage_id, action_request_id, session_id,
+                expected_workflow_run_hash, expected_action_request_hash,
+                requested_by: "cli".into(), requested_at: Utc::now(), idempotency_key,
+            };
+
+            let context = WorkflowActionRouteContext {
+                workflow_run: run.as_ref(),
+                target_stage,
+                target_action_request: target_ar,
+                prior_routes: prior_refs,
+                session_bridge_available: true,
+                session_runner_available: true,
+                workflow_run_hash: request.expected_workflow_run_hash.clone(),
+                action_request_hash: request.expected_action_request_hash.clone(),
+            };
+
+            let mut record = evaluate_action_route(&request, &context);
+
+            // If routed, call the session bridge (deterministic for Wave 27 CLI)
+            if record.status == WorkflowActionRouteStatus::Routed {
+                let bridge = DeterministicSessionBridge::completed();
+                let bridge_result = bridge.route_action_to_session(record.route_prompt.clone(), request.session_id.clone());
+                match bridge_result {
+                    Ok(snap) => {
+                        record.session_route = Some(snap.clone());
+                        if snap.session_status == "completed" {
+                            record.status = WorkflowActionRouteStatus::Completed;
+                            record.decision = WorkflowActionRouteDecision::Completed {
+                                summary: "Session turn completed via deterministic bridge".into(),
+                            };
+                        } else if snap.pending_approval_id.is_some() {
+                            record.status = WorkflowActionRouteStatus::SuspendedForApproval;
+                            record.decision = WorkflowActionRouteDecision::SuspendedForApproval {
+                                approval_request_id: snap.pending_approval_id.unwrap(),
+                                summary: "Session suspended for approval".into(),
+                            };
+                        }
+                        record.completed_at = Some(Utc::now());
+                    }
+                    Err(e) => {
+                        record.status = WorkflowActionRouteStatus::Failed;
+                        record.decision = WorkflowActionRouteDecision::Failed {
+                            reason_code: "bridge_error".into(),
+                            summary: format!("{:?}", e),
+                        };
+                    }
+                }
+            }
+
+            let path = save_workflow_action_route(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Route: {}", record.route_id.0);
+                println!("  Status: {:?}", record.status);
+                println!("  Stage: {}", record.stage_id);
+                println!("  Action: {}", record.action_request_id);
+                if let Some(ref sr) = record.session_route {
+                    println!("  Session: {}", sr.session_id);
+                }
+                println!("  Saved: {}", path.display());
+            }
+        }
+
+        WorkflowActionCommands::Show { route_id, output_dir, json } => {
+            let record = load_workflow_action_route(std::path::Path::new(&output_dir), &WorkflowActionRouteId(route_id))
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Route: {}", record.route_id.0);
+                println!("  Status: {:?}", record.status);
+                if let Some(ref sr) = record.session_route {
+                    println!("  Session: {} ({})", sr.session_id, sr.session_status);
+                }
+            }
+        }
+
+        WorkflowActionCommands::Latest { workflow_execution_id, stage_id, action_request_id, session_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, stage_id, action_request_id, session_id) {
+                (Some(eid), _, _, _) => route_by_workflow_run(store, &eid),
+                (_, Some(sid), _, _) => route_by_stage(store, &sid),
+                (_, _, Some(arid), _) => route_by_action_request(store, &arid),
+                (_, _, _, Some(sess)) => route_by_session(store, &sess),
+                _ => latest_workflow_action_route(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(record) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+                    } else {
+                        println!("Latest route: {}", record.route_id.0);
+                        println!("  Status: {:?}", record.status);
+                    }
+                }
+                None => println!("No workflow action routes found."),
             }
         }
     }

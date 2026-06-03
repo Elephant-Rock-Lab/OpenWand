@@ -39,7 +39,7 @@ openwand-session = { path = "../session", features = ["testing"] }
 openwand-store = { path = "../store", features = ["sqlite"] }
 openwand-tools = { path = "../tools" }
 openwand-policy = { path = "../policy" }
-openwand-llm = { path = "../llm", features = ["openai-compatible"] }
+openwand-llm = { path = "../llm", features = ["openai-compatible", "testing"] }
 openwand-memory = { path = "../memory", features = ["sqlite", "testing"] }
 openwand-trace = { path = "../trace", features = ["testing"] }
 

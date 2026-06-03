@@ -28,3 +28,4 @@ pub mod workflow_proposal;
 pub mod workflow_readiness;
 pub mod workflow_execution;
 pub mod workflow_session_bridge;
+pub mod workflow_action_routing;

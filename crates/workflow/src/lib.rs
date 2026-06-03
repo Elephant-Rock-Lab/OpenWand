@@ -12,3 +12,5 @@ pub mod workflow_proposal;
 pub mod workflow_proposal_builder;
 pub mod workflow_proposal_review;
 pub mod workflow_proposal_validation;
+pub mod workflow_readiness;
+pub mod workflow_readiness_validation;

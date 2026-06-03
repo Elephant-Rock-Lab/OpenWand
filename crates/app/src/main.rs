@@ -70,6 +70,13 @@ enum Commands {
         session_id: String,
     },
 
+    /// Task plan commands (no model required)
+    #[command(name = "task-plan")]
+    TaskPlan {
+        #[command(subcommand)]
+        task_plan_cmd: TaskPlanCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -696,6 +703,143 @@ enum PushExecutionQueryCommands {
     },
 }
 
+/// Task plan commands
+#[derive(Debug, clap::Subcommand)]
+enum TaskPlanCommands {
+    /// Create a task plan from user intent
+    Create {
+        /// User intent text
+        #[arg(long)]
+        intent: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a specific task plan
+    Show {
+        /// Plan ID
+        plan_id: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the latest task plan
+    Latest {
+        /// Filter by goal ID
+        #[arg(long)]
+        goal_id: Option<String>,
+
+        /// Filter by skill ID
+        #[arg(long)]
+        skill_id: Option<String>,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Review a task plan
+    #[command(subcommand)]
+    Review(TaskPlanReviewCommands),
+}
+
+/// Task plan review commands
+#[derive(Debug, clap::Subcommand)]
+enum TaskPlanReviewCommands {
+    /// Approve a task plan
+    Approve {
+        /// Plan ID to approve
+        #[arg(long)]
+        plan_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Approval rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Reject a task plan
+    Reject {
+        /// Plan ID to reject
+        #[arg(long)]
+        plan_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rejection rationale
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback text
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Request changes to a task plan
+    RequestChanges {
+        /// Plan ID
+        #[arg(long)]
+        plan_id: String,
+
+        /// Reviewer name
+        #[arg(long)]
+        reviewer: String,
+
+        /// Rationale for changes
+        #[arg(long)]
+        rationale: String,
+
+        /// Feedback text describing changes needed
+        #[arg(long)]
+        feedback: String,
+
+        /// Report store directory
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -708,6 +852,7 @@ async fn main() -> Result<()> {
         Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
+        Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -2598,6 +2743,179 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_eval_task_plan(cmd: TaskPlanCommands) -> Result<()> {
+    use openwand_app::task_planning::*;
+    use openwand_workflow::builder::build_task_plan;
+    use openwand_workflow::context::TaskPlanInput;
+    use openwand_workflow::plan::TaskPlanId;
+    use openwand_workflow::plan_review::{
+        TaskPlanFeedback, TaskPlanReview, TaskPlanReviewDecision, task_review_id_for,
+    };
+    use openwand_workflow::validation::validate_task_plan_review;
+    use chrono::Utc;
+
+    match cmd {
+        TaskPlanCommands::Create { intent, output_dir, json } => {
+            if intent.trim().is_empty() {
+                anyhow::bail!("intent must not be empty");
+            }
+            let input = TaskPlanInput {
+                user_intent: intent,
+                skill_context: vec![],
+                goal_context: vec![],
+                memory_summaries: vec![],
+                trace_summaries: vec![],
+                governance_summaries: vec![],
+                policy_constraints: vec![],
+            };
+            let plan = build_task_plan(&input).map_err(|e| anyhow::anyhow!(e))?;
+            let path = save_task_plan(std::path::Path::new(&output_dir), &plan)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&plan).context("Serialize")?);
+            } else {
+                println!("Plan created: {}", plan.plan_id.0);
+                println!("  Title: {}", plan.title);
+                println!("  Steps: {}", plan.steps.len());
+                println!("  Saved: {}", path.display());
+            }
+        }
+
+        TaskPlanCommands::Show { plan_id, output_dir, json } => {
+            let plan = load_task_plan(std::path::Path::new(&output_dir), &TaskPlanId(plan_id))
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&plan).context("Serialize")?);
+            } else {
+                println!("Plan: {}", plan.plan_id.0);
+                println!("  Title: {}", plan.title);
+                println!("  Status: {:?}", plan.status);
+                println!("  Steps:");
+                for step in &plan.steps {
+                    println!("    {}: {:?} - {}", step.step_id, step.kind, step.title);
+                }
+            }
+        }
+
+        TaskPlanCommands::Latest { goal_id, skill_id, output_dir, json } => {
+            let result = match (goal_id, skill_id) {
+                (Some(gid), _) => task_plans_by_goal(std::path::Path::new(&output_dir), &gid),
+                (_, Some(sid)) => task_plans_by_skill(std::path::Path::new(&output_dir), &sid),
+                _ => latest_task_plan(std::path::Path::new(&output_dir)),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(plan) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&plan).context("Serialize")?);
+                    } else {
+                        println!("Latest plan: {}", plan.plan_id.0);
+                        println!("  Title: {}", plan.title);
+                    }
+                }
+                None => println!("No task plans found."),
+            }
+        }
+
+        TaskPlanCommands::Review(review_cmd) => {
+            match review_cmd {
+                TaskPlanReviewCommands::Approve { plan_id, reviewer, rationale, output_dir, json } => {
+                    let plan = load_task_plan(std::path::Path::new(&output_dir), &TaskPlanId(plan_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = task_review_id_for(&plan.plan_id, &TaskPlanReviewDecision::Approved, &rationale);
+                    let review = TaskPlanReview {
+                        review_id,
+                        plan_id: plan.plan_id.clone(),
+                        plan_hash: plan.plan_hash.clone(),
+                        decision: TaskPlanReviewDecision::Approved,
+                        reviewer,
+                        rationale,
+                        feedback: None,
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_task_plan_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_plan_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: approved");
+                    }
+                }
+
+                TaskPlanReviewCommands::Reject { plan_id, reviewer, rationale, feedback, output_dir, json } => {
+                    let plan = load_task_plan(std::path::Path::new(&output_dir), &TaskPlanId(plan_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = task_review_id_for(&plan.plan_id, &TaskPlanReviewDecision::Rejected, &rationale);
+                    let fb = TaskPlanFeedback {
+                        summary: feedback.clone(),
+                        blocking_reasons: vec![feedback],
+                        requested_changes: vec![],
+                        evidence_gaps: vec![],
+                    };
+                    let review = TaskPlanReview {
+                        review_id,
+                        plan_id: plan.plan_id.clone(),
+                        plan_hash: plan.plan_hash.clone(),
+                        decision: TaskPlanReviewDecision::Rejected,
+                        reviewer,
+                        rationale,
+                        feedback: Some(fb),
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_task_plan_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_plan_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: rejected");
+                    }
+                }
+
+                TaskPlanReviewCommands::RequestChanges { plan_id, reviewer, rationale, feedback, output_dir, json } => {
+                    let plan = load_task_plan(std::path::Path::new(&output_dir), &TaskPlanId(plan_id))
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    let review_id = task_review_id_for(&plan.plan_id, &TaskPlanReviewDecision::ChangesRequested, &rationale);
+                    let fb = TaskPlanFeedback {
+                        summary: feedback.clone(),
+                        blocking_reasons: vec![],
+                        requested_changes: vec![feedback],
+                        evidence_gaps: vec![],
+                    };
+                    let review = TaskPlanReview {
+                        review_id,
+                        plan_id: plan.plan_id.clone(),
+                        plan_hash: plan.plan_hash.clone(),
+                        decision: TaskPlanReviewDecision::ChangesRequested,
+                        reviewer,
+                        rationale,
+                        feedback: Some(fb),
+                        creates_execution_grant: false,
+                        execution_allowed_now: false,
+                        reviewed_at: Utc::now(),
+                    };
+                    validate_task_plan_review(&review).map_err(|e| anyhow::anyhow!("Validation: {}", e.join(", ")))?;
+                    save_plan_review(std::path::Path::new(&output_dir), &review)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?);
+                    } else {
+                        println!("Review: {}", review.review_id.0);
+                        println!("  Decision: changes_requested");
                     }
                 }
             }

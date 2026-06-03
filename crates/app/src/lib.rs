@@ -27,3 +27,4 @@ pub mod ui;
 pub mod workflow_proposal;
 pub mod workflow_readiness;
 pub mod workflow_execution;
+pub mod workflow_session_bridge;

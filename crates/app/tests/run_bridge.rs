@@ -118,7 +118,10 @@ async fn ui_run_bridge_coalesces_text_without_dropping_completion() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let s = state.lock().unwrap();
-    assert_eq!("AB", s.streamed_text);
+    // After completion, streamed text is flushed into messages
+    assert!(s.streamed_text.is_empty());
+    assert_eq!(1, s.messages.len());
+    assert_eq!("AB", s.messages[0].content);
     assert_eq!(UiRunStatus::Completed, s.status);
 }
 

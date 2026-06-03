@@ -35,7 +35,7 @@ tracing-subscriber = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 openwand-core = { path = "../core" }
 blake3 = { workspace = true }
-openwand-session = { path = "../session" }
+openwand-session = { path = "../session", features = ["testing"] }
 openwand-store = { path = "../store", features = ["sqlite"] }
 openwand-tools = { path = "../tools" }
 openwand-policy = { path = "../policy" }

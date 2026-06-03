@@ -12,6 +12,8 @@ pub mod memory_service;
 pub mod replay;
 pub mod run_bridge;
 pub mod run_dto;
+pub mod session_actions;
+pub mod session_components;
 pub mod service;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};

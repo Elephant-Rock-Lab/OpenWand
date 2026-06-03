@@ -25,6 +25,8 @@ pub mod task_plan_components;
 pub mod task_plan_state;
 pub mod workflow_proposal_components;
 pub mod workflow_proposal_state;
+pub mod workflow_readiness_components;
+pub mod workflow_readiness_state;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
 pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};

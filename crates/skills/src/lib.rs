@@ -1,14 +1,23 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! OpenWand skill definitions — declarative capability context.
+//!
+//! Skills describe reusable capabilities. They are context, not authority.
+//!
+//! This crate provides:
+//! - Skill manifest DTOs (loaded from .openwand/skills.toml)
+//! - Validation and registry
+//! - Read-only context projection for session consumption
+//!
+//! Dependencies: serde, serde_json, toml, thiserror, tracing only.
+//! No dependency on openwand-session, openwand-tools, openwand-policy,
+//! openwand-memory, openwand-trace, openwand-store, tokio, uuid.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod context;
+pub mod manifest;
+pub mod registry;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use context::SkillContextSummary;
+pub use manifest::{SkillContextKind, SkillDefinition, SkillId, SkillManifest};
+pub use registry::{
+    load_skill_registry, SkillRegistry, SkillValidationIssue, SkillValidationReport,
+    SkillValidationSeverity,
+};

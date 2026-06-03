@@ -2,14 +2,15 @@
 name = "openwand-goals"
 version.workspace = true
 edition.workspace = true
+description = "OpenWand goal definitions — declarative outcome context"
 
 [dependencies]
-tokio = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
+toml = "0.8"
 thiserror = { workspace = true }
 tracing = { workspace = true }
-chrono = { workspace = true }
-uuid = { workspace = true }
-openwand-memory = { workspace = true }
+
+# No dependency on openwand-session, openwand-tools, openwand-policy,
+# openwand-memory, openwand-trace, openwand-store, openwand-core,
+# openwand-skills, tokio, uuid, chrono, anyhow.

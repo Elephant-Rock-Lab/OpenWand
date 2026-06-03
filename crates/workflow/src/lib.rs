@@ -13,6 +13,7 @@ pub mod workflow_proposal_builder;
 pub mod workflow_proposal_review;
 pub mod workflow_proposal_validation;
 pub mod workflow_readiness;
+pub mod workflow_action_outcome_gate;
 pub mod workflow_action_outcome;
 pub mod workflow_action_outcome_validation;
 pub mod workflow_action_route;

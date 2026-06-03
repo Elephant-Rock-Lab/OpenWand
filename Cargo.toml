@@ -12,6 +12,7 @@ members = [
     "crates/llm",
     "crates/skills",
     "crates/goals",
+    "crates/workflow",
     "crates/content",
     "crates/app",
     "crates/mcp-pool/tests/fixtures/echo-server",

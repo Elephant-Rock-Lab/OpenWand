@@ -10,4 +10,5 @@ pub mod plan_review;
 pub mod validation;
 pub mod workflow_proposal;
 pub mod workflow_proposal_builder;
+pub mod workflow_proposal_review;
 pub mod workflow_proposal_validation;

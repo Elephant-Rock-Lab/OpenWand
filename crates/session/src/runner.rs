@@ -232,6 +232,11 @@ impl SessionRunner {
         })
     }
 
+    /// Get the working directory for this session.
+    pub fn working_directory(&self) -> &str {
+        &self.working_directory
+    }
+
     /// Get the approval_request_id from the cache, if any.
     async fn pending_approval_hint(&self) -> Option<openwand_core::ApprovalRequestId> {
         self.pending_approval

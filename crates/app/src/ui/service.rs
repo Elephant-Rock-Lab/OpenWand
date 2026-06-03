@@ -216,4 +216,31 @@ impl UiSessionService {
             cancellation,
         })
     }
+
+    /// Resolve a pending tool approval through the existing SessionRunner API.
+    ///
+    /// This is a thin adapter over `SessionRunner::resolve_approval()`.
+    /// It does not construct LLM requests, execute tools, evaluate policy,
+    /// or mutate pending state directly.
+    pub async fn resolve_approval(
+        runner: &SessionRunner,
+        decision: openwand_session::runner::ApprovalDecision,
+        config: RunConfig,
+    ) -> Result<openwand_session::runner::ApprovalResult, UiServiceError> {
+        runner
+            .resolve_approval(decision, config)
+            .await
+            .map_err(UiServiceError::Session)
+    }
+
+    /// Refresh session view by reading from trace projection only.
+    ///
+    /// This is read-only: it opens the session and replays from trace.
+    /// It does not call LLM, tools, policy, or memory writers.
+    pub async fn refresh_session(
+        &self,
+        session_id: &str,
+    ) -> Result<UiSessionView, UiServiceError> {
+        self.open_session(session_id).await
+    }
 }

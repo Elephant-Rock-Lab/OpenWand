@@ -29,8 +29,7 @@ pub fn start_bridge(
                 result = rx.recv() => {
                     match result {
                         Ok(agent_event) => {
-                            let ui_event = translate_event(&agent_event);
-                            if let Some(event) = ui_event {
+                            if let Some(event) = translate_event(&agent_event) {
                                 let mut state = state.lock().unwrap();
                                 state.apply(event);
                             }
@@ -49,6 +48,7 @@ pub fn start_bridge(
                             if state.status == UiRunStatus::Running {
                                 state.status = UiRunStatus::Completed;
                             }
+                            // Don't overwrite WaitingForApproval
                             break;
                         }
                     }
@@ -65,8 +65,14 @@ pub fn start_bridge(
 
 /// Translate an AgentEvent from the session runner into a UiRunEvent.
 /// Returns None for events the UI doesn't need to render.
+///
+/// Maps actual emitted variants from openwand-session only.
+/// See `ui_bridge_covers_all_current_agent_event_variants` guard test.
 fn translate_event(event: &AgentEvent) -> Option<UiRunEvent> {
     match event {
+        AgentEvent::RunStarted { session_id, .. } => Some(UiRunEvent::RunStarted {
+            session_id: session_id.to_string(),
+        }),
         AgentEvent::TextDelta { delta, .. } => Some(UiRunEvent::TextDelta {
             delta: delta.clone(),
         }),
@@ -90,11 +96,28 @@ fn translate_event(event: &AgentEvent) -> Option<UiRunEvent> {
             output: result_preview.clone(),
             is_error: *is_error,
         }),
+        AgentEvent::ApprovalRequested {
+            tool_call_id,
+            tool_name,
+            reason,
+            ..
+        } => Some(UiRunEvent::ToolPendingApproval {
+            tool_call_id: tool_call_id.0.clone(),
+            tool_name: tool_name.clone(),
+            reason: reason.clone(),
+        }),
+        AgentEvent::ApprovalResolved {
+            tool_call_id,
+            approved,
+            ..
+        } => Some(UiRunEvent::ToolApprovalResolved {
+            tool_call_id: tool_call_id.0.clone(),
+            approved: *approved,
+        }),
         AgentEvent::PhaseEntered { phase, step, .. } => Some(UiRunEvent::PhaseChanged {
             phase: phase.clone(),
             step: *step,
         }),
-        AgentEvent::RunStarted { .. } => None, // state already set to Running
         AgentEvent::RunCompleted {
             stop_reason, ..
         } => Some(UiRunEvent::Completed {
@@ -102,7 +125,5 @@ fn translate_event(event: &AgentEvent) -> Option<UiRunEvent> {
             tools: 0,
             reason: stop_reason.clone(),
         }),
-        AgentEvent::ApprovalRequested { .. } => None, // handled at session level
-        AgentEvent::ApprovalResolved { .. } => None,   // handled at session level
     }
 }

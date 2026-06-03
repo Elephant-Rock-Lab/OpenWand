@@ -84,6 +84,13 @@ enum Commands {
         workflow_proposal_cmd: WorkflowProposalCommands,
     },
 
+    /// Workflow readiness evaluation (no model required)
+    #[command(name = "workflow-readiness")]
+    WorkflowReadiness {
+        #[command(subcommand)]
+        workflow_readiness_cmd: WorkflowReadinessCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -861,6 +868,7 @@ async fn main() -> Result<()> {
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
         Commands::WorkflowProposal { workflow_proposal_cmd } => { cmd_workflow_proposal(workflow_proposal_cmd)?; Ok(()) },
+        Commands::WorkflowReadiness { workflow_readiness_cmd } => { cmd_workflow_readiness(workflow_readiness_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -3250,6 +3258,171 @@ fn cmd_workflow_proposal(cmd: WorkflowProposalCommands) -> Result<()> {
                         println!("  Decision: changes_requested");
                     }
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+
+/// Workflow readiness commands
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowReadinessCommands {
+    /// Evaluate workflow readiness
+    Evaluate {
+        #[arg(long)]
+        proposal_id: String,
+        #[arg(long)]
+        review_id: String,
+        #[arg(long)]
+        expected_proposal_hash: String,
+        #[arg(long)]
+        expected_source_task_plan_hash: String,
+        #[arg(long, default_value = "default")]
+        idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a specific readiness record
+    Show {
+        readiness_id: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the latest readiness record
+    Latest {
+        #[arg(long)]
+        proposal_id: Option<String>,
+        #[arg(long)]
+        review_id: Option<String>,
+        #[arg(long)]
+        task_plan_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn cmd_workflow_readiness(cmd: WorkflowReadinessCommands) -> Result<()> {
+    use openwand_app::task_planning::*;
+    use openwand_app::workflow_proposal::*;
+    use openwand_app::workflow_readiness::*;
+    use openwand_workflow::plan::TaskPlanId;
+    use openwand_workflow::workflow_proposal::WorkflowProposalId;
+    use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
+    use openwand_workflow::workflow_readiness::{WorkflowReadinessRequest, WorkflowEnvironmentSnapshot};
+    use openwand_workflow::workflow_readiness_evaluator::{WorkflowReadinessContext, evaluate_workflow_readiness};
+    use chrono::Utc;
+
+    match cmd {
+        WorkflowReadinessCommands::Evaluate {
+            proposal_id, review_id, expected_proposal_hash,
+            expected_source_task_plan_hash, idempotency_key, output_dir, json,
+        } => {
+            let proposal = load_workflow_proposal(
+                std::path::Path::new(&output_dir),
+                &WorkflowProposalId(proposal_id.clone()),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            let review = load_proposal_review(
+                std::path::Path::new(&output_dir),
+                &WorkflowProposalReviewId(review_id.clone()),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+
+            let source_plan = load_task_plan(
+                std::path::Path::new(&output_dir),
+                &proposal.source_task_plan_id,
+            ).ok();
+            let source_review = source_plan.as_ref()
+                .and_then(|_| latest_plan_review(std::path::Path::new(&output_dir)).ok().flatten());
+            let latest_review = latest_proposal_review(std::path::Path::new(&output_dir))
+                .map_err(|e| anyhow::anyhow!(e))?
+                .filter(|r| r.proposal_id == proposal.proposal_id);
+
+            let request = WorkflowReadinessRequest {
+                proposal_id: proposal.proposal_id.clone(),
+                review_id: review.review_id.clone(),
+                expected_proposal_hash,
+                expected_source_task_plan_hash,
+                requested_by: "cli".into(),
+                requested_at: Utc::now(),
+                idempotency_key,
+            };
+            let context = WorkflowReadinessContext {
+                proposal: Some(proposal),
+                review: Some(review.clone()),
+                latest_review_for_proposal: latest_review,
+                source_task_plan: source_plan,
+                source_task_plan_review: source_review.clone(),
+                latest_source_task_plan_review: source_review,
+                environment: WorkflowEnvironmentSnapshot {
+                    workspace_observed: true,
+                    provider_config_available: true,
+                    session_runtime_available: true,
+                    tool_manifest_available: true,
+                    policy_context_available: true,
+                    notes: vec![],
+                },
+                existing_readiness_records: vec![],
+            };
+            let record = evaluate_workflow_readiness(&request, &context);
+            let path = save_workflow_readiness(std::path::Path::new(&output_dir), &record)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Readiness: {}", record.readiness_id.0);
+                println!("  Status: {:?}", record.status);
+                let passed = record.predicates.iter().filter(|p| p.passed).count();
+                println!("  Predicates: {}/{} passed", passed, record.predicates.len());
+                println!("  Saved: {}", path.display());
+            }
+        }
+
+        WorkflowReadinessCommands::Show { readiness_id, output_dir, json } => {
+            let record = load_workflow_readiness(
+                std::path::Path::new(&output_dir),
+                &openwand_workflow::workflow_readiness::WorkflowReadinessId(readiness_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Readiness: {}", record.readiness_id.0);
+                println!("  Status: {:?}", record.status);
+                for pred in &record.predicates {
+                    let mark = if pred.passed { "OK" } else { "FAIL" };
+                    println!("  {} {:?}: {}", mark, pred.predicate, pred.reason);
+                }
+            }
+        }
+
+        WorkflowReadinessCommands::Latest { proposal_id, review_id, task_plan_id, output_dir, json } => {
+            let result = match (proposal_id, review_id, task_plan_id) {
+                (Some(pid), _, _) => workflow_readiness_by_proposal(
+                    std::path::Path::new(&output_dir), &WorkflowProposalId(pid),
+                ),
+                (_, Some(rid), _) => workflow_readiness_by_review(
+                    std::path::Path::new(&output_dir), &WorkflowProposalReviewId(rid),
+                ),
+                (_, _, Some(tpid)) => workflow_readiness_by_task_plan(
+                    std::path::Path::new(&output_dir), &TaskPlanId(tpid),
+                ),
+                _ => latest_workflow_readiness(std::path::Path::new(&output_dir)),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(record) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+                    } else {
+                        println!("Latest readiness: {}", record.readiness_id.0);
+                        println!("  Status: {:?}", record.status);
+                    }
+                }
+                None => println!("No workflow readiness records found."),
             }
         }
     }

@@ -24,8 +24,26 @@ pub struct WorkflowActionRouteUiState {
 }
 
 pub fn workflow_action_route_safety_warning() -> String {
-    "Workflow action routing sends a descriptive action request into the existing SessionRunner path. \
-     Workflow does not execute tools, approve tools, append trace, or construct tool calls directly.".into()
+    "Live workflow routing uses SessionRunner. Workflow observes session-produced events only and still does not execute tools, approve tools, or append trace.".into()
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowSessionBridgeRow {
+    pub bridge_kind: String,
+    pub session_runner_used: bool,
+    pub trace_ids_count: usize,
+    pub observed_tool_call: bool,
+    pub observed_pending_approval: bool,
+}
+
+pub fn workflow_session_bridge_lines(record: &WorkflowActionRouteRecord) -> Option<WorkflowSessionBridgeRow> {
+    record.session_route.as_ref().map(|sr| WorkflowSessionBridgeRow {
+        bridge_kind: "live".into(),
+        session_runner_used: true,
+        trace_ids_count: sr.trace_ids.len(),
+        observed_tool_call: sr.tool_call_id.is_some(),
+        observed_pending_approval: sr.pending_approval_id.is_some(),
+    })
 }
 
 pub fn workflow_action_route_summary(record: &WorkflowActionRouteRecord) -> WorkflowActionRouteSummaryRow {
@@ -142,5 +160,21 @@ mod tests {
         let w = workflow_action_route_safety_warning();
         assert!(w.contains("SessionRunner"));
         assert!(!w.contains("executes tools directly"));
+    }
+
+    #[test]
+    fn bridge_status_helper_shows_live_bridge_kind_when_session_route_present() {
+        let row = workflow_session_bridge_lines(&test_record()).unwrap();
+        assert_eq!("live", row.bridge_kind);
+        assert!(row.session_runner_used);
+        assert_eq!(1, row.trace_ids_count);
+    }
+
+    #[test]
+    fn updated_safety_warning_mentions_live_routing_and_session_runner() {
+        let w = workflow_action_route_safety_warning();
+        assert!(w.contains("Live workflow routing"));
+        assert!(w.contains("SessionRunner"));
+        assert!(w.contains("observes session-produced events only"));
     }
 }

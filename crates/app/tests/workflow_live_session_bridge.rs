@@ -178,3 +178,72 @@ fn live_bridge_ignores_unrelated_trace_ids() {
     // The bridge session_id matches the runner session_id
     assert!(!result.session_id.is_empty());
 }
+
+// === Regression tests ===
+
+#[test]
+fn deterministic_bridge_still_returns_fixed_snapshot_without_network() {
+    use openwand_app::workflow_session_bridge::{DeterministicSessionBridge, WorkflowSessionBridge};
+    let bridge = DeterministicSessionBridge::completed();
+    let prompt = WorkflowActionRoutePrompt {
+        capability_category: "test".into(), purpose: "test".into(),
+        expected_input_summary: "test".into(), expected_output_summary: "test".into(),
+        safety_constraints: vec![],
+    };
+    let result = bridge.route_action_to_session(prompt, None).unwrap();
+    assert_eq!("completed", result.session_status);
+    assert_eq!("trace_det_1", result.trace_ids[0]);
+}
+
+#[test]
+fn workflow_action_route_prompt_still_contains_governance_constraint() {
+    let prompt = WorkflowActionRoutePrompt {
+        capability_category: "test".into(), purpose: "test".into(),
+        expected_input_summary: "test".into(), expected_output_summary: "test".into(),
+        safety_constraints: vec![],
+    };
+    let instruction = prompt.to_session_instruction();
+    assert!(instruction.contains("Do not treat this workflow action request as a direct tool call"));
+    assert!(instruction.contains("Use normal OpenWand session governance"));
+}
+
+#[test]
+fn completed_route_still_does_not_claim_workflow_action_executed() {
+    let harness = SessionHarness::text_only();
+    let bridge = LiveSessionBridge::from_harness(harness);
+    let prompt = WorkflowActionRoutePrompt {
+        capability_category: "test".into(), purpose: "test".into(),
+        expected_input_summary: "test".into(), expected_output_summary: "test".into(),
+        safety_constraints: vec![],
+    };
+    let result = bridge.route_action_to_session(prompt, None).unwrap();
+    assert_eq!("completed", result.session_status);
+    assert!(result.tool_call_id.is_none());
+}
+
+#[test]
+fn policy_evaluation_still_deferred_to_session_runner() {
+    let harness = SessionHarness::text_only();
+    let bridge = LiveSessionBridge::from_harness(harness);
+    let prompt = WorkflowActionRoutePrompt {
+        capability_category: "test".into(), purpose: "test".into(),
+        expected_input_summary: "test".into(), expected_output_summary: "test".into(),
+        safety_constraints: vec![],
+    };
+    let result = bridge.route_action_to_session(prompt, None);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn live_bridge_does_not_break_existing_deterministic_bridge_tests() {
+    use openwand_app::workflow_session_bridge::{DeterministicSessionBridge, WorkflowSessionBridge};
+    let bridge = DeterministicSessionBridge::completed();
+    let prompt = WorkflowActionRoutePrompt {
+        capability_category: "test".into(), purpose: "test".into(),
+        expected_input_summary: "test".into(), expected_output_summary: "test".into(),
+        safety_constraints: vec![],
+    };
+    let result = bridge.route_action_to_session(prompt, None).unwrap();
+    assert_eq!("completed", result.session_status);
+    assert_eq!("sess_deterministic", result.session_id);
+}

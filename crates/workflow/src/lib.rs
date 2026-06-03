@@ -14,3 +14,5 @@ pub mod workflow_proposal_review;
 pub mod workflow_proposal_validation;
 pub mod workflow_readiness;
 pub mod workflow_readiness_validation;
+pub mod workflow_readiness_evaluator;
+pub mod tool_intent_resolution;

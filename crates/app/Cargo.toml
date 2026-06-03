@@ -44,6 +44,7 @@ openwand-memory = { path = "../memory", features = ["sqlite", "testing"] }
 openwand-trace = { path = "../trace", features = ["testing"] }
 openwand-skills = { path = "../skills" }
 openwand-goals = { path = "../goals" }
+openwand-workflow = { path = "../workflow" }
 
 # Desktop UI (feature-gated)
 dioxus = { version = "=0.7.9", optional = true, features = ["desktop"] }

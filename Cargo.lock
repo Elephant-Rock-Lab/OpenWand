@@ -4180,6 +4180,7 @@ dependencies = [
  "openwand-store",
  "openwand-tools",
  "openwand-trace",
+ "openwand-workflow",
  "serde",
  "serde_json",
  "serde_yaml",

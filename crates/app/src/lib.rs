@@ -24,3 +24,4 @@ pub mod session_capability;
 pub mod session_runtime;
 pub mod task_planning;
 pub mod ui;
+pub mod workflow_proposal;

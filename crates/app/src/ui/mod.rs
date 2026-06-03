@@ -23,6 +23,8 @@ pub mod skills_goals_components;
 pub mod skills_goals_state;
 pub mod task_plan_components;
 pub mod task_plan_state;
+pub mod workflow_proposal_components;
+pub mod workflow_proposal_state;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
 pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};

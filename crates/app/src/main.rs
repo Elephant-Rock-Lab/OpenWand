@@ -91,6 +91,13 @@ enum Commands {
         workflow_readiness_cmd: WorkflowReadinessCommands,
     },
 
+    /// Workflow execution commands (no model required)
+    #[command(name = "workflow-execution")]
+    WorkflowExecution {
+        #[command(subcommand)]
+        workflow_execution_cmd: WorkflowExecutionCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -869,6 +876,7 @@ async fn main() -> Result<()> {
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
         Commands::WorkflowProposal { workflow_proposal_cmd } => { cmd_workflow_proposal(workflow_proposal_cmd)?; Ok(()) },
         Commands::WorkflowReadiness { workflow_readiness_cmd } => { cmd_workflow_readiness(workflow_readiness_cmd)?; Ok(()) },
+        Commands::WorkflowExecution { workflow_execution_cmd } => { cmd_workflow_execution(workflow_execution_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -3423,6 +3431,175 @@ fn cmd_workflow_readiness(cmd: WorkflowReadinessCommands) -> Result<()> {
                     }
                 }
                 None => println!("No workflow readiness records found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+
+/// Workflow execution commands
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowExecutionCommands {
+    /// Execute a workflow from a readiness record
+    Execute {
+        #[arg(long)]
+        readiness_id: String,
+        #[arg(long)]
+        proposal_id: String,
+        #[arg(long)]
+        proposal_review_id: String,
+        #[arg(long)]
+        expected_readiness_hash: String,
+        #[arg(long)]
+        expected_proposal_hash: String,
+        #[arg(long, default_value = "default")]
+        idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a specific workflow run
+    Show {
+        execution_id: String,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the latest workflow run
+    Latest {
+        #[arg(long)]
+        readiness_id: Option<String>,
+        #[arg(long)]
+        proposal_id: Option<String>,
+        #[arg(long)]
+        proposal_review_id: Option<String>,
+        #[arg(long)]
+        task_plan_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn cmd_workflow_execution(cmd: WorkflowExecutionCommands) -> Result<()> {
+    use openwand_app::workflow_execution::*;
+    use openwand_app::workflow_proposal::*;
+    use openwand_app::workflow_readiness::*;
+    use openwand_app::task_planning::*;
+    use openwand_workflow::plan::TaskPlanId;
+    use openwand_workflow::workflow_proposal::WorkflowProposalId;
+    use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
+    use openwand_workflow::workflow_readiness::WorkflowReadinessId;
+    use openwand_workflow::workflow_readiness::WorkflowEnvironmentSnapshot;
+    use openwand_workflow::workflow_run::{WorkflowExecutionRequest, WorkflowRunStatus};
+    use openwand_workflow::workflow_execution_gate::{WorkflowExecutionContext, evaluate_workflow_execution};
+    use chrono::Utc;
+
+    match cmd {
+        WorkflowExecutionCommands::Execute {
+            readiness_id, proposal_id, proposal_review_id,
+            expected_readiness_hash, expected_proposal_hash,
+            idempotency_key, output_dir, json,
+        } => {
+            let readiness = load_workflow_readiness(
+                std::path::Path::new(&output_dir),
+                &WorkflowReadinessId(readiness_id.clone()),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            let proposal = load_workflow_proposal(
+                std::path::Path::new(&output_dir),
+                &WorkflowProposalId(proposal_id.clone()),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            let review = load_proposal_review(
+                std::path::Path::new(&output_dir),
+                &WorkflowProposalReviewId(proposal_review_id.clone()),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+
+            let source_plan = load_task_plan(
+                std::path::Path::new(&output_dir),
+                &proposal.source_task_plan_id,
+            ).ok();
+            let latest_review = latest_proposal_review(std::path::Path::new(&output_dir))
+                .ok().flatten().filter(|r| r.proposal_id == proposal.proposal_id);
+
+            let request = WorkflowExecutionRequest {
+                readiness_id: readiness.readiness_id.clone(),
+                proposal_id: proposal.proposal_id.clone(),
+                proposal_review_id: review.review_id.clone(),
+                expected_readiness_hash,
+                expected_proposal_hash,
+                requested_by: "cli".into(),
+                requested_at: Utc::now(),
+                idempotency_key,
+            };
+            let context = WorkflowExecutionContext {
+                readiness: Some(readiness),
+                proposal: Some(proposal),
+                proposal_review: Some(review.clone()),
+                latest_proposal_review: latest_review,
+                source_task_plan: source_plan,
+                source_task_plan_review: None,
+                latest_source_task_plan_review: None,
+                provider_config_available: true,
+                session_runtime_available: true,
+                existing_runs: vec![],
+            };
+            let record = evaluate_workflow_execution(&request, &context);
+            let path = save_workflow_run(std::path::Path::new(&output_dir), &record)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Run: {}", record.execution_id.0);
+                println!("  Status: {:?}", record.status);
+                println!("  Stages: {}", record.stages.len());
+                let passed = record.predicates.iter().filter(|p| p.passed).count();
+                println!("  Predicates: {}/{} passed", passed, record.predicates.len());
+                println!("  Saved: {}", path.display());
+            }
+        }
+
+        WorkflowExecutionCommands::Show { execution_id, output_dir, json } => {
+            let record = load_workflow_run(
+                std::path::Path::new(&output_dir),
+                &openwand_workflow::workflow_run::WorkflowExecutionId(execution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Run: {}", record.execution_id.0);
+                println!("  Status: {:?}", record.status);
+                for stage in &record.stages {
+                    println!("  {}: {:?} - {:?}", stage.stage_id, stage.kind, stage.status);
+                }
+            }
+        }
+
+        WorkflowExecutionCommands::Latest { readiness_id, proposal_id, proposal_review_id, task_plan_id, output_dir, json } => {
+            let result = match (readiness_id, proposal_id, proposal_review_id, task_plan_id) {
+                (Some(rid), _, _, _) => workflow_run_by_readiness(
+                    std::path::Path::new(&output_dir), &WorkflowReadinessId(rid)),
+                (_, Some(pid), _, _) => workflow_run_by_proposal(
+                    std::path::Path::new(&output_dir), &WorkflowProposalId(pid)),
+                (_, _, Some(rid), _) => workflow_run_by_review(
+                    std::path::Path::new(&output_dir), &WorkflowProposalReviewId(rid)),
+                (_, _, _, Some(tpid)) => workflow_run_by_task_plan(
+                    std::path::Path::new(&output_dir), &TaskPlanId(tpid)),
+                _ => latest_workflow_run(std::path::Path::new(&output_dir)),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(record) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+                    } else {
+                        println!("Latest run: {}", record.execution_id.0);
+                        println!("  Status: {:?}", record.status);
+                    }
+                }
+                None => println!("No workflow runs found."),
             }
         }
     }

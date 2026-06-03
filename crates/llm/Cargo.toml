@@ -15,6 +15,7 @@ chrono = { workspace = true, features = ["serde"] }
 tracing = { workspace = true }
 reqwest = { version = "0.12", features = ["json", "stream"], optional = true }
 tokio = { workspace = true, optional = true }
+toml = "0.8"
 
 # No dependency on openwand-session, openwand-trace, openwand-memory,
 # openwand-policy, openwand-tools, openwand-mcp-pool, openwand-store,
@@ -24,6 +25,8 @@ tokio = { workspace = true, optional = true }
 default = []
 testing = []
 openai-compatible = ["reqwest", "tokio"]
+anthropic-compatible = ["reqwest", "tokio"]
+real-provider-smoke = ["openai-compatible", "anthropic-compatible"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

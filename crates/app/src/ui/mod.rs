@@ -11,6 +11,8 @@ pub mod inspector_components;
 pub mod inspector_state;
 pub mod memory_dto;
 pub mod memory_service;
+pub mod provider_components;
+pub mod provider_config;
 pub mod replay;
 pub mod run_bridge;
 pub mod run_dto;

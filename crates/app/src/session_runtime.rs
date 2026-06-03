@@ -6,6 +6,8 @@
 use openwand_core::SessionId;
 use openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient;
 use openwand_llm::LlmClient;
+use openwand_llm::provider_config::ProviderTargetConfig;
+use openwand_llm::provider_registry::ProviderRegistry;
 use openwand_memory::{MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_policy::{BuiltinPolicyEngine, PolicyEngine};
 use openwand_session::runner::SessionRunner;
@@ -65,6 +67,65 @@ pub async fn build_session_runtime(
     );
 
     // 8. Create session runner
+    let session_id = SessionId::new();
+    let runner = SessionRunner::new(
+        session_id.clone(),
+        trace,
+        llm,
+        tools,
+        policy,
+        memory_read.clone(),
+        working_directory.to_string(),
+    );
+
+    Ok(SessionRuntime {
+        runner,
+        trace: trace_for_coordinator.clone(),
+        trace_for_coordinator,
+        memory_store: memory_for_coordinator,
+        memory_read,
+        session_id,
+    })
+}
+
+/// Build session runtime using a provider registry.
+/// Resolves the provider from the registry by target ID.
+pub async fn build_session_runtime_with_provider(
+    db_path: &str,
+    working_directory: &str,
+    provider_configs: Vec<ProviderTargetConfig>,
+    target_id: &str,
+) -> anyhow::Result<SessionRuntime> {
+    let registry = ProviderRegistry::new(provider_configs);
+    let llm = registry.build_client(target_id)?;
+
+    // 1. Open SQLite store (trace + registry)
+    let store = SqliteStore::open(SqliteStoreConfig::file(db_path)).await?;
+    let trace: Arc<dyn TraceStore<StoredEvent>> = Arc::new(store);
+
+    // 2. Open SQLite memory store
+    let memory_store = SqliteMemoryStore::open(Path::new(db_path))?;
+    let memory_read: Arc<dyn MemoryReadStore> = Arc::new(memory_store);
+
+    // 3. Create tools executor
+    let tools: Arc<dyn ToolExecutor> = Arc::new(
+        CompositeToolExecutor::local_only(openwand_tools::local::batch2_local_tools())
+    );
+
+    // 4. Create policy engine
+    let policy: Arc<dyn PolicyEngine> = Arc::new(build_write_policy());
+
+    // 5. Second trace store connection for coordinator
+    let trace_for_coordinator: Arc<dyn TraceStore<StoredEvent>> = Arc::new(
+        SqliteStore::open(SqliteStoreConfig::file(db_path)).await?
+    );
+
+    // 6. Memory store with write access for coordinator
+    let memory_for_coordinator: Arc<dyn MemoryStore> = Arc::new(
+        SqliteMemoryStore::open(Path::new(db_path))?
+    );
+
+    // 7. Create session runner
     let session_id = SessionId::new();
     let runner = SessionRunner::new(
         session_id.clone(),

@@ -49,7 +49,7 @@ impl OpenAiCompatibleClient {
     }
 
     /// Convert an OpenWand LlmRequest into an OpenAI-compatible JSON body.
-    fn build_request_body(request: &LlmRequest) -> serde_json::Value {
+    pub fn build_request_body(request: &LlmRequest) -> serde_json::Value {
         let mut messages = Vec::new();
 
         // System prompt

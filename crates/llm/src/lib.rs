@@ -8,6 +8,8 @@
 pub mod adapters;
 pub mod client;
 pub mod error;
+pub mod provider_config;
+pub mod provider_registry;
 pub mod request;
 pub mod response;
 pub mod tool_buffer;

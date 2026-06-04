@@ -41,6 +41,8 @@ pub mod workflow_routing_readiness_components;
 pub mod workflow_routing_readiness_state;
 pub mod workflow_next_action_routing_components;
 pub mod workflow_next_action_routing_state;
+pub mod workflow_loop_controller_components;
+pub mod workflow_loop_controller_state;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
 pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};

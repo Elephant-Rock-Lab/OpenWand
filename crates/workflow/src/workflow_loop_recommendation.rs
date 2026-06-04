@@ -110,7 +110,7 @@ mod tests {
             command_hint: hint.into(),
             reason: "test".into(), required_inputs: vec![], evidence_links: vec![],
         };
-        // It's a plain string, not a Command or process builder
+        // It's a plain string, not a process builder or shell invocation
         assert_eq!(rec.command_hint, hint);
     }
 

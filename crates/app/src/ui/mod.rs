@@ -45,6 +45,8 @@ pub mod workflow_loop_controller_components;
 pub mod workflow_loop_controller_state;
 pub mod workflow_command_composer_components;
 pub mod workflow_command_composer_state;
+pub mod workflow_command_review_components;
+pub mod workflow_command_review_state;
 
 pub use dto::{CreateSessionRequest, UiMessage, UiMessageRole, UiSessionSummary, UiSessionView};
 pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSummary};

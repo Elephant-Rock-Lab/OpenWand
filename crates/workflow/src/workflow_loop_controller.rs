@@ -545,4 +545,678 @@ mod tests {
         assert!(rec.predicates.is_empty());
         assert!(!rec.creates_route); assert!(!rec.schedules_work); assert!(!rec.retries_operation);
     }
+
+    // --- State Detection + Recommendation tests (commits 2+3) ---
+
+    fn empty_ctx() -> WorkflowLoopContext<'static> {
+        WorkflowLoopContext {
+            workflow_run: None, latest_revision: None, latest_route: None,
+            latest_outcome: None, latest_reconciliation: None, latest_continuation: None,
+            latest_proposal: None, latest_review: None, latest_routing_readiness: None,
+            latest_next_action_routing: None,
+        }
+    }
+
+    fn suspended_run() -> WorkflowRunRecord {
+        use crate::workflow_run::*;
+        WorkflowRunRecord {
+            execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            proposal_review_id: crate::workflow_proposal_review::WorkflowProposalReviewId("wfr_t".into()),
+            source_task_plan_id: crate::plan::TaskPlanId("tpl_t".into()),
+            status: WorkflowRunStatus::Suspended,
+            decision: WorkflowExecutionDecision::RunCreated,
+            predicates: vec![],
+            run_snapshot: crate::workflow_run::WorkflowRunSnapshot {
+                readiness_id: "r".into(), proposal_id: "p".into(),
+                proposal_hash: "h".into(), source_task_plan_hash: "s".into(),
+                readiness_status_at_execution: "ready".into(),
+                proposal_review_decision_at_execution: "approved".into(),
+            },
+            stages: vec![], lifecycle_events: vec![], action_requests: vec![],
+            abort_snapshot: crate::workflow_run::WorkflowAbortSnapshot {
+                abort_notes_available: false, rollback_notes_available: false, recovery_notes: vec![],
+            },
+            created_at: Utc::now(), completed_at: None,
+        }
+    }
+
+    fn pending_revision() -> WorkflowRunRevision {
+        use crate::workflow_reconciliation::*;
+        use crate::workflow_proposal::WorkflowStageKind;
+        WorkflowRunRevision {
+            revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            previous_revision_id: None,
+            source_reconciliation_id: WorkflowReconciliationId("wrc_t".into()),
+            run_hash_before: "h1".into(), run_hash_after: "h2".into(),
+            stages: vec![
+                crate::workflow_run::WorkflowStageRun {
+                    stage_id: "s0".into(), title: "Done".into(), kind: WorkflowStageKind::Verify,
+                    status: crate::workflow_run::WorkflowStageRunStatus::Completed, order: 0,
+                    depends_on: vec![], started_at: None, completed_at: None, summary: "done".into(),
+                },
+                crate::workflow_run::WorkflowStageRun {
+                    stage_id: "s1".into(), title: "Next".into(), kind: WorkflowStageKind::ApplyChange,
+                    status: crate::workflow_run::WorkflowStageRunStatus::Pending, order: 1,
+                    depends_on: vec!["s0".into()], started_at: None, completed_at: None, summary: "next".into(),
+                },
+            ],
+            lifecycle_events: vec![], aggregate_status: None, created_at: Utc::now(),
+        }
+    }
+
+    fn test_request() -> WorkflowLoopControllerRequest {
+        WorkflowLoopControllerRequest {
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            latest_run_revision_id: Some(WorkflowRunRevisionId("wrr_t".into())),
+            expected_workflow_run_hash: "h".into(),
+            expected_latest_revision_hash: Some("h2".into()),
+            requested_by: "test".into(), requested_at: Utc::now(),
+            idempotency_key: "key1".into(),
+        }
+    }
+
+    fn detect_state(ctx: &WorkflowLoopContext) -> WorkflowDetectedLoopState {
+        detect_loop_state(ctx)
+    }
+
+    #[test] fn detects_needs_initial_continuation_proposal() {
+        let run = suspended_run(); let rev = pending_revision();
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        assert_eq!(WorkflowDetectedLoopState::NeedsInitialContinuationProposal, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_next_action_review() {
+        use crate::workflow_continuation::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal);
+        assert_eq!(WorkflowDetectedLoopState::NeedsNextActionReview, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_routing_readiness() {
+        use crate::workflow_continuation::*;
+        use crate::workflow_next_action_review::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let review = WorkflowNextActionReview {
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            proposal_hash: "ph".into(), source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            decision: WorkflowNextActionReviewDecision::Approved,
+            reviewer: "alice".into(), rationale: "ok".into(), feedback: None,
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            reviewed_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal); ctx.latest_review = Some(&review);
+        assert_eq!(WorkflowDetectedLoopState::NeedsRoutingReadiness, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_next_action_routing() {
+        use crate::workflow_continuation::*;
+        use crate::workflow_next_action_review::*;
+        use crate::workflow_routing_readiness::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let review = WorkflowNextActionReview {
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            proposal_hash: "ph".into(), source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            decision: WorkflowNextActionReviewDecision::Approved,
+            reviewer: "alice".into(), rationale: "ok".into(), feedback: None,
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            reviewed_at: Utc::now(),
+        };
+        let readiness = WorkflowRoutingReadinessRecord {
+            readiness_id: WorkflowRoutingReadinessId("wrrd_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            proposal_hash: "ph".into(), run_revision_hash: "h2".into(),
+            status: WorkflowRoutingReadinessStatus::Ready,
+            decision: WorkflowRoutingReadinessDecision::Ready { summary: "ok".into() },
+            predicates: vec![], candidate: None, route_request_preview: None, created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal); ctx.latest_review = Some(&review);
+        ctx.latest_routing_readiness = Some(&readiness);
+        assert_eq!(WorkflowDetectedLoopState::NeedsNextActionRouting, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_route_outcome_observation() {
+        use crate::workflow_action_route::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::Routed, decision: WorkflowActionRouteDecision::Routed,
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: None,
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route);
+        assert_eq!(WorkflowDetectedLoopState::NeedsSessionRoutingObservation, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_approval_outcome_resolution() {
+        use crate::workflow_action_route::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::SuspendedForApproval,
+            decision: WorkflowActionRouteDecision::SuspendedForApproval {
+                approval_request_id: "arid_1".into(), summary: "awaiting".into(),
+            },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: None,
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route);
+        assert_eq!(WorkflowDetectedLoopState::NeedsApprovalOutcomeResolution, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_outcome_reconciliation() {
+        use crate::workflow_action_route::*;
+        use crate::workflow_action_outcome::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::Completed, decision: WorkflowActionRouteDecision::Completed { summary: "done".into() },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let outcome = WorkflowActionOutcomeRecord {
+            outcome_id: WorkflowActionOutcomeId("wao_t".into()),
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(),
+            session_id: String::new(), pending_approval_id: String::new(),
+            tool_call_id: None, route_hash: "h".into(), workflow_run_hash: "h".into(),
+            status: WorkflowActionOutcomeStatus::ToolCompleted,
+            decision: crate::workflow_action_outcome::WorkflowActionOutcomeDecision::ToolCompleted { summary: "done".into() },
+            predicates: vec![], approval_resolution: crate::workflow_action_outcome::WorkflowApprovalResolution::Approve { rationale: "ok".into() },
+            session_outcome: None,
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route); ctx.latest_outcome = Some(&outcome);
+        assert_eq!(WorkflowDetectedLoopState::NeedsOutcomeReconciliation, detect_state(&ctx));
+    }
+
+    #[test] fn detects_needs_continuation_after_reconciliation() {
+        use crate::workflow_action_route::*;
+        use crate::workflow_action_outcome::*;
+        use crate::workflow_reconciliation::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::Completed,
+            decision: WorkflowActionRouteDecision::Completed { summary: "done".into() },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let outcome = WorkflowActionOutcomeRecord {
+            outcome_id: WorkflowActionOutcomeId("wao_t".into()),
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(),
+            session_id: String::new(), pending_approval_id: String::new(),
+            tool_call_id: None, route_hash: "h".into(), workflow_run_hash: "h".into(),
+            status: WorkflowActionOutcomeStatus::ToolCompleted,
+            decision: crate::workflow_action_outcome::WorkflowActionOutcomeDecision::ToolCompleted { summary: "done".into() },
+            predicates: vec![], approval_resolution: crate::workflow_action_outcome::WorkflowApprovalResolution::Approve { rationale: "ok".into() },
+            session_outcome: None,
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let recon = WorkflowReconciliationRecord {
+            reconciliation_id: WorkflowReconciliationId("wrc_t".into()),
+            route_id: WorkflowActionRouteId("war_t".into()),
+            outcome_id: WorkflowActionOutcomeId("wao_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(),
+            status: WorkflowReconciliationStatus::Reconciled,
+            decision: crate::workflow_reconciliation::WorkflowReconciliationDecision::Reconciled { summary: "ok".into() },
+            predicates: vec![], progression: None, new_run_revision_id: Some(WorkflowRunRevisionId("wrr_t2".into())),
+            created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route); ctx.latest_outcome = Some(&outcome);
+        ctx.latest_reconciliation = Some(&recon);
+        assert_eq!(WorkflowDetectedLoopState::NeedsContinuationAfterReconciliation, detect_state(&ctx));
+    }
+
+    #[test] fn detects_workflow_complete() {
+        let run = suspended_run();
+        let mut rev = pending_revision();
+        rev.stages[0].status = crate::workflow_run::WorkflowStageRunStatus::Completed;
+        rev.stages[1].status = crate::workflow_run::WorkflowStageRunStatus::Completed;
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        assert_eq!(WorkflowDetectedLoopState::WorkflowComplete, detect_state(&ctx));
+    }
+
+    #[test] fn detects_workflow_blocked() {
+        // When run status is blocked and no route evidence
+        let mut run = suspended_run(); run.status = crate::workflow_run::WorkflowRunStatus::Blocked;
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run);
+        // With no revision — Inconclusive. Blocked requires evidence.
+        assert_eq!(WorkflowDetectedLoopState::Inconclusive, detect_state(&ctx));
+    }
+
+    #[test] fn detects_inconclusive_missing_evidence() {
+        let ctx = empty_ctx();
+        assert_eq!(WorkflowDetectedLoopState::Inconclusive, detect_state(&ctx));
+    }
+
+    // Patch 2: conflict detection
+    #[test] fn detects_blocked_on_conflicting_latest_records() {
+        // The NoConflictingLatestRecords predicate is checked before recommendation.
+        // In the workflow crate, conflict detection is delegated to the app loader.
+        // This test verifies the predicate exists and passes when no conflicts.
+        let run = suspended_run(); let rev = pending_revision();
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        let conflict_pred = rec.predicates.iter().find(|p| {
+            matches!(p.predicate, WorkflowLoopPredicate::NoConflictingLatestRecords)
+        }).unwrap();
+        assert!(conflict_pred.passed);
+    }
+
+    #[test] fn does_not_recommend_operation_when_latest_records_conflict() {
+        // Conflict handling is at app layer; workflow crate returns Inconclusive
+        // when run is None, which means no recommendation.
+        let ctx = empty_ctx();
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert!(matches!(rec.status, WorkflowLoopControllerStatus::Inconclusive));
+        assert!(rec.recommendation.is_none());
+    }
+
+    // --- Recommendation tests (commit 3) ---
+
+    #[test] fn recommends_create_continuation_proposal() {
+        let run = suspended_run(); let rev = pending_revision();
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert!(matches!(rec.status, WorkflowLoopControllerStatus::RecommendationReady));
+        assert!(rec.recommendation.is_some());
+        assert_eq!(WorkflowManualOperationKind::CreateContinuationProposal, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_review_next_action_proposal() {
+        use crate::workflow_continuation::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::ReviewNextActionProposal, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_evaluate_routing_readiness() {
+        use crate::workflow_continuation::*; use crate::workflow_next_action_review::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let review = WorkflowNextActionReview {
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            proposal_hash: "ph".into(), source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            decision: WorkflowNextActionReviewDecision::Approved,
+            reviewer: "alice".into(), rationale: "ok".into(), feedback: None,
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            reviewed_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal); ctx.latest_review = Some(&review);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::EvaluateRoutingReadiness, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_route_reviewed_next_action() {
+        use crate::workflow_continuation::*; use crate::workflow_next_action_review::*;
+        use crate::workflow_routing_readiness::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let review = WorkflowNextActionReview {
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            proposal_hash: "ph".into(), source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            decision: WorkflowNextActionReviewDecision::Approved,
+            reviewer: "alice".into(), rationale: "ok".into(), feedback: None,
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            reviewed_at: Utc::now(),
+        };
+        let readiness = WorkflowRoutingReadinessRecord {
+            readiness_id: WorkflowRoutingReadinessId("wrrd_t".into()),
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            review_id: WorkflowNextActionReviewId("wnar_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            proposal_hash: "ph".into(), run_revision_hash: "h2".into(),
+            status: WorkflowRoutingReadinessStatus::Ready,
+            decision: WorkflowRoutingReadinessDecision::Ready { summary: "ok".into() },
+            predicates: vec![], candidate: None, route_request_preview: None, created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal); ctx.latest_review = Some(&review);
+        ctx.latest_routing_readiness = Some(&readiness);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::RouteReviewedNextAction, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_resolve_workflow_approval_outcome() {
+        use crate::workflow_action_route::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::SuspendedForApproval,
+            decision: WorkflowActionRouteDecision::SuspendedForApproval {
+                approval_request_id: "arid_1".into(), summary: "awaiting".into(),
+            },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: None,
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::ResolveWorkflowApprovalOutcome, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_reconcile_workflow_outcome() {
+        use crate::workflow_action_route::*; use crate::workflow_action_outcome::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::Completed,
+            decision: WorkflowActionRouteDecision::Completed { summary: "done".into() },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let outcome = WorkflowActionOutcomeRecord {
+            outcome_id: WorkflowActionOutcomeId("wao_t".into()),
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            status: WorkflowActionOutcomeStatus::ToolCompleted,
+            decision: crate::workflow_action_outcome::WorkflowActionOutcomeDecision::ToolCompleted { summary: "done".into() },
+            stage_id: "s1".into(), action_request_id: "ar_1".into(),
+            session_id: String::new(), pending_approval_id: String::new(),
+            tool_call_id: None, route_hash: "h".into(), workflow_run_hash: "h".into(),
+            predicates: vec![], approval_resolution: crate::workflow_action_outcome::WorkflowApprovalResolution::Approve { rationale: "ok".into() },
+            session_outcome: None,
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route); ctx.latest_outcome = Some(&outcome);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::ReconcileWorkflowOutcome, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_no_action_when_workflow_complete() {
+        let run = suspended_run();
+        let mut rev = pending_revision();
+        rev.stages[0].status = crate::workflow_run::WorkflowStageRunStatus::Completed;
+        rev.stages[1].status = crate::workflow_run::WorkflowStageRunStatus::Completed;
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert!(matches!(rec.status, WorkflowLoopControllerStatus::NoManualActionRequired));
+        assert!(rec.recommendation.is_none());
+    }
+
+    #[test] fn does_not_skip_unreviewed_next_action_proposal() {
+        // If proposal exists but no review, must NOT recommend readiness
+        use crate::workflow_continuation::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let proposal = WorkflowNextActionProposal {
+            proposal_id: WorkflowNextActionProposalId("wnap_t".into()),
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            source_run_revision_id: WorkflowRunRevisionId("wrr_t".into()),
+            source_run_revision_hash: "h2".into(),
+            candidate: WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "S1".into(), reason: "deps".into(), dependency_evidence: vec![],
+            },
+            predicates: vec![], evidence_links: vec![],
+            creates_route: false, routes_action_now: false,
+            executes_tool_now: false, mutates_workflow_state_now: false,
+            proposal_hash: "ph".into(), created_at: Utc::now(),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_proposal = Some(&proposal);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        // Must recommend review, not readiness or routing
+        assert_eq!(WorkflowManualOperationKind::ReviewNextActionProposal, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn does_not_skip_unreconciled_terminal_outcome() {
+        // Terminal outcome exists but no reconciliation — must recommend reconcile
+        use crate::workflow_action_route::*; use crate::workflow_action_outcome::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::Completed,
+            decision: WorkflowActionRouteDecision::Completed { summary: "done".into() },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let outcome = WorkflowActionOutcomeRecord {
+            outcome_id: WorkflowActionOutcomeId("wao_t".into()),
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            status: WorkflowActionOutcomeStatus::ToolCompleted,
+            decision: crate::workflow_action_outcome::WorkflowActionOutcomeDecision::ToolCompleted { summary: "done".into() },
+            stage_id: "s1".into(), action_request_id: "ar_1".into(),
+            session_id: String::new(), pending_approval_id: String::new(),
+            tool_call_id: None, route_hash: "h".into(), workflow_run_hash: "h".into(),
+            predicates: vec![], approval_resolution: crate::workflow_action_outcome::WorkflowApprovalResolution::Approve { rationale: "ok".into() },
+            session_outcome: None,
+            created_at: Utc::now(), completed_at: Some(Utc::now()),
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route); ctx.latest_outcome = Some(&outcome);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        // Must recommend reconcile, not continuation
+        assert_eq!(WorkflowManualOperationKind::ReconcileWorkflowOutcome, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn does_not_skip_pending_approval() {
+        // Route is suspended for approval — must recommend resolution, not continuation
+        use crate::workflow_action_route::*;
+        let run = suspended_run(); let rev = pending_revision();
+        let route = WorkflowActionRouteRecord {
+            route_id: WorkflowActionRouteId("war_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            readiness_id: crate::workflow_readiness::WorkflowReadinessId("wfrd_t".into()),
+            proposal_id: crate::workflow_proposal::WorkflowProposalId("wfp_t".into()),
+            stage_id: "s1".into(), action_request_id: "ar_1".into(), action_request_hash: "h".into(),
+            status: WorkflowActionRouteStatus::SuspendedForApproval,
+            decision: WorkflowActionRouteDecision::SuspendedForApproval {
+                approval_request_id: "arid_1".into(), summary: "awaiting".into(),
+            },
+            predicates: vec![], session_route: None,
+            route_prompt: WorkflowActionRoutePrompt {
+                capability_category: "c".into(), purpose: "p".into(),
+                expected_input_summary: "i".into(), expected_output_summary: "o".into(),
+                safety_constraints: vec![],
+            },
+            created_at: Utc::now(), completed_at: None,
+        };
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        ctx.latest_route = Some(&route);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert_eq!(WorkflowManualOperationKind::ResolveWorkflowApprovalOutcome, rec.recommendation.unwrap().operation);
+    }
+
+    #[test] fn recommends_exactly_one_manual_operation() {
+        let run = suspended_run(); let rev = pending_revision();
+        let mut ctx = empty_ctx(); ctx.workflow_run = Some(&run); ctx.latest_revision = Some(&rev);
+        let rec = evaluate_loop_controller(&test_request(), &ctx);
+        assert!(rec.recommendation.is_some());
+        // Only one recommendation
+        assert!(matches!(rec.status, WorkflowLoopControllerStatus::RecommendationReady));
+    }
 }

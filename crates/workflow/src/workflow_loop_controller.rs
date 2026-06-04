@@ -265,7 +265,8 @@ pub fn evaluate_loop_controller(
     WorkflowLoopControllerRecord {
         controller_id: cid,
         workflow_execution_id: request.workflow_execution_id.clone(),
-        latest_run_revision_id: revision.map(|r| r.revision_id.clone()),
+        latest_run_revision_id: revision.map(|r| r.revision_id.clone())
+            .or_else(|| request.latest_run_revision_id.clone()),
         status, decision,
         loop_state: Some(loop_state),
         recommendation,

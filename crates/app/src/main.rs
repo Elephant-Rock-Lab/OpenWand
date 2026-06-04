@@ -147,6 +147,13 @@ enum Commands {
         next_action_routing_cmd: WorkflowNextActionRoutingCommands,
     },
 
+    /// Workflow loop controller
+    #[command(name = "workflow-loop")]
+    WorkflowLoopCmd {
+        #[command(subcommand)]
+        loop_cmd: WorkflowLoopCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -937,6 +944,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowNextActionReviewCmd { next_action_review_cmd } => { cmd_workflow_next_action_review(next_action_review_cmd)?; Ok(()) },
         Commands::WorkflowRoutingReadinessCmd { routing_readiness_cmd } => { cmd_workflow_routing_readiness(routing_readiness_cmd)?; Ok(()) },
         Commands::WorkflowNextActionRoutingCmd { next_action_routing_cmd } => { cmd_workflow_next_action_routing(next_action_routing_cmd)?; Ok(()) },
+        Commands::WorkflowLoopCmd { loop_cmd } => { cmd_workflow_loop(loop_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4486,6 +4494,79 @@ fn cmd_workflow_next_action_routing(cmd: WorkflowNextActionRoutingCommands) -> R
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.routing_id.0, r.status); } }
                 None => println!("No next-action routing found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowLoopCommands {
+    Recommend {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_workflow_run_hash: String,
+        #[arg(long)] latest_run_revision_id: Option<String>,
+        #[arg(long)] expected_latest_revision_hash: Option<String>,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { controller_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] run_revision_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_loop(cmd: WorkflowLoopCommands) -> Result<()> {
+    use openwand_app::workflow_loop_controller::*;
+    use openwand_workflow::workflow_loop_controller::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_reconciliation::WorkflowRunRevisionId;
+
+    match cmd {
+        WorkflowLoopCommands::Recommend { workflow_execution_id, expected_workflow_run_hash,
+            latest_run_revision_id, expected_latest_revision_hash, idempotency_key,
+            output_dir, json } =>
+        {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowLoopControllerRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                latest_run_revision_id: latest_run_revision_id.map(WorkflowRunRevisionId),
+                expected_workflow_run_hash,
+                expected_latest_revision_hash,
+                requested_by: "cli".into(), requested_at: chrono::Utc::now(),
+                idempotency_key,
+            };
+            let ctx = WorkflowLoopContext {
+                workflow_run: None, latest_revision: None, latest_route: None,
+                latest_outcome: None, latest_reconciliation: None, latest_continuation: None,
+                latest_proposal: None, latest_review: None, latest_routing_readiness: None,
+                latest_next_action_routing: None,
+            };
+            let record = evaluate_loop_controller(&request, &ctx);
+            let path = save_loop_controller(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Controller: {} — {:?}", record.controller_id.0, record.status); }
+        }
+        WorkflowLoopCommands::Show { controller_id, output_dir, json } => {
+            let rec = load_loop_controller(std::path::Path::new(&output_dir),
+                &WorkflowLoopControllerId(controller_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Controller: {} — {:?}", rec.controller_id.0, rec.status); }
+        }
+        WorkflowLoopCommands::Latest { workflow_execution_id, run_revision_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, run_revision_id) {
+                (Some(id), _) => controller_by_workflow_run(store, &id),
+                (_, Some(id)) => controller_by_run_revision(store, &id),
+                _ => latest_loop_controller(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.controller_id.0, r.status); } }
+                None => println!("No loop controller found."),
             }
         }
     }

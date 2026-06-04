@@ -119,6 +119,13 @@ enum Commands {
         workflow_reconciliation_cmd: WorkflowReconciliationCommands,
     },
 
+    /// Workflow continuation commands
+    #[command(name = "workflow-continuation")]
+    WorkflowContinuation {
+        #[command(subcommand)]
+        workflow_continuation_cmd: WorkflowContinuationCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -905,6 +912,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowAction { workflow_action_cmd } => { cmd_workflow_action(workflow_action_cmd)?; Ok(()) },
         Commands::WorkflowActionOutcome { workflow_action_outcome_cmd } => { cmd_workflow_action_outcome(workflow_action_outcome_cmd)?; Ok(()) },
         Commands::WorkflowReconciliation { workflow_reconciliation_cmd } => { cmd_workflow_reconciliation(workflow_reconciliation_cmd)?; Ok(()) },
+        Commands::WorkflowContinuation { workflow_continuation_cmd } => { cmd_workflow_continuation(workflow_continuation_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4063,6 +4071,119 @@ fn cmd_workflow_reconciliation(cmd: WorkflowReconciliationCommands) -> Result<()
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.reconciliation_id.0, r.status); } }
                 None => println!("No reconciliations found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowContinuationCommands {
+    /// Propose the next eligible action from a run revision
+    Propose {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] latest_run_revision_id: String,
+        #[arg(long)] expected_run_revision_hash: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a continuation readiness record
+    ShowReadiness {
+        readiness_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a next-action proposal record
+    ShowProposal {
+        proposal_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show the latest continuation readiness or proposal
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] run_revision_id: Option<String>,
+        #[arg(long)] stage_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_continuation(cmd: WorkflowContinuationCommands) -> Result<()> {
+    use openwand_app::workflow_continuation::*;
+    use openwand_workflow::workflow_continuation::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_reconciliation::WorkflowRunRevisionId;
+
+    match cmd {
+        WorkflowContinuationCommands::Propose {
+            workflow_execution_id, latest_run_revision_id, expected_run_revision_hash,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowContinuationRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                latest_run_revision_id: WorkflowRunRevisionId(latest_run_revision_id),
+                expected_run_revision_hash, requested_by: "cli".into(),
+                requested_at: chrono::Utc::now(), idempotency_key,
+            };
+            let prior = list_continuation_readiness(store).unwrap_or_default();
+            let prior_refs: Vec<&WorkflowContinuationReadinessRecord> = prior.iter().collect();
+            let prior_props = list_next_action_proposals(store).unwrap_or_default();
+            let prior_prop_refs: Vec<&WorkflowNextActionProposal> = prior_props.iter().collect();
+            let ctx = openwand_workflow::workflow_next_action_selector::WorkflowContinuationContext {
+                workflow_run: None, run_revision: None,
+                prior_readiness: prior_refs, prior_proposals: prior_prop_refs,
+            };
+            let record = openwand_workflow::workflow_next_action_selector::evaluate_continuation_readiness(&request, &ctx);
+            let path = save_continuation_readiness(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Readiness: {}", record.readiness_id.0);
+                println!("  Status: {:?}", record.status);
+                if let Some(ref c) = record.selected_candidate {
+                    println!("  Candidate: {} ({:?})", c.stage_id, c.candidate_kind);
+                }
+                println!("  Saved: {}", path.display());
+            }
+        }
+        WorkflowContinuationCommands::ShowReadiness { readiness_id, output_dir, json } => {
+            let rec = load_continuation_readiness(std::path::Path::new(&output_dir),
+                &WorkflowContinuationReadinessId(readiness_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Readiness: {} — {:?}", rec.readiness_id.0, rec.status); }
+        }
+        WorkflowContinuationCommands::ShowProposal { proposal_id, output_dir, json } => {
+            let rec = load_next_action_proposal(std::path::Path::new(&output_dir),
+                &WorkflowNextActionProposalId(proposal_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Proposal: {} — stage {}", rec.proposal_id.0, rec.candidate.stage_id); }
+        }
+        WorkflowContinuationCommands::Latest { workflow_execution_id, run_revision_id, stage_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            if let Some(sid) = stage_id {
+                match proposal_by_stage(store, &sid) {
+                    Ok(Some(p)) => { if json { println!("{}", serde_json::to_string_pretty(&p).context("Serialize")?); } else { println!("Proposal: {} — stage {}", p.proposal_id.0, p.candidate.stage_id); } }
+                    _ => println!("No proposal found for stage."),
+                }
+            } else if let Some(rid) = run_revision_id {
+                match proposal_by_run_revision(store, &rid) {
+                    Ok(Some(p)) => { if json { println!("{}", serde_json::to_string_pretty(&p).context("Serialize")?); } else { println!("Proposal: {}", p.proposal_id.0); } }
+                    _ => println!("No proposal found for revision."),
+                }
+            } else if let Some(wid) = workflow_execution_id {
+                match readiness_by_workflow_run(store, &wid) {
+                    Ok(Some(r)) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Readiness: {} — {:?}", r.readiness_id.0, r.status); } }
+                    _ => println!("No readiness found for workflow run."),
+                }
+            } else {
+                match latest_continuation_readiness(store) {
+                    Ok(Some(r)) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest readiness: {} — {:?}", r.readiness_id.0, r.status); } }
+                    _ => println!("No continuation records found."),
+                }
             }
         }
     }

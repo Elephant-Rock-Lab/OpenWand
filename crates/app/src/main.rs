@@ -140,6 +140,13 @@ enum Commands {
         routing_readiness_cmd: WorkflowRoutingReadinessCommands,
     },
 
+    /// Next-action routing commands
+    #[command(name = "workflow-next-action-routing")]
+    WorkflowNextActionRoutingCmd {
+        #[command(subcommand)]
+        next_action_routing_cmd: WorkflowNextActionRoutingCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -929,6 +936,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowContinuation { workflow_continuation_cmd } => { cmd_workflow_continuation(workflow_continuation_cmd)?; Ok(()) },
         Commands::WorkflowNextActionReviewCmd { next_action_review_cmd } => { cmd_workflow_next_action_review(next_action_review_cmd)?; Ok(()) },
         Commands::WorkflowRoutingReadinessCmd { routing_readiness_cmd } => { cmd_workflow_routing_readiness(routing_readiness_cmd)?; Ok(()) },
+        Commands::WorkflowNextActionRoutingCmd { next_action_routing_cmd } => { cmd_workflow_next_action_routing(next_action_routing_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4385,6 +4393,99 @@ fn cmd_workflow_routing_readiness(cmd: WorkflowRoutingReadinessCommands) -> Resu
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.readiness_id.0, r.status); } }
                 None => println!("No routing readiness found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowNextActionRoutingCommands {
+    Route {
+        #[arg(long)] routing_readiness_id: String,
+        #[arg(long)] next_action_proposal_id: String,
+        #[arg(long)] next_action_review_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] source_run_revision_id: String,
+        #[arg(long)] expected_routing_readiness_hash: String,
+        #[arg(long)] expected_proposal_hash: String,
+        #[arg(long)] expected_review_hash: String,
+        #[arg(long)] expected_run_revision_hash: String,
+        #[arg(long)] expected_action_request_hash: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { routing_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] routing_readiness_id: Option<String>,
+        #[arg(long)] proposal_id: Option<String>,
+        #[arg(long)] review_id: Option<String>,
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] route_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_next_action_routing(cmd: WorkflowNextActionRoutingCommands) -> Result<()> {
+    use openwand_app::workflow_next_action_routing::*;
+    use openwand_workflow::workflow_next_action_routing_gate::*;
+    use openwand_workflow::workflow_routing_readiness::WorkflowRoutingReadinessId;
+    use openwand_workflow::workflow_continuation::WorkflowNextActionProposalId;
+    use openwand_workflow::workflow_next_action_review::WorkflowNextActionReviewId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_reconciliation::WorkflowRunRevisionId;
+
+    match cmd {
+        WorkflowNextActionRoutingCommands::Route { routing_readiness_id, next_action_proposal_id,
+            next_action_review_id, workflow_execution_id, source_run_revision_id,
+            expected_routing_readiness_hash, expected_proposal_hash, expected_review_hash,
+            expected_run_revision_hash, expected_action_request_hash, idempotency_key,
+            output_dir, json } =>
+        {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowNextActionRoutingRequest {
+                routing_readiness_id: WorkflowRoutingReadinessId(routing_readiness_id),
+                next_action_proposal_id: WorkflowNextActionProposalId(next_action_proposal_id),
+                next_action_review_id: WorkflowNextActionReviewId(next_action_review_id),
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                source_run_revision_id: WorkflowRunRevisionId(source_run_revision_id),
+                expected_routing_readiness_hash, expected_proposal_hash, expected_review_hash,
+                expected_run_revision_hash, expected_action_request_hash,
+                requested_by: "cli".into(), requested_at: chrono::Utc::now(), idempotency_key,
+            };
+            let ctx = WorkflowNextActionRoutingContext {
+                routing_readiness: None, next_action_proposal: None,
+                next_action_review: None, latest_review: None,
+                run_revision: None, action_request: None, prior_routings: vec![],
+            };
+            let record = evaluate_next_action_routing(&request, &ctx);
+            let path = save_next_action_routing(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Routing: {} — {:?}", record.routing_id.0, record.status); println!("  Saved: {}", path.display()); }
+        }
+        WorkflowNextActionRoutingCommands::Show { routing_id, output_dir, json } => {
+            let rec = load_next_action_routing(std::path::Path::new(&output_dir),
+                &WorkflowNextActionRoutingId(routing_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Routing: {} — {:?}", rec.routing_id.0, rec.status); }
+        }
+        WorkflowNextActionRoutingCommands::Latest { routing_readiness_id, proposal_id, review_id,
+            workflow_execution_id, route_id, output_dir, json } =>
+        {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (routing_readiness_id, proposal_id, review_id, workflow_execution_id, route_id) {
+                (Some(id), _, _, _, _) => routing_by_readiness(store, &id),
+                (_, Some(id), _, _, _) => routing_by_proposal(store, &id),
+                (_, _, Some(id), _, _) => routing_by_review(store, &id),
+                (_, _, _, Some(id), _) => routing_by_workflow_run(store, &id),
+                (_, _, _, _, Some(id)) => routing_by_route(store, &id),
+                _ => latest_next_action_routing(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.routing_id.0, r.status); } }
+                None => println!("No next-action routing found."),
             }
         }
     }

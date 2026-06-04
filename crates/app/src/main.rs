@@ -154,6 +154,13 @@ enum Commands {
         loop_cmd: WorkflowLoopCommands,
     },
 
+    /// Command composer
+    #[command(name = "workflow-command")]
+    WorkflowCommandCmd {
+        #[command(subcommand)]
+        command_cmd: WorkflowCommandCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -945,6 +952,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowRoutingReadinessCmd { routing_readiness_cmd } => { cmd_workflow_routing_readiness(routing_readiness_cmd)?; Ok(()) },
         Commands::WorkflowNextActionRoutingCmd { next_action_routing_cmd } => { cmd_workflow_next_action_routing(next_action_routing_cmd)?; Ok(()) },
         Commands::WorkflowLoopCmd { loop_cmd } => { cmd_workflow_loop(loop_cmd)?; Ok(()) },
+        Commands::WorkflowCommandCmd { command_cmd } => { cmd_workflow_command(command_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4567,6 +4575,72 @@ fn cmd_workflow_loop(cmd: WorkflowLoopCommands) -> Result<()> {
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.controller_id.0, r.status); } }
                 None => println!("No loop controller found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowCommandCommands {
+    Compose {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { composer_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] loop_controller_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_command(cmd: WorkflowCommandCommands) -> Result<()> {
+    use openwand_app::workflow_command_composer::*;
+    use openwand_workflow::workflow_command_composer::*;
+    use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+
+    match cmd {
+        WorkflowCommandCommands::Compose { workflow_execution_id, loop_controller_id,
+            expected_loop_controller_hash, idempotency_key, output_dir, json } =>
+        {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowCommandComposerRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                expected_loop_controller_hash, requested_by: "cli".into(),
+                requested_at: chrono::Utc::now(), idempotency_key,
+            };
+            let ctx = WorkflowCommandComposerContext {
+                loop_controller_record: None, workflow_run: None, latest_revision: None,
+            };
+            let record = compose_command_descriptor(&request, &ctx);
+            let path = save_command_composer(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Composer: {} — {:?}", record.composer_id.0, record.status); }
+        }
+        WorkflowCommandCommands::Show { composer_id, output_dir, json } => {
+            let rec = load_command_composer(std::path::Path::new(&output_dir),
+                &WorkflowCommandComposerId(composer_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Composer: {} — {:?}", rec.composer_id.0, rec.status); }
+        }
+        WorkflowCommandCommands::Latest { workflow_execution_id, loop_controller_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, loop_controller_id) {
+                (Some(id), _) => composer_by_workflow_run(store, &id),
+                (_, Some(id)) => composer_by_loop_controller(store, &id),
+                _ => latest_command_composer(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.composer_id.0, r.status); } }
+                None => println!("No command descriptor found."),
             }
         }
     }

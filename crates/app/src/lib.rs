@@ -33,3 +33,5 @@ pub mod workflow_approval_bridge;
 pub mod workflow_action_outcome;
 pub mod workflow_reconciliation;
 pub mod workflow_continuation;
+pub mod workflow_next_action_review;
+pub mod workflow_routing_readiness;

@@ -112,6 +112,13 @@ enum Commands {
         workflow_action_outcome_cmd: WorkflowActionOutcomeCommands,
     },
 
+    /// Workflow reconciliation commands
+    #[command(name = "workflow-reconciliation")]
+    WorkflowReconciliation {
+        #[command(subcommand)]
+        workflow_reconciliation_cmd: WorkflowReconciliationCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -897,6 +904,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowExecution { workflow_execution_cmd } => { cmd_workflow_execution(workflow_execution_cmd)?; Ok(()) },
         Commands::WorkflowAction { workflow_action_cmd } => { cmd_workflow_action(workflow_action_cmd)?; Ok(()) },
         Commands::WorkflowActionOutcome { workflow_action_outcome_cmd } => { cmd_workflow_action_outcome(workflow_action_outcome_cmd)?; Ok(()) },
+        Commands::WorkflowReconciliation { workflow_reconciliation_cmd } => { cmd_workflow_reconciliation(workflow_reconciliation_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -3940,6 +3948,121 @@ fn cmd_workflow_action_outcome(cmd: WorkflowActionOutcomeCommands) -> Result<()>
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.outcome_id.0, r.status); } }
                 None => println!("No outcomes found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowReconciliationCommands {
+    /// Reconcile a terminal outcome back into workflow run stage state
+    Reconcile {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] route_id: String,
+        #[arg(long)] outcome_id: String,
+        #[arg(long)] stage_id: String,
+        #[arg(long)] action_request_id: String,
+        #[arg(long)] expected_workflow_run_hash: String,
+        #[arg(long)] expected_route_hash: String,
+        #[arg(long)] expected_outcome_hash: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a specific reconciliation record
+    Show {
+        reconciliation_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show the latest reconciliation record
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] route_id: Option<String>,
+        #[arg(long)] outcome_id: Option<String>,
+        #[arg(long)] stage_id: Option<String>,
+        #[arg(long)] action_request_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_reconciliation(cmd: WorkflowReconciliationCommands) -> Result<()> {
+    use openwand_app::workflow_reconciliation::*;
+    use openwand_workflow::workflow_reconciliation::*;
+    use openwand_workflow::workflow_reconciliation_gate::{WorkflowReconciliationContext, evaluate_reconciliation};
+    use openwand_workflow::workflow_stage_progression::{compute_stage_progression, apply_progression_to_stages, build_run_revision};
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_action_route::WorkflowActionRouteId;
+    use openwand_workflow::workflow_action_outcome::WorkflowActionOutcomeId;
+
+    match cmd {
+        WorkflowReconciliationCommands::Reconcile {
+            workflow_execution_id, route_id, outcome_id, stage_id, action_request_id,
+            expected_workflow_run_hash, expected_route_hash, expected_outcome_hash,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowReconciliationRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                route_id: WorkflowActionRouteId(route_id),
+                outcome_id: WorkflowActionOutcomeId(outcome_id),
+                stage_id, action_request_id,
+                expected_workflow_run_hash, expected_route_hash, expected_outcome_hash,
+                requested_by: "cli".into(), requested_at: chrono::Utc::now(), idempotency_key,
+            };
+            // Load available records for context
+            let prior_recs = list_workflow_reconciliations(store).unwrap_or_default();
+            let prior_refs: Vec<&WorkflowReconciliationRecord> = prior_recs.iter().collect();
+            let context = WorkflowReconciliationContext {
+                workflow_run: None, // CLI doesn't load full records — gate blocks without them
+                route_record: None,
+                outcome_record: None,
+                prior_reconciliations: prior_refs,
+                expected_workflow_run_hash: request.expected_workflow_run_hash.clone(),
+                expected_route_hash: request.expected_route_hash.clone(),
+                expected_outcome_hash: request.expected_outcome_hash.clone(),
+            };
+            let mut record = evaluate_reconciliation(&request, &context);
+
+            // If reconciled, attempt stage progression (no run data in CLI, so progression is None)
+            if record.status == WorkflowReconciliationStatus::Reconciled {
+                record.status = WorkflowReconciliationStatus::Blocked;
+                record.decision = WorkflowReconciliationDecision::Blocked {
+                    reason_code: "no_run_loaded".into(),
+                    summary: "CLI reconcile requires pre-loaded run/route/outcome context".into(),
+                };
+            }
+
+            let path = save_workflow_reconciliation(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?);
+            } else {
+                println!("Reconciliation: {}", record.reconciliation_id.0);
+                println!("  Status: {:?}", record.status);
+                println!("  Saved: {}", path.display());
+            }
+        }
+        WorkflowReconciliationCommands::Show { reconciliation_id, output_dir, json } => {
+            let record = load_workflow_reconciliation(std::path::Path::new(&output_dir),
+                &WorkflowReconciliationId(reconciliation_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Reconciliation: {} — {:?}", record.reconciliation_id.0, record.status); }
+        }
+        WorkflowReconciliationCommands::Latest { workflow_execution_id, route_id, outcome_id, stage_id, action_request_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, route_id, outcome_id, stage_id, action_request_id) {
+                (Some(id), _, _, _, _) => reconciliation_by_workflow_run(store, &id),
+                (_, Some(id), _, _, _) => reconciliation_by_route(store, &id),
+                (_, _, Some(id), _, _) => reconciliation_by_outcome(store, &id),
+                (_, _, _, Some(id), _) => reconciliation_by_stage(store, &id),
+                (_, _, _, _, Some(id)) => reconciliation_by_action_request(store, &id),
+                _ => latest_workflow_reconciliation(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.reconciliation_id.0, r.status); } }
+                None => println!("No reconciliations found."),
             }
         }
     }

@@ -36,3 +36,4 @@ pub mod workflow_continuation;
 pub mod workflow_next_action_review;
 pub mod workflow_routing_readiness;
 pub mod workflow_next_action_routing;
+pub mod workflow_loop_controller;

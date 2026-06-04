@@ -269,4 +269,25 @@ mod tests {
         assert!(!is_terminal_stage_status(&WorkflowStageRunStatus::Running));
         assert!(!is_terminal_stage_status(&WorkflowStageRunStatus::Suspended));
     }
+
+    #[test]
+    fn workflow_crate_dependency_guard_still_allows_only_6_deps() {
+        // Patch 4: workflow crate stays at exactly 6 dependencies
+        let manifest_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+        let allowed = ["serde", "serde_json", "blake3", "chrono", "thiserror", "tracing"];
+        let mut dep_count = 0u32;
+        let mut in_deps = false;
+        for line in manifest.lines() {
+            let trimmed = line.trim();
+            if trimmed == "[dependencies]" { in_deps = true; continue; }
+            if trimmed.starts_with('[') { in_deps = false; continue; }
+            if !in_deps { continue; }
+            if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+            let name = trimmed.split('=').next().unwrap().trim();
+            assert!(allowed.contains(&name), "Unexpected dependency: {}", name);
+            dep_count += 1;
+        }
+        assert_eq!(6, dep_count, "Workflow crate must have exactly 6 dependencies");
+    }
 }

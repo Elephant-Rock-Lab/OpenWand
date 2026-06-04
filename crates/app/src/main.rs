@@ -168,6 +168,13 @@ enum Commands {
         review_cmd: WorkflowCommandReviewCommands,
     },
 
+    /// Manual result capture
+    #[command(name = "workflow-manual-result")]
+    WorkflowManualResultCmd {
+        #[command(subcommand)]
+        result_cmd: WorkflowManualResultCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -961,6 +968,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowLoopCmd { loop_cmd } => { cmd_workflow_loop(loop_cmd)?; Ok(()) },
         Commands::WorkflowCommandCmd { command_cmd } => { cmd_workflow_command(command_cmd)?; Ok(()) },
         Commands::WorkflowCommandReviewCmd { review_cmd } => { cmd_workflow_command_review(review_cmd)?; Ok(()) },
+        Commands::WorkflowManualResultCmd { result_cmd } => { cmd_workflow_manual_result(result_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4854,4 +4862,136 @@ fn build_review_from_request(request: &openwand_workflow::workflow_command_revie
         queues_operation: false, creates_execution_grant: false,
         execution_allowed_now: false, reviewed_at: request.reviewed_at,
     }
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowManualResultCommands {
+    Capture {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] command_review_id: String,
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] status: String,
+        #[arg(long)] operator: String,
+        #[arg(long)] summary: String,
+        #[arg(long)] details: Option<String>,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { result_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] command_review_id: Option<String>,
+        #[arg(long)] command_composer_id: Option<String>,
+        #[arg(long)] loop_controller_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_manual_result(cmd: WorkflowManualResultCommands) -> Result<()> {
+    use openwand_app::workflow_manual_result::*;
+    use openwand_workflow::workflow_manual_result::*;
+    use openwand_workflow::workflow_command_review::WorkflowCommandReviewId;
+    use openwand_workflow::workflow_command_composer::WorkflowCommandComposerId;
+    use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+
+    match cmd {
+        WorkflowManualResultCommands::Capture {
+            workflow_execution_id, command_review_id, command_composer_id,
+            loop_controller_id, expected_command_review_hash,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, status, operator, summary, details,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let parsed_status = match status.as_str() {
+                "reported-succeeded" => WorkflowManualResultStatus::ReportedSucceeded,
+                "reported-failed" => WorkflowManualResultStatus::ReportedFailed,
+                "reported-partial" => WorkflowManualResultStatus::ReportedPartial,
+                "not-performed" => WorkflowManualResultStatus::NotPerformed,
+                "inconclusive" => WorkflowManualResultStatus::Inconclusive,
+                _ => return Err(anyhow::anyhow!("Invalid status: {}", status)),
+            };
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"manual_result:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(command_review_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let result_id = WorkflowManualResultId(format!("wmr_{}", &hex[..16]));
+
+            let record = WorkflowManualResult {
+                result_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                command_review_id: WorkflowCommandReviewId(command_review_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                command_review_hash: expected_command_review_hash.clone(),
+                command_composer_hash: expected_command_composer_hash.clone(),
+                command_descriptor_hash: expected_command_descriptor_hash.clone(),
+                loop_controller_hash: expected_loop_controller_hash.clone(),
+                status: parsed_status.clone(),
+                operator,
+                summary: WorkflowManualResultSummary {
+                    operator_summary: summary,
+                    operator_details: details,
+                    reported_status: parsed_status,
+                    caveat: "Operator-reported, not verified by OpenWand.".into(),
+                },
+                artifact_references: vec![],
+                validation_snapshot: WorkflowManualResultValidationSnapshot {
+                    command_review_was_acknowledged: true,
+                    command_review_hash_matched: true,
+                    command_composer_hash_matched: true,
+                    command_descriptor_hash_matched: true,
+                    loop_controller_hash_matched: true,
+                    command_review_marked_not_performed_by_openwand: true,
+                },
+                reported_by_operator: true,
+                verified_by_openwand: false, command_executed_by_openwand: false,
+                mutates_workflow_state: false, reconciles_outcome: false,
+                routes_action: false, resolves_approval: false,
+                appends_trace: false, writes_memory: false,
+                invokes_shell: false, invokes_git: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                captured_at: chrono::Utc::now(),
+            };
+            save_manual_result(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Result captured: {} (reported, not verified)", record.result_id.0); }
+        }
+        WorkflowManualResultCommands::Show { result_id, output_dir, json } => {
+            let rec = load_manual_result(std::path::Path::new(&output_dir),
+                &WorkflowManualResultId(result_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Result: {} — {:?}", rec.result_id.0, rec.status); }
+        }
+        WorkflowManualResultCommands::Latest {
+            workflow_execution_id, command_review_id, command_composer_id,
+            loop_controller_id, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, command_review_id, command_composer_id, loop_controller_id) {
+                (Some(id), _, _, _) => result_by_workflow_run(store, &id),
+                (_, Some(id), _, _) => result_by_command_review(store, &id),
+                (_, _, Some(id), _) => result_by_command_composer(store, &id),
+                (_, _, _, Some(id)) => result_by_loop_controller(store, &id),
+                _ => latest_manual_result(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.result_id.0, r.status); } }
+                None => println!("No manual result found."),
+            }
+        }
+    }
+    Ok(())
 }

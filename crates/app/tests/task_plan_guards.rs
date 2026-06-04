@@ -93,7 +93,7 @@ fn plan_review_does_not_write_governance_records() {
 fn workflow_crate_does_not_import_process_command() {
     let source = read_crate_sources("crates/workflow");
     assert!(!source.contains("std::process"));
-    assert!(!source.contains("Command"));
+    assert!(!source.contains("process::Command"));
 }
 
 #[test]

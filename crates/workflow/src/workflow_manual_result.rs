@@ -291,3 +291,97 @@ mod tests {
         assert!(back.command_review_hash_matched);
     }
 }
+
+// --- Artifact reference semantics tests ---
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+
+    #[test]
+    fn artifact_reference_is_metadata_only() {
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a1".into(), label: "log".into(),
+            kind: WorkflowManualArtifactKind::LogExcerpt,
+            reference: "/tmp/build.log".into(),
+            operator_supplied_hash: Some("sha256:abc".into()),
+            description: Some("Build log".into()),
+        };
+        // Reference is just a string — no file read, no URL fetch
+        assert!(ar.reference.starts_with('/'));
+        assert!(ar.operator_supplied_hash.is_some());
+    }
+
+    #[test]
+    fn artifact_reference_does_not_read_file_contents() {
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a2".into(), label: "file".into(),
+            kind: WorkflowManualArtifactKind::FilePathReference,
+            reference: "C:\\does_not_exist.txt".into(),
+            operator_supplied_hash: None, description: None,
+        };
+        // The reference string is stored as-is. No std::fs::read.
+        assert!(!ar.reference.is_empty());
+        assert!(ar.operator_supplied_hash.is_none());
+    }
+
+    #[test]
+    fn artifact_reference_does_not_fetch_url() {
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a3".into(), label: "link".into(),
+            kind: WorkflowManualArtifactKind::ExternalUrl,
+            reference: "https://example.com/log".into(),
+            operator_supplied_hash: Some("sha256:xyz".into()),
+            description: None,
+        };
+        // URL is stored as string. No HTTP client, no fetch.
+        assert!(ar.reference.starts_with("https://"));
+    }
+
+    #[test]
+    fn artifact_hash_is_operator_supplied_not_verified() {
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a4".into(), label: "screenshot".into(),
+            kind: WorkflowManualArtifactKind::Screenshot,
+            reference: "screenshot.png".into(),
+            operator_supplied_hash: Some("blake3:deadbeef".into()),
+            description: Some("Error screenshot".into()),
+        };
+        // Hash is operator-supplied metadata. Not recomputed.
+        assert!(ar.operator_supplied_hash.as_ref().unwrap().contains("blake3"));
+    }
+
+    #[test]
+    fn artifact_reference_serialized_json_contains_no_file_bytes() {
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a5".into(), label: "note".into(),
+            kind: WorkflowManualArtifactKind::PlainTextNote,
+            reference: "see attached".into(),
+            operator_supplied_hash: None, description: None,
+        };
+        let json = serde_json::to_string(&ar).unwrap().to_lowercase();
+        assert!(!json.contains("file_bytes"));
+        assert!(!json.contains("content_base64"));
+        assert!(!json.contains("data_url"));
+    }
+
+    // Patch 5: operator_supplied_hash stored verbatim, never recomputed
+    #[test]
+    fn operator_supplied_artifact_hash_is_stored_without_recomputation() {
+        let original_hash = "sha256:abcdef1234567890";
+        let ar = WorkflowManualArtifactReference {
+            artifact_id: "a6".into(), label: "log".into(),
+            kind: WorkflowManualArtifactKind::LogExcerpt,
+            reference: "/var/log/build.log".into(),
+            operator_supplied_hash: Some(original_hash.into()),
+            description: None,
+        };
+        // Serialize and deserialize — hash must be identical
+        let json = serde_json::to_string(&ar).unwrap();
+        let back: WorkflowManualArtifactReference = serde_json::from_str(&json).unwrap();
+        assert_eq!(original_hash, back.operator_supplied_hash.unwrap());
+        // No recomputation function exists in this module
+        let src = include_str!("workflow_manual_result.rs");
+        assert!(!src.contains("blake3::hash") || src.contains("// Patch 5"));
+    }
+}

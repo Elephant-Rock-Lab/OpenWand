@@ -35,6 +35,7 @@ pub mod workflow_command_descriptor;
 pub mod workflow_command_composer;
 pub mod workflow_command_review;
 pub mod workflow_command_review_validation;
+pub mod workflow_manual_result;
 pub mod workflow_action_route;
 pub mod workflow_action_route_gate;
 pub mod workflow_action_route_validation;

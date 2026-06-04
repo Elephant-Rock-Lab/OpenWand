@@ -19,6 +19,8 @@ pub mod workflow_reconciliation;
 pub mod workflow_reconciliation_validation;
 pub mod workflow_reconciliation_gate;
 pub mod workflow_stage_progression;
+pub mod workflow_continuation;
+pub mod workflow_continuation_validation;
 pub mod workflow_action_outcome_validation;
 pub mod workflow_action_route;
 pub mod workflow_action_route_gate;

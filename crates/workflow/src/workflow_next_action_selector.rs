@@ -600,3 +600,146 @@ mod tests {
         assert!(is_blocked(&r));
     }
 }
+
+/// Build a next-action proposal from a ProposalReady readiness record.
+/// Returns None if the decision is not ProposalReady.
+/// Does not create route/outcome/reconciliation/revision records.
+pub fn build_next_action_proposal(
+    readiness: &WorkflowContinuationReadinessRecord,
+    request: &WorkflowContinuationRequest,
+) -> Option<WorkflowNextActionProposal> {
+    if !matches!(readiness.status, WorkflowContinuationStatus::ProposalReady) {
+        return None;
+    }
+    let candidate = readiness.selected_candidate.as_ref()?;
+
+    use crate::workflow_continuation_validation::{next_action_proposal_id_for, proposal_hash_for};
+
+    let proposal_id = next_action_proposal_id_for(
+        &readiness.workflow_execution_id.0,
+        &readiness.latest_run_revision_id.0,
+        &candidate.stage_id,
+    );
+
+    let proposal_hash = proposal_hash_for(
+        &readiness.workflow_execution_id.0,
+        &readiness.latest_run_revision_id.0,
+        &candidate.stage_id,
+        candidate.action_request_id.as_deref(),
+    );
+
+    let evidence_links = vec![
+        WorkflowContinuationEvidenceLink {
+            kind: WorkflowContinuationEvidenceKind::WorkflowRun,
+            id: readiness.workflow_execution_id.0.clone(),
+            summary: "Source workflow run".into(),
+        },
+        WorkflowContinuationEvidenceLink {
+            kind: WorkflowContinuationEvidenceKind::WorkflowRunRevision,
+            id: readiness.latest_run_revision_id.0.clone(),
+            summary: "Source run revision".into(),
+        },
+        WorkflowContinuationEvidenceLink {
+            kind: WorkflowContinuationEvidenceKind::Stage,
+            id: candidate.stage_id.clone(),
+            summary: format!("Target stage: {}", candidate.stage_title),
+        },
+    ];
+
+    Some(WorkflowNextActionProposal {
+        proposal_id,
+        readiness_id: readiness.readiness_id.clone(),
+        workflow_execution_id: readiness.workflow_execution_id.clone(),
+        source_run_revision_id: readiness.latest_run_revision_id.clone(),
+        source_run_revision_hash: readiness.run_revision_hash.clone(),
+        candidate: candidate.clone(),
+        predicates: readiness.predicates.clone(),
+        evidence_links,
+        creates_route: false,
+        routes_action_now: false,
+        executes_tool_now: false,
+        mutates_workflow_state_now: false,
+        proposal_hash,
+        created_at: Utc::now(),
+    })
+}
+
+#[cfg(test)]
+mod proposal_tests {
+    use super::*;
+    use crate::workflow_proposal::WorkflowStageKind;
+    use crate::workflow_reconciliation::WorkflowReconciliationId;
+
+    fn proposal_ready_record() -> WorkflowContinuationReadinessRecord {
+        WorkflowContinuationReadinessRecord {
+            readiness_id: WorkflowContinuationReadinessId("wcr_t".into()),
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            latest_run_revision_id: crate::workflow_reconciliation::WorkflowRunRevisionId("wrr_t".into()),
+            run_revision_hash: "h2".into(),
+            status: WorkflowContinuationStatus::ProposalReady,
+            decision: WorkflowContinuationDecision::ProposalReady { summary: "ok".into() },
+            predicates: vec![WorkflowContinuationPredicateResult {
+                predicate: WorkflowContinuationPredicate::WorkflowRunExists, passed: true, reason: "ok".into(),
+            }],
+            selected_candidate: Some(WorkflowNextActionCandidate {
+                stage_id: "s1".into(), action_request_id: Some("ar_1".into()),
+                candidate_kind: WorkflowNextActionKind::RoutePreparedAction,
+                stage_title: "Stage 1".into(), reason: "deps met".into(), dependency_evidence: vec![],
+            }),
+            created_at: Utc::now(),
+        }
+    }
+
+    fn test_request() -> WorkflowContinuationRequest {
+        WorkflowContinuationRequest {
+            workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
+            latest_run_revision_id: crate::workflow_reconciliation::WorkflowRunRevisionId("wrr_t".into()),
+            expected_run_revision_hash: "h2".into(),
+            requested_by: "test".into(), requested_at: Utc::now(), idempotency_key: "key1".into(),
+        }
+    }
+
+    #[test] fn proposal_created_only_when_decision_proposal_ready() {
+        let mut rec = proposal_ready_record();
+        rec.status = WorkflowContinuationStatus::Blocked;
+        rec.decision = WorkflowContinuationDecision::Blocked { reason_code: "test".into(), summary: "blocked".into() };
+        rec.selected_candidate = None;
+        assert!(build_next_action_proposal(&rec, &test_request()).is_none());
+    }
+    #[test] fn proposal_copies_run_revision_hash() {
+        let p = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        assert_eq!("h2", p.source_run_revision_hash);
+    }
+    #[test] fn proposal_copies_stage_and_action_request_ids() {
+        let p = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        assert_eq!("s1", p.candidate.stage_id);
+        assert_eq!(Some("ar_1".into()), p.candidate.action_request_id);
+    }
+    #[test] fn proposal_contains_predicate_results() {
+        let p = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        assert_eq!(1, p.predicates.len());
+    }
+    #[test] fn proposal_contains_evidence_links() {
+        let p = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        assert!(p.evidence_links.iter().any(|l| matches!(l.kind, WorkflowContinuationEvidenceKind::WorkflowRunRevision)));
+        assert!(p.evidence_links.iter().any(|l| matches!(l.kind, WorkflowContinuationEvidenceKind::Stage)));
+    }
+    #[test] fn proposal_hash_changes_when_candidate_changes() {
+        let mut rec = proposal_ready_record();
+        rec.selected_candidate.as_mut().unwrap().stage_id = "s2".into();
+        let p1 = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        let p2 = build_next_action_proposal(&rec, &test_request()).unwrap();
+        assert_ne!(p1.proposal_hash, p2.proposal_hash);
+    }
+    #[test] fn proposal_ready_does_not_create_route_record() {
+        let p = build_next_action_proposal(&proposal_ready_record(), &test_request()).unwrap();
+        assert!(!p.creates_route);
+        assert!(!p.routes_action_now);
+    }
+    #[test] fn proposal_ready_does_not_mutate_run_revision() {
+        let rec = proposal_ready_record();
+        let hash_before = rec.run_revision_hash.clone();
+        let _ = build_next_action_proposal(&rec, &test_request());
+        assert_eq!(hash_before, rec.run_revision_hash); // unchanged
+    }
+}

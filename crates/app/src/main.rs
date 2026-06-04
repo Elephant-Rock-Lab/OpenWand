@@ -161,6 +161,13 @@ enum Commands {
         command_cmd: WorkflowCommandCommands,
     },
 
+    /// Command review
+    #[command(name = "workflow-command-review")]
+    WorkflowCommandReviewCmd {
+        #[command(subcommand)]
+        review_cmd: WorkflowCommandReviewCommands,
+    },
+
     /// Evaluation scenarios for real-model quality measurement
     #[cfg(feature = "real-model-eval")]
     Eval {
@@ -953,6 +960,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowNextActionRoutingCmd { next_action_routing_cmd } => { cmd_workflow_next_action_routing(next_action_routing_cmd)?; Ok(()) },
         Commands::WorkflowLoopCmd { loop_cmd } => { cmd_workflow_loop(loop_cmd)?; Ok(()) },
         Commands::WorkflowCommandCmd { command_cmd } => { cmd_workflow_command(command_cmd)?; Ok(()) },
+        Commands::WorkflowCommandReviewCmd { review_cmd } => { cmd_workflow_command_review(review_cmd)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4645,4 +4653,205 @@ fn cmd_workflow_command(cmd: WorkflowCommandCommands) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum WorkflowCommandReviewCommands {
+    Acknowledge {
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Reject {
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long)] feedback: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    RequestChanges {
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long)] feedback: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { review_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] command_composer_id: Option<String>,
+        #[arg(long)] loop_controller_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_command_review(cmd: WorkflowCommandReviewCommands) -> Result<()> {
+    use openwand_app::workflow_command_review::*;
+    use openwand_workflow::workflow_command_review::*;
+    use openwand_workflow::workflow_command_composer::WorkflowCommandComposerId;
+    use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+
+    match cmd {
+        WorkflowCommandReviewCommands::Acknowledge {
+            command_composer_id, loop_controller_id, workflow_execution_id,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowCommandReviewRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                expected_command_composer_hash, expected_command_descriptor_hash,
+                expected_loop_controller_hash,
+                decision: WorkflowCommandReviewDecision::Acknowledged,
+                reviewer, rationale, feedback: None,
+                reviewed_at: chrono::Utc::now(), idempotency_key,
+            };
+            let record = build_review_from_request(&request);
+            save_command_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — acknowledged (not executed)", record.review_id.0); }
+        }
+        WorkflowCommandReviewCommands::Reject {
+            command_composer_id, loop_controller_id, workflow_execution_id,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale, feedback,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowCommandReviewRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                expected_command_composer_hash, expected_command_descriptor_hash,
+                expected_loop_controller_hash,
+                decision: WorkflowCommandReviewDecision::Rejected,
+                reviewer, rationale,
+                feedback: Some(WorkflowCommandReviewFeedback {
+                    summary: feedback.clone(), blocking_reasons: vec![feedback],
+                    requested_changes: vec![], evidence_gaps: vec![],
+                }),
+                reviewed_at: chrono::Utc::now(), idempotency_key,
+            };
+            let record = build_review_from_request(&request);
+            save_command_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — rejected", record.review_id.0); }
+        }
+        WorkflowCommandReviewCommands::RequestChanges {
+            command_composer_id, loop_controller_id, workflow_execution_id,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale, feedback,
+            idempotency_key, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let request = WorkflowCommandReviewRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                expected_command_composer_hash, expected_command_descriptor_hash,
+                expected_loop_controller_hash,
+                decision: WorkflowCommandReviewDecision::ChangesRequested,
+                reviewer, rationale,
+                feedback: Some(WorkflowCommandReviewFeedback {
+                    summary: feedback.clone(), blocking_reasons: vec![],
+                    requested_changes: vec![feedback], evidence_gaps: vec![],
+                }),
+                reviewed_at: chrono::Utc::now(), idempotency_key,
+            };
+            let record = build_review_from_request(&request);
+            save_command_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — changes requested", record.review_id.0); }
+        }
+        WorkflowCommandReviewCommands::Show { review_id, output_dir, json } => {
+            let rec = load_command_review(std::path::Path::new(&output_dir),
+                &WorkflowCommandReviewId(review_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Review: {} — {:?}", rec.review_id.0, rec.decision); }
+        }
+        WorkflowCommandReviewCommands::Latest {
+            workflow_execution_id, command_composer_id, loop_controller_id,
+            output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (workflow_execution_id, command_composer_id, loop_controller_id) {
+                (Some(id), _, _) => review_by_workflow_run(store, &id),
+                (_, Some(id), _) => review_by_command_composer(store, &id),
+                (_, _, Some(id)) => review_by_loop_controller(store, &id),
+                _ => latest_command_review(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.review_id.0, r.decision); } }
+                None => println!("No command review found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn build_review_from_request(request: &openwand_workflow::workflow_command_review::WorkflowCommandReviewRequest) -> openwand_workflow::workflow_command_review::WorkflowCommandReview {
+    use openwand_workflow::workflow_command_review::*;
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"command_review:v1:");
+    hasher.update(request.workflow_execution_id.0.as_bytes());
+    hasher.update(b":");
+    hasher.update(request.command_composer_id.0.as_bytes());
+    hasher.update(b":");
+    hasher.update(request.idempotency_key.as_bytes());
+    let hex = hasher.finalize().to_hex().to_string();
+    let review_id = WorkflowCommandReviewId(format!("wcrv_{}", &hex[..16]));
+
+    WorkflowCommandReview {
+        review_id,
+        workflow_execution_id: request.workflow_execution_id.clone(),
+        command_composer_id: request.command_composer_id.clone(),
+        loop_controller_id: request.loop_controller_id.clone(),
+        command_composer_hash: request.expected_command_composer_hash.clone(),
+        command_descriptor_hash: request.expected_command_descriptor_hash.clone(),
+        loop_controller_hash: request.expected_loop_controller_hash.clone(),
+        decision: request.decision.clone(),
+        reviewer: request.reviewer.clone(),
+        rationale: request.rationale.clone(),
+        feedback: request.feedback.clone(),
+        acknowledgment_snapshot: WorkflowCommandAcknowledgmentSnapshot {
+            descriptor_display_command: String::new(),
+            descriptor_copyable_text_hash: String::new(),
+            descriptor_display_only: true, descriptor_executable: false,
+            descriptor_missing_inputs: vec![], loop_detected_state: String::new(),
+            loop_recommended_operation: String::new(),
+            acknowledges_review_only: true, command_performed_now: false,
+        },
+        executes_command: false, invokes_shell: false, invokes_git: false,
+        routes_action: false, resolves_approval: false, reconciles_outcome: false,
+        mutates_workflow_state: false, schedules_work: false, starts_worker: false,
+        queues_operation: false, creates_execution_grant: false,
+        execution_allowed_now: false, reviewed_at: request.reviewed_at,
+    }
 }

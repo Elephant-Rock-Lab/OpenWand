@@ -31,6 +31,7 @@ Wave history from repository disk state. Tagged with annotated `wave-##-lock` ta
 | Wave | Title | Tag | Tests | Lock Doc |
 |------|-------|-----|------:|----------|
 | 38 | Repository Reality Map | `wave-38-lock` | 2824 | `docs/WAVE38_REPOSITORY_REALITY_MAP_LOCK.md` |
+| 39 | Disk-Verified Wave Template + Guardrails | `wave-39-lock` | 2824 | `docs/WAVE39_DISK_VERIFIED_WAVE_TEMPLATE_GUARDRAILS_LOCK.md` |
 
 ---
 

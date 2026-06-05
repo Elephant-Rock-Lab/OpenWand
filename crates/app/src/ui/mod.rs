@@ -59,3 +59,5 @@ pub mod workflow_manual_result_review_state;
 pub mod workflow_manual_result_review_components;
 pub mod workflow_manual_result_reconciliation_readiness_state;
 pub mod workflow_manual_result_reconciliation_readiness_components;
+pub mod workflow_manual_result_reconciliation_gate_state;
+pub mod workflow_manual_result_reconciliation_gate_components;

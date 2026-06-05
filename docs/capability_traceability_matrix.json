@@ -530,6 +530,31 @@
       "id_constructor_location": "workflow_evidence_chain_inspector_validation.rs",
       "lock_doc": "WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md",
       "tag": "wave-45-lock"
+    },
+    {
+      "capability": "External Attestation Model",
+      "wave": 46,
+      "workflow_source": [
+        "workflow_external_attestation.rs",
+        "workflow_external_attestation_validation.rs"
+      ],
+      "app_persistence": "workflow_external_attestation.rs (save, load, list, by_workflow_run, by_target, by_kind, by_source)",
+      "cli_command": "workflow-external-attestation",
+      "cli_subcommands": [
+        "attach",
+        "show",
+        "list"
+      ],
+      "ui_state": "workflow_external_attestation_state.rs",
+      "ui_components": "workflow_external_attestation_components.rs",
+      "cli_test": "workflow_external_attestation_cli.rs",
+      "guard_test": "workflow_external_attestation_guards.rs",
+      "persistence_root": "workflow_external_attestations/",
+      "id_prefix": "watt_",
+      "id_type": "WorkflowExternalAttestationId",
+      "id_constructor_location": "workflow_external_attestation.rs",
+      "lock_doc": "WAVE46_EXTERNAL_ATTESTATION_MODEL_LOCK.md",
+      "tag": "wave-46-lock"
     }
   ],
   "supporting_modules": [

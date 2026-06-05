@@ -176,6 +176,15 @@ enum Commands {
     },
 
     /// Evaluation scenarios for real-model quality measurement
+    /// Manual result review — accept/reject/request-changes on reported results
+    #[command(name = "workflow-manual-result-review")]
+    WorkflowManualResultReview {
+        #[command(subcommand)]
+        cmd: WorkflowManualResultReviewCommands,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
     #[cfg(feature = "real-model-eval")]
     Eval {
         #[command(subcommand)]
@@ -969,6 +978,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowCommandCmd { command_cmd } => { cmd_workflow_command(command_cmd)?; Ok(()) },
         Commands::WorkflowCommandReviewCmd { review_cmd } => { cmd_workflow_command_review(review_cmd)?; Ok(()) },
         Commands::WorkflowManualResultCmd { result_cmd } => { cmd_workflow_manual_result(result_cmd)?; Ok(()) },
+        Commands::WorkflowManualResultReview { cmd, output_dir } => { cmd_workflow_manual_result_review(cmd, output_dir)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -4894,6 +4904,76 @@ enum WorkflowManualResultCommands {
     },
 }
 
+
+#[derive(Subcommand, Debug)]
+enum WorkflowManualResultReviewCommands {
+    ReviewAccept {
+        #[arg(long)] manual_result_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] command_review_id: String,
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_manual_result_hash: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    ReviewReject {
+        #[arg(long)] manual_result_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] command_review_id: String,
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_manual_result_hash: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long)] blocking_reasons: String,
+        #[arg(long)] feedback_summary: Option<String>,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    ReviewRequestChanges {
+        #[arg(long)] manual_result_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] command_review_id: String,
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_manual_result_hash: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] rationale: String,
+        #[arg(long)] requested_changes: String,
+        #[arg(long)] feedback_summary: Option<String>,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { review_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] manual_result_id: Option<String>,
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long)] command_review_id: Option<String>,
+        #[arg(long)] command_composer_id: Option<String>,
+        #[arg(long)] loop_controller_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
 fn cmd_workflow_manual_result(cmd: WorkflowManualResultCommands) -> Result<()> {
     use openwand_app::workflow_manual_result::*;
     use openwand_workflow::workflow_manual_result::*;
@@ -4990,6 +5070,209 @@ fn cmd_workflow_manual_result(cmd: WorkflowManualResultCommands) -> Result<()> {
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?}", r.result_id.0, r.status); } }
                 None => println!("No manual result found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_workflow_manual_result_review(cmd: WorkflowManualResultReviewCommands, output_dir: String) -> Result<()> {
+    use openwand_app::workflow_manual_result_review::*;
+    use openwand_workflow::workflow_manual_result_review::*;
+    use openwand_workflow::workflow_manual_result::WorkflowManualResultId;
+    use openwand_workflow::workflow_command_review::WorkflowCommandReviewId;
+    use openwand_workflow::workflow_command_composer::WorkflowCommandComposerId;
+    use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+
+    let store = std::path::Path::new(&output_dir);
+    match cmd {
+        WorkflowManualResultReviewCommands::ReviewAccept {
+            manual_result_id, workflow_execution_id, command_review_id,
+            command_composer_id, loop_controller_id,
+            expected_manual_result_hash, expected_command_review_hash,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale,
+            idempotency_key, output_dir, json,
+        } => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"manual_result_review:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = WorkflowManualResultReviewId(format!("wmrr_{}", &hex[..16]));
+            let now = chrono::Utc::now();
+            let record = WorkflowManualResultReview {
+                review_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                manual_result_id: WorkflowManualResultId(manual_result_id),
+                command_review_id: WorkflowCommandReviewId(command_review_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                manual_result_hash: expected_manual_result_hash,
+                command_review_hash: expected_command_review_hash,
+                command_composer_hash: expected_command_composer_hash,
+                command_descriptor_hash: expected_command_descriptor_hash,
+                loop_controller_hash: expected_loop_controller_hash,
+                decision: WorkflowManualResultReviewDecision::Accepted,
+                reviewer, rationale, feedback: None,
+                acceptance_snapshot: WorkflowManualResultReviewAcceptanceSnapshot {
+                    accepts_reported_evidence: true,
+                    verifies_external_state: false,
+                    reconciles_workflow_state: false,
+                    result_verified_by_openwand: false,
+                },
+                verifies_external_state: false, reconciles_workflow_state: false,
+                mutates_workflow_state: false, executes_command: false,
+                invokes_shell: false, invokes_git: false,
+                routes_action: false, resolves_approval: false,
+                appends_trace: false, writes_memory: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                reviewed_at: now,
+            };
+            let store = std::path::Path::new(&output_dir);
+            save_manual_result_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — accepted", record.review_id.0); }
+        }
+        WorkflowManualResultReviewCommands::ReviewReject {
+            manual_result_id, workflow_execution_id, command_review_id,
+            command_composer_id, loop_controller_id,
+            expected_manual_result_hash, expected_command_review_hash,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale,
+            blocking_reasons, feedback_summary, idempotency_key, output_dir, json,
+        } => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"manual_result_review:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = WorkflowManualResultReviewId(format!("wmrr_{}", &hex[..16]));
+            let now = chrono::Utc::now();
+            let record = WorkflowManualResultReview {
+                review_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                manual_result_id: WorkflowManualResultId(manual_result_id),
+                command_review_id: WorkflowCommandReviewId(command_review_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                manual_result_hash: expected_manual_result_hash,
+                command_review_hash: expected_command_review_hash,
+                command_composer_hash: expected_command_composer_hash,
+                command_descriptor_hash: expected_command_descriptor_hash,
+                loop_controller_hash: expected_loop_controller_hash,
+                decision: WorkflowManualResultReviewDecision::Rejected,
+                reviewer, rationale,
+                feedback: Some(WorkflowManualResultReviewFeedback {
+                    summary: feedback_summary.unwrap_or_default(),
+                    blocking_reasons: blocking_reasons.split(',').map(|s| s.trim().to_string()).collect(),
+                    requested_changes: vec![], evidence_gaps: vec![],
+                }),
+                acceptance_snapshot: WorkflowManualResultReviewAcceptanceSnapshot {
+                    accepts_reported_evidence: false,
+                    verifies_external_state: false,
+                    reconciles_workflow_state: false,
+                    result_verified_by_openwand: false,
+                },
+                verifies_external_state: false, reconciles_workflow_state: false,
+                mutates_workflow_state: false, executes_command: false,
+                invokes_shell: false, invokes_git: false,
+                routes_action: false, resolves_approval: false,
+                appends_trace: false, writes_memory: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                reviewed_at: now,
+            };
+            let store = std::path::Path::new(&output_dir);
+            save_manual_result_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — rejected", record.review_id.0); }
+        }
+        WorkflowManualResultReviewCommands::ReviewRequestChanges {
+            manual_result_id, workflow_execution_id, command_review_id,
+            command_composer_id, loop_controller_id,
+            expected_manual_result_hash, expected_command_review_hash,
+            expected_command_composer_hash, expected_command_descriptor_hash,
+            expected_loop_controller_hash, reviewer, rationale,
+            requested_changes, feedback_summary, idempotency_key, output_dir, json,
+        } => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"manual_result_review:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = WorkflowManualResultReviewId(format!("wmrr_{}", &hex[..16]));
+            let now = chrono::Utc::now();
+            let record = WorkflowManualResultReview {
+                review_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                manual_result_id: WorkflowManualResultId(manual_result_id),
+                command_review_id: WorkflowCommandReviewId(command_review_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                manual_result_hash: expected_manual_result_hash,
+                command_review_hash: expected_command_review_hash,
+                command_composer_hash: expected_command_composer_hash,
+                command_descriptor_hash: expected_command_descriptor_hash,
+                loop_controller_hash: expected_loop_controller_hash,
+                decision: WorkflowManualResultReviewDecision::ChangesRequested,
+                reviewer, rationale,
+                feedback: Some(WorkflowManualResultReviewFeedback {
+                    summary: feedback_summary.unwrap_or_default(),
+                    blocking_reasons: vec![],
+                    requested_changes: requested_changes.split(',').map(|s| s.trim().to_string()).collect(),
+                    evidence_gaps: vec![],
+                }),
+                acceptance_snapshot: WorkflowManualResultReviewAcceptanceSnapshot {
+                    accepts_reported_evidence: false,
+                    verifies_external_state: false,
+                    reconciles_workflow_state: false,
+                    result_verified_by_openwand: false,
+                },
+                verifies_external_state: false, reconciles_workflow_state: false,
+                mutates_workflow_state: false, executes_command: false,
+                invokes_shell: false, invokes_git: false,
+                routes_action: false, resolves_approval: false,
+                appends_trace: false, writes_memory: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                reviewed_at: now,
+            };
+            let store = std::path::Path::new(&output_dir);
+            save_manual_result_review(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Review recorded: {} — changes requested", record.review_id.0); }
+        }
+        WorkflowManualResultReviewCommands::Show { review_id, output_dir, json } => {
+            let rec = load_manual_result_review(std::path::Path::new(&output_dir),
+                &WorkflowManualResultReviewId(review_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Review: {} — {:?} by {}", rec.review_id.0, rec.decision, rec.reviewer); }
+        }
+        WorkflowManualResultReviewCommands::Latest {
+            manual_result_id, workflow_execution_id, command_review_id,
+            command_composer_id, loop_controller_id, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (manual_result_id, workflow_execution_id, command_review_id, command_composer_id, loop_controller_id) {
+                (Some(mr), _, _, _, _) => review_by_manual_result(store, &mr),
+                (_, Some(wfx), _, _, _) => review_by_workflow_run(store, &wfx),
+                (_, _, Some(cr), _, _) => review_by_command_review(store, &cr),
+                (_, _, _, Some(cc), _) => review_by_command_composer(store, &cc),
+                (_, _, _, _, Some(lc)) => review_by_loop_controller(store, &lc),
+                _ => latest_manual_result_review(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.review_id.0, r.decision, r.reviewer); } }
+                None => println!("No manual result review found."),
             }
         }
     }

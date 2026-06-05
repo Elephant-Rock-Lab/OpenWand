@@ -36,16 +36,20 @@ mod tests {
     use openwand_workflow::workflow_loop_state::WorkflowDetectedLoopState;
 
     fn test_state() -> WorkflowOperatorConsoleState {
-        let mut s = WorkflowOperatorConsoleState {
+        WorkflowOperatorConsoleState {
             workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
             run_status: "suspended".into(),
             stages: vec![],
             detected_state: "inconclusive".into(),
+            detected_state_explanation: Some("test explanation".into()),
             recommendation: None,
             evidence_chain: vec![ConsoleEvidenceLink {
                 link_kind: "test".into(), record_id: "id_1".into(),
                 status: "found".into(), summary: "test".into(),
             }],
+            sections: vec![],
+            attestation_groups: vec![],
+            verification_readiness_summary: vec![],
             chain_warnings: vec![],
             evidence_chain_consistent: true,
             warnings: vec![],
@@ -53,8 +57,8 @@ mod tests {
             creates_route: false, executes_tool: false, verifies_external_state: false,
             resolves_approval: false, reconciles_outcome: false, mutates_workflow_state: false,
             creates_run_revision: false, appends_trace: false, writes_memory: false,
-        };
-        s
+            certifies_evidence: false, promotes_trust: false, schedules_verification: false,
+        }
     }
 
     #[test]

@@ -48,7 +48,7 @@ All lock documents in `docs/WAVE*.md` are sealed after their respective wave com
 
 All `wave-*-lock` tags are sealed. They must not be moved, deleted, or re-created pointing to different commits.
 
-**Current tags:** 24 (`wave-23-lock` through `wave-46-lock`)
+**Current tags:** 25 (`wave-23-lock` through `wave-47-lock`)
 
 ---
 

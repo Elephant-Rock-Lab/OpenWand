@@ -124,7 +124,9 @@ Calibrated from disk-verified repository state at Wave 38.
 
 ---
 
-### Wave 47 — Read-Only Verification Readiness
+### ~~Wave 47 — Read-Only Verification Readiness~~ ✅ Locked
+
+**Tests:** 3266 (+63)
 
 **Purpose:** Determine whether a manual result is eligible for a future verification attempt.
 

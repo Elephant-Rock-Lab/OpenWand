@@ -555,6 +555,31 @@
       "id_constructor_location": "workflow_external_attestation.rs",
       "lock_doc": "WAVE46_EXTERNAL_ATTESTATION_MODEL_LOCK.md",
       "tag": "wave-46-lock"
+    },
+    {
+      "capability": "Verification Readiness",
+      "wave": 47,
+      "workflow_source": [
+        "workflow_verification_readiness.rs",
+        "workflow_verification_readiness_evaluator.rs"
+      ],
+      "app_persistence": "workflow_verification_readiness.rs (save, load, list, by_workflow_run, by_target, by_target_id)",
+      "cli_command": "workflow-verification-readiness",
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
+      "ui_state": "workflow_verification_readiness_state.rs",
+      "ui_components": "workflow_verification_readiness_components.rs",
+      "cli_test": "workflow_verification_readiness_cli.rs",
+      "guard_test": "workflow_verification_readiness_guards.rs",
+      "persistence_root": "workflow_verification_readiness/",
+      "id_prefix": "wvr_",
+      "id_type": "WorkflowVerificationReadinessId",
+      "id_constructor_location": "workflow_verification_readiness.rs",
+      "lock_doc": "WAVE47_READ_ONLY_VERIFICATION_READINESS_LOCK.md",
+      "tag": "wave-47-lock"
     }
   ],
   "supporting_modules": [

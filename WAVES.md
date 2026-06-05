@@ -32,6 +32,26 @@ Wave history from repository disk state. Tagged with annotated `wave-##-lock` ta
 |------|-------|-----|------:|----------|
 | 38 | Repository Reality Map | `wave-38-lock` | 2824 | `docs/WAVE38_REPOSITORY_REALITY_MAP_LOCK.md` |
 | 39 | Disk-Verified Wave Template + Guardrails | `wave-39-lock` | 2824 | `docs/WAVE39_DISK_VERIFIED_WAVE_TEMPLATE_GUARDRAILS_LOCK.md` |
+| 40 | Capability-to-Code Traceability Matrix | `wave-40-lock` | 2824 | `docs/WAVE40_CAPABILITY_TRACEABILITY_MATRIX_LOCK.md` |
+
+---
+
+## Phase: Manual Result Review Lane
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 41 | Manual Result Review and Acceptance Gate | `wave-41-lock` | 2901 | `docs/WAVE41_MANUAL_RESULT_REVIEW_LOCK.md` |
+| 42 | Manual Result Reconciliation Readiness | `wave-42-lock` | 2967 | `docs/WAVE42_MANUAL_RESULT_RECONCILIATION_READINESS_LOCK.md` |
+| 43 | Manual Result Reconciliation Gate | `wave-43-lock` | 3052 | `docs/WAVE43_MANUAL_RESULT_RECONCILIATION_GATE_LOCK.md` |
+
+---
+
+## Phase: Operator Productization
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 44 | Workflow Operator Console | `wave-44-lock` | 3079 | `docs/WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md` |
+| 45 | Evidence Chain Inspector and Audit Packet | `wave-45-lock` | 3139 | `docs/WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md` |
 
 ---
 
@@ -139,3 +159,7 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | `wcc_` | WorkflowCommandComposerId | 35 |
 | `wcrv_` | WorkflowCommandReviewId | 36 |
 | `wmr_` | WorkflowManualResultId | 37 |
+| `wmrr_` | WorkflowManualResultReviewId | 41 |
+| `wmrrr_` | WorkflowManualResultReconciliationReadinessId | 42 |
+| `wmrrg_` | WorkflowManualResultReconciliationGateId | 43 |
+| `weci_` | WorkflowEvidenceChainInspectionId | 45 |

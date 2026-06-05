@@ -55,3 +55,5 @@ pub use memory_dto::{UiFilteredMemoryPanel, UiMemoryPanelRow, UiMemoryPanelSumma
 pub use replay::UiTimelineItem;
 pub use run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 pub use service::{UiServiceError, UiSessionService};
+pub mod workflow_manual_result_review_state;
+pub mod workflow_manual_result_review_components;

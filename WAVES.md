@@ -54,6 +54,7 @@ Wave history from repository disk state. Tagged with annotated `wave-##-lock` ta
 | 45 | Evidence Chain Inspector and Audit Packet | `wave-45-lock` | 3139 | `docs/WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md` |
 | 46 | External Attestation Model | `wave-46-lock` | 3203 | `docs/WAVE46_EXTERNAL_ATTESTATION_MODEL_LOCK.md` |
 | 47 | Read-Only Verification Readiness | `wave-47-lock` | 3266 | `docs/WAVE47_READ_ONLY_VERIFICATION_READINESS_LOCK.md` |
+| 48A | Operator Console Hardening | `wave-48a-lock` | 3312 | `docs/WAVE48A_OPERATOR_CONSOLE_HARDENING_LOCK.md` |
 
 ---
 

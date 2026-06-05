@@ -185,6 +185,15 @@ enum Commands {
         output_dir: String,
     },
 
+    /// Workflow operator console
+    #[command(name = "workflow-operator-console")]
+    WorkflowOperatorConsole {
+        #[command(subcommand)]
+        console_cmd: WorkflowOperatorConsoleCommands,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
     /// Manual result reconciliation gate
     #[command(name = "workflow-manual-result-reconciliation-gate")]
     WorkflowManualResultReconciliationGate {
@@ -999,6 +1008,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowManualResultReview { cmd, output_dir } => { cmd_workflow_manual_result_review(cmd, output_dir)?; Ok(()) },
         Commands::WorkflowManualResultReconciliationReadiness { readiness_cmd, output_dir } => { cmd_workflow_reconciliation_readiness(readiness_cmd, output_dir)?; Ok(()) },
         Commands::WorkflowManualResultReconciliationGate { gate_cmd, output_dir } => { cmd_manual_reconciliation_gate(gate_cmd, output_dir)?; Ok(()) },
+        Commands::WorkflowOperatorConsole { console_cmd, output_dir } => { cmd_operator_console(console_cmd, output_dir)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -5541,6 +5551,40 @@ fn cmd_manual_reconciliation_gate(cmd: WorkflowManualResultReconciliationGateCom
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.gate_id.0, r.status, r.reconciled_by); } }
                 None => println!("No manual reconciliation gate found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand, Debug)]
+enum WorkflowOperatorConsoleCommands {
+    Show {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_operator_console(cmd: WorkflowOperatorConsoleCommands, _output_dir: String) -> Result<()> {
+    match cmd {
+        WorkflowOperatorConsoleCommands::Show { workflow_execution_id, output_dir, json } => {
+            use openwand_workflow::workflow_run::WorkflowExecutionId;
+            let store = std::path::Path::new(&output_dir);
+            let state = openwand_app::workflow_operator_console::assemble_console_state(
+                store, &WorkflowExecutionId(workflow_execution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&state).context("Serialize")?);
+            } else {
+                println!("Console: {} — {} — chain: {}", state.workflow_execution_id.0, state.run_status,
+                    if state.evidence_chain_consistent { "consistent" } else { "WARNINGS" });
+                for link in &state.evidence_chain {
+                    println!("  {} — {} ({})", link.link_kind, link.record_id, link.status);
+                }
+                for w in &state.chain_warnings {
+                    println!("  WARNING: {} — {}", w.link_kind, w.reason);
+                }
             }
         }
     }

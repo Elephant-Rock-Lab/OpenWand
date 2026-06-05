@@ -27,6 +27,13 @@ pub enum WorkflowManualOperationKind {
     ReconcileWorkflowOutcome,
     InspectBlockedWorkflow,
     NoAction,
+    // Wave 44: manual-result ladder operation kinds
+    CreateCommandDescriptor,
+    ReviewCommandDescriptor,
+    CaptureManualResult,
+    ReviewManualResult,
+    EvaluateReconciliationReadiness,
+    ReconcileManualResult,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

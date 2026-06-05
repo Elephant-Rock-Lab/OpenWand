@@ -63,3 +63,5 @@ pub mod workflow_manual_result_reconciliation_gate_state;
 pub mod workflow_manual_result_reconciliation_gate_components;
 pub mod workflow_operator_console_state;
 pub mod workflow_operator_console_components;
+pub mod workflow_evidence_chain_inspector_state;
+pub mod workflow_evidence_chain_inspector_components;

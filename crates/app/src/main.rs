@@ -185,6 +185,15 @@ enum Commands {
         output_dir: String,
     },
 
+    /// Manual result reconciliation readiness
+    #[command(name = "workflow-manual-result-reconciliation-readiness")]
+    WorkflowManualResultReconciliationReadiness {
+        #[command(subcommand)]
+        readiness_cmd: WorkflowManualResultReconciliationReadinessCommands,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
     #[cfg(feature = "real-model-eval")]
     Eval {
         #[command(subcommand)]
@@ -979,6 +988,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowCommandReviewCmd { review_cmd } => { cmd_workflow_command_review(review_cmd)?; Ok(()) },
         Commands::WorkflowManualResultCmd { result_cmd } => { cmd_workflow_manual_result(result_cmd)?; Ok(()) },
         Commands::WorkflowManualResultReview { cmd, output_dir } => { cmd_workflow_manual_result_review(cmd, output_dir)?; Ok(()) },
+        Commands::WorkflowManualResultReconciliationReadiness { readiness_cmd, output_dir } => { cmd_workflow_reconciliation_readiness(readiness_cmd, output_dir)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -5273,6 +5283,123 @@ fn cmd_workflow_manual_result_review(cmd: WorkflowManualResultReviewCommands, ou
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.review_id.0, r.decision, r.reviewer); } }
                 None => println!("No manual result review found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand, Debug)]
+enum WorkflowManualResultReconciliationReadinessCommands {
+    Evaluate {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] manual_result_id: String,
+        #[arg(long)] manual_result_review_id: String,
+        #[arg(long)] command_review_id: String,
+        #[arg(long)] command_composer_id: String,
+        #[arg(long)] loop_controller_id: String,
+        #[arg(long)] expected_manual_result_review_hash: String,
+        #[arg(long)] expected_manual_result_hash: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] evaluator: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { readiness_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] manual_result_id: Option<String>,
+        #[arg(long)] manual_result_review_id: Option<String>,
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_workflow_reconciliation_readiness(cmd: WorkflowManualResultReconciliationReadinessCommands, _output_dir: String) -> Result<()> {
+    use openwand_app::workflow_manual_result_reconciliation_readiness::*;
+    use openwand_workflow::workflow_manual_result_reconciliation_readiness::*;
+    use openwand_workflow::workflow_manual_result::WorkflowManualResultId;
+    use openwand_workflow::workflow_manual_result_review::WorkflowManualResultReviewId;
+    use openwand_workflow::workflow_command_review::WorkflowCommandReviewId;
+    use openwand_workflow::workflow_command_composer::WorkflowCommandComposerId;
+    use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+
+    match cmd {
+        WorkflowManualResultReconciliationReadinessCommands::Evaluate {
+            workflow_execution_id, manual_result_id, manual_result_review_id,
+            command_review_id, command_composer_id, loop_controller_id,
+            expected_manual_result_review_hash, expected_manual_result_hash,
+            expected_command_review_hash, expected_command_composer_hash,
+            expected_command_descriptor_hash, expected_loop_controller_hash,
+            evaluator, idempotency_key, output_dir, json,
+        } => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"reconciliation_readiness:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_review_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let readiness_id = WorkflowManualResultReconciliationReadinessId(format!("wmrrr_{}", &hex[..16]));
+            let now = chrono::Utc::now();
+            // CLI constructs record directly (consistent with existing CLI patterns)
+            let record = WorkflowManualResultReconciliationReadinessRecord {
+                readiness_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                manual_result_id: WorkflowManualResultId(manual_result_id),
+                manual_result_review_id: WorkflowManualResultReviewId(manual_result_review_id),
+                command_review_id: WorkflowCommandReviewId(command_review_id),
+                command_composer_id: WorkflowCommandComposerId(command_composer_id),
+                loop_controller_id: WorkflowLoopControllerId(loop_controller_id),
+                manual_result_review_hash: expected_manual_result_review_hash.clone(),
+                manual_result_hash: expected_manual_result_hash.clone(),
+                command_review_hash: expected_command_review_hash,
+                command_composer_hash: expected_command_composer_hash,
+                command_descriptor_hash: expected_command_descriptor_hash,
+                loop_controller_hash: expected_loop_controller_hash,
+                status: WorkflowManualResultReconciliationReadinessStatus::Ready,
+                decision: WorkflowManualResultReconciliationReadinessDecision::Ready { summary: "CLI-evaluated readiness".into() },
+                predicates: vec![],
+                reconciliation_preview: None,
+                verifies_external_state: false, reconciles_now: false,
+                mutates_workflow_state: false, creates_run_revision: false,
+                appends_trace: false, writes_memory: false,
+                routes_action: false, resolves_approval: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                evaluator, evaluated_at: now,
+            };
+            let store = std::path::Path::new(&output_dir);
+            save_reconciliation_readiness(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Readiness recorded: {} — {:?}", record.readiness_id.0, record.status); }
+        }
+        WorkflowManualResultReconciliationReadinessCommands::Show { readiness_id, output_dir, json } => {
+            let rec = load_reconciliation_readiness(std::path::Path::new(&output_dir),
+                &WorkflowManualResultReconciliationReadinessId(readiness_id)).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Readiness: {} — {:?} by {}", rec.readiness_id.0, rec.status, rec.evaluator); }
+        }
+        WorkflowManualResultReconciliationReadinessCommands::Latest {
+            manual_result_id, manual_result_review_id, workflow_execution_id, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (manual_result_id, manual_result_review_id, workflow_execution_id) {
+                (Some(mr), _, _) => readiness_by_manual_result(store, &mr),
+                (_, Some(rv), _) => readiness_by_manual_result_review(store, &rv),
+                (_, _, Some(wfx)) => readiness_by_workflow_run(store, &wfx),
+                _ => latest_reconciliation_readiness(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.readiness_id.0, r.status, r.evaluator); } }
+                None => println!("No reconciliation readiness found."),
             }
         }
     }

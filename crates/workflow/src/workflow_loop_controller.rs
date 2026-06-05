@@ -440,6 +440,49 @@ fn build_recommendation(detected: &WorkflowDetectedLoopState, _context: &Workflo
         }),
         WorkflowDetectedLoopState::WorkflowComplete => None,
         WorkflowDetectedLoopState::Inconclusive => None,
+        // Wave 44: manual-result ladder recommendations (placeholder — full logic in Commit 3)
+        WorkflowDetectedLoopState::NeedsCommandDescriptor => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::CreateCommandDescriptor,
+            command_hint: "openwand workflow-command-composer compose ...".into(),
+            reason: "Next action routed; command descriptor needed".into(),
+            required_inputs: vec!["workflow_execution_id".into()],
+            evidence_links: vec![],
+        }),
+        WorkflowDetectedLoopState::NeedsCommandReview => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::ReviewCommandDescriptor,
+            command_hint: "openwand workflow-command-review acknowledge ...".into(),
+            reason: "Command descriptor composed; operator review needed".into(),
+            required_inputs: vec!["command_composer_id".into()],
+            evidence_links: vec![],
+        }),
+        WorkflowDetectedLoopState::NeedsManualResultCapture => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::CaptureManualResult,
+            command_hint: "openwand workflow-manual-result capture ...".into(),
+            reason: "Command reviewed; operator should capture manual result".into(),
+            required_inputs: vec!["command_review_id".into()],
+            evidence_links: vec![],
+        }),
+        WorkflowDetectedLoopState::NeedsManualResultReview => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::ReviewManualResult,
+            command_hint: "openwand workflow-manual-result-review accept ...".into(),
+            reason: "Manual result captured; operator review needed".into(),
+            required_inputs: vec!["manual_result_id".into()],
+            evidence_links: vec![],
+        }),
+        WorkflowDetectedLoopState::NeedsReconciliationReadiness => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::EvaluateReconciliationReadiness,
+            command_hint: "openwand workflow-manual-result-reconciliation-readiness evaluate ...".into(),
+            reason: "Manual result review accepted; readiness evaluation needed".into(),
+            required_inputs: vec!["manual_result_review_id".into()],
+            evidence_links: vec![],
+        }),
+        WorkflowDetectedLoopState::NeedsManualReconciliation => Some(WorkflowLoopRecommendation {
+            operation: WorkflowManualOperationKind::ReconcileManualResult,
+            command_hint: "openwand workflow-manual-result-reconciliation-gate reconcile ...".into(),
+            reason: "Reconciliation readiness Ready; manual reconciliation gate needed".into(),
+            required_inputs: vec!["reconciliation_readiness_id".into()],
+            evidence_links: vec![],
+        }),
     }
 }
 
@@ -472,6 +515,13 @@ fn build_loop_state(
         latest_next_action_review_id: context.latest_review.map(|r| r.review_id.clone()),
         latest_routing_readiness_id: context.latest_routing_readiness.map(|r| r.readiness_id.clone()),
         latest_next_action_routing_id: context.latest_next_action_routing.map(|r| r.routing_id.clone()),
+        // Wave 44: manual-result ladder fields
+        latest_command_composer_id: None,
+        latest_command_review_id: None,
+        latest_manual_result_id: None,
+        latest_manual_result_review_id: None,
+        latest_reconciliation_readiness_id: None,
+        latest_manual_reconciliation_gate_id: None,
         detected_state: detected.clone(),
     }
 }

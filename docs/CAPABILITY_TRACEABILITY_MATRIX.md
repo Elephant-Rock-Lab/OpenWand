@@ -39,6 +39,8 @@ These 15 capabilities form the core evidence chain. Each has a workflow source, 
 
 | 21 | External Attestation Model | 46 | workflow_external_attestation.rs, workflow_external_attestation_validation.rs | workflow_external_attestation.rs (save, load, list, by_workflow_run, by_target, by_kind, by_source) | workflow-external-attestation (attach, show, list) | workflow_external_attestation_state.rs | workflow_external_attestation_components.rs | workflow_external_attestation_cli.rs | workflow_external_attestation_guards.rs | workflow_external_attestations/ | watt_ | WorkflowExternalAttestationId | workflow_external_attestation.rs | WAVE46_EXTERNAL_ATTESTATION_MODEL_LOCK.md | wave-46-lock |
 
+| 22 | Verification Readiness | 47 | workflow_verification_readiness.rs, workflow_verification_readiness_evaluator.rs | workflow_verification_readiness.rs (save, load, list, by_workflow_run, by_target, by_target_id) | workflow-verification-readiness (evaluate, show, latest) | workflow_verification_readiness_state.rs | workflow_verification_readiness_components.rs | workflow_verification_readiness_cli.rs | workflow_verification_readiness_guards.rs | workflow_verification_readiness/ | wvr_ | WorkflowVerificationReadinessId | workflow_verification_readiness.rs | WAVE47_READ_ONLY_VERIFICATION_READINESS_LOCK.md | wave-47-lock |
+
 ## Supporting Code Rows
 
 These modules support primary capabilities but do not have their own persistence root, ID prefix, CLI command, or lock doc.
@@ -119,7 +121,7 @@ OpenWand records what it can prove.
 - **Pre-workflow lock docs (Waves 00–22):** 57 files
 - **Workflow evidence lock docs (Waves 23–37):** 15 files
 - **Doctrine lock docs (Waves 38–39):** 2 files
-- **Total before Wave 46:** 82 files
+- **Total before Wave 47:** 84 files
 
 ---
 

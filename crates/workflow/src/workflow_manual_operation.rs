@@ -17,6 +17,13 @@ pub enum WorkflowManualCommandKind {
     WorkflowLoopRecommend,
     InspectBlockedWorkflow,
     NoCommand,
+    // Patch 5: manual-result ladder command kinds
+    WorkflowCommandCompose,
+    WorkflowCommandReviewAcknowledge,
+    WorkflowManualResultCapture,
+    WorkflowManualResultReviewAccept,
+    WorkflowManualResultReconciliationReadinessEvaluate,
+    WorkflowManualResultReconciliationGateReconcile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -378,6 +378,49 @@ fn build_descriptor_from_recommendation<'a>(
                 None, vec![], vec![],
             );
         }
+        // Patch 5: manual-result ladder operation kinds
+        WorkflowManualOperationKind::CreateCommandDescriptor => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Command descriptor composition".into() },
+                None, vec![], vec![],
+            );
+        }
+        WorkflowManualOperationKind::ReviewCommandDescriptor => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Command descriptor review".into() },
+                None, vec![], vec![],
+            );
+        }
+        WorkflowManualOperationKind::CaptureManualResult => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Manual result capture".into() },
+                None, vec![], vec![],
+            );
+        }
+        WorkflowManualOperationKind::ReviewManualResult => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Manual result review".into() },
+                None, vec![], vec![],
+            );
+        }
+        WorkflowManualOperationKind::EvaluateReconciliationReadiness => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Reconciliation readiness evaluation".into() },
+                None, vec![], vec![],
+            );
+        }
+        WorkflowManualOperationKind::ReconcileManualResult => {
+            return (
+                WorkflowCommandComposerStatus::DescriptorReady,
+                WorkflowCommandComposerDecision::DescriptorReady { summary: "Manual result reconciliation gate".into() },
+                None, vec![], vec![],
+            );
+        }
     };
 
     let descriptor = WorkflowManualCommandDescriptor {

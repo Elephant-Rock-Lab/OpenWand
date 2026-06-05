@@ -14,6 +14,12 @@ use crate::workflow_continuation::WorkflowNextActionProposalId;
 use crate::workflow_next_action_review::WorkflowNextActionReviewId;
 use crate::workflow_routing_readiness::WorkflowRoutingReadinessId;
 use crate::workflow_next_action_routing_gate::WorkflowNextActionRoutingId;
+use crate::workflow_command_composer::WorkflowCommandComposerId;
+use crate::workflow_command_review::WorkflowCommandReviewId;
+use crate::workflow_manual_result::WorkflowManualResultId;
+use crate::workflow_manual_result_review::WorkflowManualResultReviewId;
+use crate::workflow_manual_result_reconciliation_readiness::WorkflowManualResultReconciliationReadinessId;
+use crate::workflow_manual_result_reconciliation_gate::WorkflowManualResultReconciliationGateId;
 
 /// Observed state of a workflow run and its linked evidence chain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +36,13 @@ pub struct WorkflowLoopState {
     pub latest_next_action_review_id: Option<WorkflowNextActionReviewId>,
     pub latest_routing_readiness_id: Option<WorkflowRoutingReadinessId>,
     pub latest_next_action_routing_id: Option<WorkflowNextActionRoutingId>,
+    // Wave 44: manual-result ladder fields
+    pub latest_command_composer_id: Option<WorkflowCommandComposerId>,
+    pub latest_command_review_id: Option<WorkflowCommandReviewId>,
+    pub latest_manual_result_id: Option<WorkflowManualResultId>,
+    pub latest_manual_result_review_id: Option<WorkflowManualResultReviewId>,
+    pub latest_reconciliation_readiness_id: Option<WorkflowManualResultReconciliationReadinessId>,
+    pub latest_manual_reconciliation_gate_id: Option<WorkflowManualResultReconciliationGateId>,
     pub detected_state: WorkflowDetectedLoopState,
 }
 
@@ -53,6 +66,13 @@ pub enum WorkflowDetectedLoopState {
     NeedsApprovalOutcomeResolution,
     NeedsOutcomeReconciliation,
     NeedsContinuationAfterReconciliation,
+    // Wave 44: manual-result ladder detected states (Patch 1: 6 additions)
+    NeedsCommandDescriptor,
+    NeedsCommandReview,
+    NeedsManualResultCapture,
+    NeedsManualResultReview,
+    NeedsReconciliationReadiness,
+    NeedsManualReconciliation,
     WorkflowComplete,
     WorkflowBlocked,
     Inconclusive,
@@ -76,11 +96,45 @@ mod tests {
             latest_reconciliation_id: None, latest_continuation_readiness_id: None,
             latest_next_action_proposal_id: None, latest_next_action_review_id: None,
             latest_routing_readiness_id: None, latest_next_action_routing_id: None,
+            latest_command_composer_id: None, latest_command_review_id: None,
+            latest_manual_result_id: None, latest_manual_result_review_id: None,
+            latest_reconciliation_readiness_id: None, latest_manual_reconciliation_gate_id: None,
             detected_state: WorkflowDetectedLoopState::NeedsInitialContinuationProposal,
         };
         let json = serde_json::to_string(&state).unwrap();
         let back: WorkflowLoopState = serde_json::from_str(&json).unwrap();
         assert_eq!(state.workflow_execution_id, back.workflow_execution_id);
         assert_eq!(state.detected_state, back.detected_state);
+    }
+
+    // Patch 1: verify 15 detected states covering manual-result ladder
+    #[test]
+    fn workflow_detected_loop_state_covers_manual_result_ladder_states() {
+        let states = vec![
+            WorkflowDetectedLoopState::NeedsInitialContinuationProposal,
+            WorkflowDetectedLoopState::NeedsNextActionReview,
+            WorkflowDetectedLoopState::NeedsRoutingReadiness,
+            WorkflowDetectedLoopState::NeedsNextActionRouting,
+            WorkflowDetectedLoopState::NeedsSessionRoutingObservation,
+            WorkflowDetectedLoopState::NeedsApprovalOutcomeResolution,
+            WorkflowDetectedLoopState::NeedsOutcomeReconciliation,
+            WorkflowDetectedLoopState::NeedsContinuationAfterReconciliation,
+            WorkflowDetectedLoopState::NeedsCommandDescriptor,
+            WorkflowDetectedLoopState::NeedsCommandReview,
+            WorkflowDetectedLoopState::NeedsManualResultCapture,
+            WorkflowDetectedLoopState::NeedsManualResultReview,
+            WorkflowDetectedLoopState::NeedsReconciliationReadiness,
+            WorkflowDetectedLoopState::NeedsManualReconciliation,
+            WorkflowDetectedLoopState::WorkflowComplete,
+            WorkflowDetectedLoopState::WorkflowBlocked,
+            WorkflowDetectedLoopState::Inconclusive,
+        ];
+        assert_eq!(17, states.len(), "Should have 17 detected states (9 original + 6 manual-result + 2 terminal)");
+        // Verify all serialize
+        for s in &states {
+            let json = serde_json::to_string(s).unwrap();
+            let back: WorkflowDetectedLoopState = serde_json::from_str(&json).unwrap();
+            assert_eq!(*s, back);
+        }
     }
 }

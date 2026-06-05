@@ -5745,3 +5745,96 @@ fn cmd_external_attestation(cmd: WorkflowExternalAttestationCommands, store_dir:
     }
     Ok(())
 }
+
+#[derive(clap::Subcommand)]
+enum WorkflowVerificationReadinessCommands {
+    /// Evaluate verification readiness for a target
+    Evaluate {
+        #[arg(long)] target_kind: String,
+        #[arg(long)] target_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_target_hash: String,
+        #[arg(long, default_value = "key1")] idempotency_key: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a readiness record by ID
+    Show {
+        #[arg(long)] readiness_id: String,
+        #[arg(long)] json: bool,
+    },
+    /// List readiness records for a workflow run
+    Latest {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] target_id: Option<String>,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_verification_readiness(cmd: WorkflowVerificationReadinessCommands, store_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_verification_readiness::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    let store = std::path::Path::new(&store_dir);
+    match cmd {
+        WorkflowVerificationReadinessCommands::Evaluate {
+            target_kind, target_id, workflow_execution_id,
+            expected_target_hash, idempotency_key, json,
+        } => {
+            let tk: VerificationReadinessTargetKind = serde_json::from_str(&format!("\"{}\"", target_kind))
+                .map_err(|e| anyhow::anyhow!("Invalid target_kind '{}': {}", target_kind, e))?;
+            let request = VerificationReadinessRequest {
+                target_kind: tk,
+                target_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                expected_target_hash,
+                idempotency_key,
+            };
+            // Evaluate using metadata-only path (target record loading would be app-level)
+            let rec = evaluate_readiness_metadata_only(
+                &request, "reported_succeeded", &request.expected_target_hash,
+                &request.workflow_execution_id.0,
+            );
+            openwand_app::workflow_verification_readiness::save_verification_readiness(store, &rec)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Readiness: {} — {:?}", rec.readiness_id.0, rec.status);
+                for pred in &rec.predicate_results {
+                    println!("  {} — {} ({})", if pred.passed { "PASS" } else { "FAIL" },
+                        format!("{:?}", pred.predicate), pred.reason);
+                }
+            }
+        }
+        WorkflowVerificationReadinessCommands::Show { readiness_id, json } => {
+            let rec = openwand_app::workflow_verification_readiness::load_verification_readiness(
+                store, &WorkflowVerificationReadinessId(readiness_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Readiness: {} — {:?}", rec.readiness_id.0, rec.status);
+                println!("  Target: {:?} → {}", rec.target_kind, rec.target_id);
+                for pred in &rec.predicate_results {
+                    println!("  {} — {} ({})", if pred.passed { "PASS" } else { "FAIL" },
+                        format!("{:?}", pred.predicate), pred.reason);
+                }
+            }
+        }
+        WorkflowVerificationReadinessCommands::Latest { workflow_execution_id, target_id, json } => {
+            let results = if let Some(tid) = target_id {
+                openwand_app::workflow_verification_readiness::readiness_by_target_id(store, &tid)
+            } else {
+                openwand_app::workflow_verification_readiness::readiness_by_workflow_run(store, &workflow_execution_id)
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results).context("Serialize")?);
+            } else {
+                println!("Readiness records ({}):", results.len());
+                for rec in &results {
+                    println!("  {} — {:?} — {} → {:?}", rec.readiness_id.0, rec.target_kind, rec.target_id, rec.status);
+                }
+            }
+        }
+    }
+    Ok(())
+}

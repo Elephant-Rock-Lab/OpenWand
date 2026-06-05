@@ -92,11 +92,24 @@ pub struct AuditPacketRecord {
 }
 
 /// Full audit packet — export wrapper.
+/// Patch 6: Attestation link in audit packet — reported, not verified.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditPacketAttestationLink {
+    pub attestation_id: String,
+    pub target_kind: String,
+    pub target_id: String,
+    pub kind: String,
+    pub claim: String,
+    pub verified_by_openwand: bool, // always false
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditPacket {
     pub inspection: EvidenceChainInspectionState,
     pub records: Vec<AuditPacketRecord>,
     pub export_metadata: AuditPacketExportMetadata,
+    /// Patch 6: optional reported attestations. Not required for chain completeness.
+    pub reported_attestations: Vec<AuditPacketAttestationLink>,
     // Patch 4: no-certification flags on packet level too
     pub certifies_external_truth: bool,
     pub verifies_artifacts: bool,
@@ -202,6 +215,7 @@ pub fn build_audit_packet(
     AuditPacket {
         inspection,
         records,
+        reported_attestations: vec![],
         export_metadata: AuditPacketExportMetadata {
             exported_at: Utc::now(),
             schema_version: 1,
@@ -470,5 +484,88 @@ mod tests {
         let h1 = compute_chain_hash(&[]);
         let h2 = compute_chain_hash(&[]);
         assert_eq!(h1, h2);
+    }
+
+    // Patch 6: attestation integration tests
+    #[test]
+    fn audit_packet_includes_reported_attestations_when_present() {
+        let state = build_inspection_state("wfx_1", vec![present_link("run", "wfx_1")], vec![], false);
+        let mut packet = build_audit_packet(state, vec![]);
+        packet.reported_attestations.push(AuditPacketAttestationLink {
+            attestation_id: "watt_1".into(),
+            target_kind: "manual_result".into(),
+            target_id: "wmr_1".into(),
+            kind: "third_party_signoff".into(),
+            claim: "Reviewed".into(),
+            verified_by_openwand: false,
+        });
+        assert_eq!(1, packet.reported_attestations.len());
+        let json = serde_json::to_string(&packet).unwrap();
+        assert!(json.contains("watt_1"));
+    }
+
+    #[test]
+    fn audit_packet_marks_attestations_as_unverified() {
+        let state = build_inspection_state("wfx_1", vec![], vec![], false);
+        let mut packet = build_audit_packet(state, vec![]);
+        packet.reported_attestations.push(AuditPacketAttestationLink {
+            attestation_id: "watt_1".into(),
+            target_kind: "manual_result".into(),
+            target_id: "wmr_1".into(),
+            kind: "third_party_signoff".into(),
+            claim: "Reviewed".into(),
+            verified_by_openwand: false,
+        });
+        assert!(!packet.reported_attestations[0].verified_by_openwand);
+    }
+
+    #[test]
+    fn attestations_do_not_affect_chain_linkage_validity() {
+        let state = build_inspection_state("wfx_1", vec![], vec![], false);
+        let mut packet = build_audit_packet(state, vec![]);
+        packet.reported_attestations.push(AuditPacketAttestationLink {
+            attestation_id: "watt_1".into(),
+            target_kind: "manual_result".into(),
+            target_id: "wmr_1".into(),
+            kind: "third_party_signoff".into(),
+            claim: "Reviewed".into(),
+            verified_by_openwand: false,
+        });
+        // Chain linkage warnings unchanged by attestations
+        assert!(packet.inspection.linkage_warnings.is_empty());
+        assert!(packet.inspection.coverage_summary.present_links == 0);
+    }
+
+    #[test]
+    fn attestations_do_not_satisfy_missing_evidence_links() {
+        let links = vec![EvidenceChainLink {
+            record_type: "manual_reconciliation_gate".into(),
+            record_id: "".into(),
+            presence: EvidenceLinkPresence::MissingExpected,
+            record_hash: "".into(),
+            source_path_hint: None,
+        }];
+        let state = build_inspection_state("wfx_1", links, vec![], false);
+        let mut packet = build_audit_packet(state, vec![]);
+        packet.reported_attestations.push(AuditPacketAttestationLink {
+            attestation_id: "watt_1".into(),
+            target_kind: "manual_result".into(),
+            target_id: "wmr_1".into(),
+            kind: "third_party_signoff".into(),
+            claim: "Reviewed".into(),
+            verified_by_openwand: false,
+        });
+        // Still missing
+        assert_eq!(1, packet.inspection.coverage_summary.missing_expected_links);
+    }
+
+    #[test]
+    fn audit_packet_without_attestations_remains_valid_packet() {
+        let state = build_inspection_state("wfx_1", vec![], vec![], false);
+        let packet = build_audit_packet(state, vec![]);
+        assert!(packet.reported_attestations.is_empty());
+        let json = serde_json::to_string(&packet).unwrap();
+        let back: AuditPacket = serde_json::from_str(&json).unwrap();
+        assert!(back.reported_attestations.is_empty());
     }
 }

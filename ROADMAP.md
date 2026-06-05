@@ -114,7 +114,9 @@ Calibrated from disk-verified repository state at Wave 38.
 
 ## Phase 4 — Verification and Attestation
 
-### Wave 46 — External Attestation Model
+### ~~Wave 46 — External Attestation Model~~ ✅ Locked
+
+**Tests:** 3203 (+64)
 
 **Purpose:** Attach third-party or external attestations to manual results.
 

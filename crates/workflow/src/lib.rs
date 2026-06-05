@@ -60,3 +60,5 @@ pub mod workflow_evidence_chain_inspector;
 pub mod workflow_evidence_chain_inspector_validation;
 pub mod workflow_external_attestation;
 pub mod workflow_external_attestation_validation;
+pub mod workflow_verification_readiness;
+pub mod workflow_verification_readiness_evaluator;

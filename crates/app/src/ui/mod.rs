@@ -67,3 +67,5 @@ pub mod workflow_evidence_chain_inspector_state;
 pub mod workflow_evidence_chain_inspector_components;
 pub mod workflow_external_attestation_state;
 pub mod workflow_external_attestation_components;
+pub mod workflow_verification_readiness_state;
+pub mod workflow_verification_readiness_components;

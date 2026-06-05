@@ -49,3 +49,6 @@ pub mod workflow_readiness_evaluator;
 pub mod tool_intent_resolution;
 pub mod workflow_manual_result_review;
 pub mod workflow_manual_result_review_validation;
+pub mod workflow_manual_result_reconciliation_readiness;
+pub mod workflow_manual_result_reconciliation_readiness_evaluator;
+pub mod workflow_manual_result_reconciliation_readiness_validation;

@@ -481,6 +481,31 @@
       "id_constructor_location": "crates/workflow/src/workflow_manual_result_reconciliation_gate_validation.rs",
       "lock_doc": "WAVE43_MANUAL_RESULT_RECONCILIATION_GATE_LOCK.md",
       "tag": "wave-43-lock"
+    },
+    {
+      "capability": "Operator Console",
+      "wave": 44,
+      "workflow_source": [
+        "workflow_operator_console.rs",
+        "workflow_loop_state.rs",
+        "workflow_loop_recommendation.rs",
+        "workflow_loop_controller.rs"
+      ],
+      "app_persistence": "workflow_operator_console.rs (assembler, no persistence)",
+      "cli_command": "workflow-operator-console",
+      "cli_subcommands": [
+        "show"
+      ],
+      "ui_state": "workflow_operator_console_state.rs",
+      "ui_components": "workflow_operator_console_components.rs",
+      "cli_test": "workflow_operator_console_cli.rs",
+      "guard_test": "workflow_operator_console_guards.rs",
+      "persistence_root": "none (recomputed)",
+      "id_prefix": "none (no new prefix)",
+      "id_type": "none",
+      "id_constructor_location": "none",
+      "lock_doc": "WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md",
+      "tag": "wave-44-lock"
     }
   ],
   "supporting_modules": [

@@ -33,7 +33,7 @@ These 15 capabilities form the core evidence chain. Each has a workflow source, 
 
 | 18 | Manual Result Reconciliation Gate | 43 | workflow_manual_result_reconciliation_gate.rs, workflow_manual_result_reconciliation_gate_evaluator.rs, workflow_manual_result_reconciliation_gate_validation.rs | workflow_manual_result_reconciliation_gate.rs | workflow-manual-result-reconciliation-gate (reconcile/show/latest) | workflow_manual_result_reconciliation_gate_state.rs | workflow_manual_result_reconciliation_gate_components.rs | workflow_manual_result_reconciliation_gate_cli.rs | workflow_manual_result_reconciliation_gate_guards.rs | workflow_manual_result_reconciliation_gates/ | wmrrg_ | WorkflowManualResultReconciliationGateId | workflow_manual_result_reconciliation_gate_validation.rs | WAVE43_MANUAL_RESULT_RECONCILIATION_GATE_LOCK.md | wave-43-lock |
 
-| 19 | Operator Console | 44 | workflow_operator_console.rs, workflow_loop_state.rs, workflow_loop_recommendation.rs, workflow_loop_controller.rs | workflow_operator_console.rs (assembler) | workflow-operator-console (show) | workflow_operator_console_state.rs | workflow_operator_console_components.rs | workflow_operator_console_cli.rs | workflow_operator_console_guards.rs | none (recomputed) | none | none | none | WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md | wave-44-lock |
+| 19 | Operator Console | 44 (hardened 48A) | workflow_operator_console.rs, workflow_loop_state.rs, workflow_loop_recommendation.rs, workflow_loop_controller.rs | workflow_operator_console.rs (assembler) | workflow-operator-console (show) | workflow_operator_console_state.rs | workflow_operator_console_components.rs | workflow_operator_console_cli.rs | workflow_operator_console_guards.rs | none (recomputed) | none | none | none | WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md | wave-44-lock |
 
 | 20 | Evidence Chain Inspector | 45 | workflow_evidence_chain_inspector.rs, workflow_evidence_chain_inspector_validation.rs | workflow_evidence_chain_inspector.rs (assembler + export) | workflow-evidence-chain (inspect, export-packet) | workflow_evidence_chain_inspector_state.rs | workflow_evidence_chain_inspector_components.rs | workflow_evidence_chain_inspector_cli.rs | workflow_evidence_chain_inspector_guards.rs | none (reads existing records) | weci_ | WorkflowEvidenceChainInspectionId | workflow_evidence_chain_inspector_validation.rs | WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md | wave-45-lock |
 
@@ -121,7 +121,7 @@ OpenWand records what it can prove.
 - **Pre-workflow lock docs (Waves 00–22):** 57 files
 - **Workflow evidence lock docs (Waves 23–37):** 15 files
 - **Doctrine lock docs (Waves 38–39):** 2 files
-- **Total before Wave 47:** 84 files
+- **Total before Wave 48A:** 86 files
 
 ---
 

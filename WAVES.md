@@ -52,6 +52,7 @@ Wave history from repository disk state. Tagged with annotated `wave-##-lock` ta
 |------|-------|-----|------:|----------|
 | 44 | Workflow Operator Console | `wave-44-lock` | 3079 | `docs/WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md` |
 | 45 | Evidence Chain Inspector and Audit Packet | `wave-45-lock` | 3139 | `docs/WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md` |
+| 46 | External Attestation Model | `wave-46-lock` | 3203 | `docs/WAVE46_EXTERNAL_ATTESTATION_MODEL_LOCK.md` |
 
 ---
 
@@ -163,3 +164,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | `wmrrr_` | WorkflowManualResultReconciliationReadinessId | 42 |
 | `wmrrg_` | WorkflowManualResultReconciliationGateId | 43 |
 | `weci_` | WorkflowEvidenceChainInspectionId | 45 |
+| `watt_` | WorkflowExternalAttestationId | 46 |

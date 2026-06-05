@@ -8,10 +8,21 @@
     {
       "capability": "Task Planning",
       "wave": 23,
-      "workflow_source": ["plan.rs", "plan_review.rs", "validation.rs", "builder.rs", "context.rs"],
+      "workflow_source": [
+        "plan.rs",
+        "plan_review.rs",
+        "validation.rs",
+        "builder.rs",
+        "context.rs"
+      ],
       "app_persistence": "task_planning.rs",
       "cli_command": "task-plan",
-      "cli_subcommands": ["create", "show", "latest", "review"],
+      "cli_subcommands": [
+        "create",
+        "show",
+        "latest",
+        "review"
+      ],
       "ui_state": "task_plan_state.rs",
       "ui_components": "task_plan_components.rs",
       "cli_test": "task_plan_cli.rs",
@@ -26,10 +37,20 @@
     {
       "capability": "Workflow Proposal",
       "wave": 24,
-      "workflow_source": ["workflow_proposal.rs", "workflow_proposal_builder.rs", "workflow_proposal_review.rs", "workflow_proposal_validation.rs"],
+      "workflow_source": [
+        "workflow_proposal.rs",
+        "workflow_proposal_builder.rs",
+        "workflow_proposal_review.rs",
+        "workflow_proposal_validation.rs"
+      ],
       "app_persistence": "workflow_proposal.rs",
       "cli_command": "workflow-proposal",
-      "cli_subcommands": ["create", "show", "latest", "review"],
+      "cli_subcommands": [
+        "create",
+        "show",
+        "latest",
+        "review"
+      ],
       "ui_state": "workflow_proposal_state.rs",
       "ui_components": "workflow_proposal_components.rs",
       "cli_test": "workflow_proposal_cli.rs",
@@ -44,10 +65,18 @@
     {
       "capability": "Workflow Readiness",
       "wave": 25,
-      "workflow_source": ["workflow_readiness.rs", "workflow_readiness_evaluator.rs", "workflow_readiness_validation.rs"],
+      "workflow_source": [
+        "workflow_readiness.rs",
+        "workflow_readiness_evaluator.rs",
+        "workflow_readiness_validation.rs"
+      ],
       "app_persistence": "workflow_readiness.rs",
       "cli_command": "workflow-readiness",
-      "cli_subcommands": ["evaluate", "show", "latest"],
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_readiness_state.rs",
       "ui_components": "workflow_readiness_components.rs",
       "cli_test": "workflow_readiness_cli.rs",
@@ -62,10 +91,20 @@
     {
       "capability": "Workflow Execution",
       "wave": 26,
-      "workflow_source": ["workflow_execution_gate.rs", "workflow_run.rs", "workflow_run_lifecycle.rs", "workflow_run_validation.rs", "workflow_stage_progression.rs"],
+      "workflow_source": [
+        "workflow_execution_gate.rs",
+        "workflow_run.rs",
+        "workflow_run_lifecycle.rs",
+        "workflow_run_validation.rs",
+        "workflow_stage_progression.rs"
+      ],
       "app_persistence": "workflow_execution.rs",
       "cli_command": "workflow-execution",
-      "cli_subcommands": ["create", "show", "latest"],
+      "cli_subcommands": [
+        "create",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_execution_state.rs",
       "ui_components": "workflow_execution_components.rs",
       "cli_test": "workflow_execution_cli.rs",
@@ -80,10 +119,18 @@
     {
       "capability": "Action Routing",
       "wave": 27,
-      "workflow_source": ["workflow_action_route.rs", "workflow_action_route_gate.rs", "workflow_action_route_validation.rs"],
+      "workflow_source": [
+        "workflow_action_route.rs",
+        "workflow_action_route_gate.rs",
+        "workflow_action_route_validation.rs"
+      ],
       "app_persistence": "workflow_action_routing.rs",
       "cli_command": "workflow-action",
-      "cli_subcommands": ["route", "show", "latest"],
+      "cli_subcommands": [
+        "route",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_action_routing_state.rs",
       "ui_components": "workflow_action_routing_components.rs",
       "cli_test": "workflow_action_routing_cli.rs",
@@ -98,10 +145,18 @@
     {
       "capability": "Action Outcome",
       "wave": 29,
-      "workflow_source": ["workflow_action_outcome.rs", "workflow_action_outcome_gate.rs", "workflow_action_outcome_validation.rs"],
+      "workflow_source": [
+        "workflow_action_outcome.rs",
+        "workflow_action_outcome_gate.rs",
+        "workflow_action_outcome_validation.rs"
+      ],
       "app_persistence": "workflow_action_outcome.rs",
       "cli_command": "workflow-action-outcome",
-      "cli_subcommands": ["create", "show", "latest"],
+      "cli_subcommands": [
+        "create",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_action_outcome_state.rs",
       "ui_components": "workflow_action_outcome_components.rs",
       "cli_test": "workflow_action_outcome_cli.rs",
@@ -116,16 +171,27 @@
     {
       "capability": "Reconciliation",
       "wave": 30,
-      "workflow_source": ["workflow_reconciliation.rs", "workflow_reconciliation_validation.rs", "workflow_reconciliation_gate.rs"],
+      "workflow_source": [
+        "workflow_reconciliation.rs",
+        "workflow_reconciliation_validation.rs",
+        "workflow_reconciliation_gate.rs"
+      ],
       "app_persistence": "workflow_reconciliation.rs",
       "cli_command": "workflow-reconciliation",
-      "cli_subcommands": ["reconcile", "show-revision", "latest-revision", "latest"],
+      "cli_subcommands": [
+        "reconcile",
+        "show-revision",
+        "latest-revision",
+        "latest"
+      ],
       "ui_state": "workflow_reconciliation_state.rs",
       "ui_components": "workflow_reconciliation_components.rs",
       "cli_test": "workflow_reconciliation_cli.rs",
       "guard_test": "workflow_reconciliation_guards.rs",
       "persistence_root": "workflow_reconciliations/",
-      "persistence_roots_extra": ["workflow_run_revisions/"],
+      "persistence_roots_extra": [
+        "workflow_run_revisions/"
+      ],
       "id_prefix": "wrc_",
       "id_type": "WorkflowReconciliationId",
       "id_prefix_extra": "wrr_",
@@ -137,10 +203,18 @@
     {
       "capability": "Continuation",
       "wave": 31,
-      "workflow_source": ["workflow_continuation.rs", "workflow_continuation_validation.rs", "workflow_next_action_selector.rs"],
+      "workflow_source": [
+        "workflow_continuation.rs",
+        "workflow_continuation_validation.rs",
+        "workflow_next_action_selector.rs"
+      ],
       "app_persistence": "workflow_continuation.rs",
       "cli_command": "workflow-continuation",
-      "cli_subcommands": ["evaluate", "show", "latest"],
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_continuation_state.rs",
       "ui_components": "workflow_continuation_components.rs",
       "cli_test": "workflow_continuation_cli.rs",
@@ -157,10 +231,16 @@
     {
       "capability": "Next-Action Review",
       "wave": 32,
-      "workflow_source": ["workflow_next_action_review.rs"],
+      "workflow_source": [
+        "workflow_next_action_review.rs"
+      ],
       "app_persistence": "workflow_next_action_review.rs",
       "cli_command": "workflow-next-action-review",
-      "cli_subcommands": ["review", "show", "latest"],
+      "cli_subcommands": [
+        "review",
+        "show",
+        "latest"
+      ],
       "ui_state": null,
       "ui_components": null,
       "cli_test": "workflow_next_action_review_cli.rs",
@@ -175,10 +255,17 @@
     {
       "capability": "Routing Readiness",
       "wave": 32,
-      "workflow_source": ["workflow_routing_readiness.rs", "workflow_routing_readiness_gate.rs"],
+      "workflow_source": [
+        "workflow_routing_readiness.rs",
+        "workflow_routing_readiness_gate.rs"
+      ],
       "app_persistence": "workflow_routing_readiness.rs",
       "cli_command": "workflow-routing-readiness",
-      "cli_subcommands": ["evaluate", "show", "latest"],
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_routing_readiness_state.rs",
       "ui_components": "workflow_routing_readiness_components.rs",
       "cli_test": null,
@@ -193,10 +280,16 @@
     {
       "capability": "Next-Action Routing",
       "wave": 33,
-      "workflow_source": ["workflow_next_action_routing_gate.rs"],
+      "workflow_source": [
+        "workflow_next_action_routing_gate.rs"
+      ],
       "app_persistence": "workflow_next_action_routing.rs",
       "cli_command": "workflow-next-action-routing",
-      "cli_subcommands": ["route", "show", "latest"],
+      "cli_subcommands": [
+        "route",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_next_action_routing_state.rs",
       "ui_components": "workflow_next_action_routing_components.rs",
       "cli_test": "workflow_next_action_routing_cli.rs",
@@ -211,10 +304,18 @@
     {
       "capability": "Loop Controller",
       "wave": 34,
-      "workflow_source": ["workflow_loop_controller.rs", "workflow_loop_state.rs", "workflow_loop_recommendation.rs"],
+      "workflow_source": [
+        "workflow_loop_controller.rs",
+        "workflow_loop_state.rs",
+        "workflow_loop_recommendation.rs"
+      ],
       "app_persistence": "workflow_loop_controller.rs",
       "cli_command": "workflow-loop",
-      "cli_subcommands": ["evaluate", "show", "latest"],
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_loop_controller_state.rs",
       "ui_components": "workflow_loop_controller_components.rs",
       "cli_test": "workflow_loop_controller_cli.rs",
@@ -229,10 +330,18 @@
     {
       "capability": "Command Composer",
       "wave": 35,
-      "workflow_source": ["workflow_command_composer.rs", "workflow_command_descriptor.rs", "workflow_manual_operation.rs"],
+      "workflow_source": [
+        "workflow_command_composer.rs",
+        "workflow_command_descriptor.rs",
+        "workflow_manual_operation.rs"
+      ],
       "app_persistence": "workflow_command_composer.rs",
       "cli_command": "workflow-command",
-      "cli_subcommands": ["compose", "show", "latest"],
+      "cli_subcommands": [
+        "compose",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_command_composer_state.rs",
       "ui_components": "workflow_command_composer_components.rs",
       "cli_test": "workflow_command_composer_cli.rs",
@@ -247,10 +356,17 @@
     {
       "capability": "Command Review",
       "wave": 36,
-      "workflow_source": ["workflow_command_review.rs", "workflow_command_review_validation.rs"],
+      "workflow_source": [
+        "workflow_command_review.rs",
+        "workflow_command_review_validation.rs"
+      ],
       "app_persistence": "workflow_command_review.rs",
       "cli_command": "workflow-command-review",
-      "cli_subcommands": ["review", "show", "latest"],
+      "cli_subcommands": [
+        "review",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_command_review_state.rs",
       "ui_components": "workflow_command_review_components.rs",
       "cli_test": "workflow_command_review_cli.rs",
@@ -265,10 +381,17 @@
     {
       "capability": "Manual Result",
       "wave": 37,
-      "workflow_source": ["workflow_manual_result.rs", "workflow_manual_result_validation.rs"],
+      "workflow_source": [
+        "workflow_manual_result.rs",
+        "workflow_manual_result_validation.rs"
+      ],
       "app_persistence": "workflow_manual_result.rs",
       "cli_command": "workflow-manual-result",
-      "cli_subcommands": ["create", "show", "latest"],
+      "cli_subcommands": [
+        "create",
+        "show",
+        "latest"
+      ],
       "ui_state": "workflow_manual_result_state.rs",
       "ui_components": "workflow_manual_result_components.rs",
       "cli_test": "workflow_manual_result_cli.rs",
@@ -279,47 +402,216 @@
       "id_constructor_location": "crates/workflow/src/workflow_manual_result_validation.rs",
       "lock_doc": "WAVE37_WORKFLOW_MANUAL_RESULT_LOCK.md",
       "tag": "wave-37-lock"
+    },
+    {
+      "capability": "Manual Result Review",
+      "wave": 41,
+      "workflow_source": [
+        "workflow_manual_result_review.rs",
+        "workflow_manual_result_review_validation.rs"
+      ],
+      "app_persistence": "workflow_manual_result_review.rs",
+      "cli_command": "workflow-manual-result-review",
+      "cli_subcommands": [
+        "review-accept",
+        "review-reject",
+        "review-request-changes",
+        "show",
+        "latest"
+      ],
+      "ui_state": "workflow_manual_result_review_state.rs",
+      "ui_components": "workflow_manual_result_review_components.rs",
+      "cli_test": "workflow_manual_result_review_cli.rs",
+      "guard_test": "workflow_manual_result_review_guards.rs",
+      "persistence_root": "workflow_manual_result_reviews/",
+      "id_prefix": "wmrr_",
+      "id_type": "WorkflowManualResultReviewId",
+      "id_constructor_location": "crates/workflow/src/workflow_manual_result_review_validation.rs",
+      "lock_doc": "WAVE41_MANUAL_RESULT_REVIEW_LOCK.md",
+      "tag": "wave-41-lock"
+    },
+    {
+      "capability": "Manual Result Reconciliation Readiness",
+      "wave": 42,
+      "workflow_source": [
+        "workflow_manual_result_reconciliation_readiness.rs",
+        "workflow_manual_result_reconciliation_readiness_evaluator.rs",
+        "workflow_manual_result_reconciliation_readiness_validation.rs"
+      ],
+      "app_persistence": "workflow_manual_result_reconciliation_readiness.rs",
+      "cli_command": "workflow-manual-result-reconciliation-readiness",
+      "cli_subcommands": [
+        "evaluate",
+        "show",
+        "latest"
+      ],
+      "ui_state": "workflow_manual_result_reconciliation_readiness_state.rs",
+      "ui_components": "workflow_manual_result_reconciliation_readiness_components.rs",
+      "cli_test": "workflow_manual_result_reconciliation_readiness_cli.rs",
+      "guard_test": "workflow_manual_result_reconciliation_readiness_guards.rs",
+      "persistence_root": "workflow_manual_result_reconciliation_readiness/",
+      "id_prefix": "wmrrr_",
+      "id_type": "WorkflowManualResultReconciliationReadinessId",
+      "id_constructor_location": "crates/workflow/src/workflow_manual_result_reconciliation_readiness_validation.rs",
+      "lock_doc": "WAVE42_MANUAL_RESULT_RECONCILIATION_READINESS_LOCK.md",
+      "tag": "wave-42-lock"
     }
   ],
   "supporting_modules": [
     {
       "module": "workflow_approval_bridge.rs",
       "location": "crates/app/src/",
-      "supports": ["Action Outcome (29)", "Action Routing (27)"],
+      "supports": [
+        "Action Outcome (29)",
+        "Action Routing (27)"
+      ],
       "role": "Bridges approval resolution from policy to workflow outcome"
     },
     {
       "module": "workflow_session_bridge.rs",
       "location": "crates/app/src/",
-      "supports": ["Action Routing (27)", "Live Session (28)"],
+      "supports": [
+        "Action Routing (27)",
+        "Live Session (28)"
+      ],
       "role": "Bridges session runner to workflow routing"
     },
     {
       "module": "tool_intent_resolution.rs",
       "location": "crates/workflow/src/",
-      "supports": ["Readiness (25)", "Proposal (24)"],
+      "supports": [
+        "Readiness (25)",
+        "Proposal (24)"
+      ],
       "role": "Resolves tool intent to descriptive capability categories"
     }
   ],
   "id_prefixes": [
-    {"prefix": "tpl_", "type": "TaskPlanId", "constructor": "crates/workflow/src/validation.rs", "wave": 23},
-    {"prefix": "tpr_", "type": "TaskPlanReviewId", "constructor": "crates/workflow/src/plan_review.rs", "wave": 23},
-    {"prefix": "wfp_", "type": "WorkflowProposalId", "constructor": "crates/workflow/src/workflow_proposal_validation.rs", "wave": 24},
-    {"prefix": "wfr_", "type": "WorkflowProposalReviewId", "constructor": "crates/workflow/src/workflow_proposal_validation.rs", "wave": 24},
-    {"prefix": "wfrd_", "type": "WorkflowReadinessId", "constructor": "crates/workflow/src/workflow_readiness_validation.rs", "wave": 25},
-    {"prefix": "wfx_", "type": "WorkflowExecutionId", "constructor": "crates/workflow/src/workflow_run.rs", "wave": 26},
-    {"prefix": "war_", "type": "WorkflowActionRouteId", "constructor": "crates/workflow/src/workflow_action_route_validation.rs", "wave": 27},
-    {"prefix": "wao_", "type": "WorkflowActionOutcomeId", "constructor": "crates/workflow/src/workflow_action_outcome_validation.rs", "wave": 29},
-    {"prefix": "wrc_", "type": "WorkflowReconciliationId", "constructor": "crates/workflow/src/workflow_reconciliation_validation.rs", "wave": 30},
-    {"prefix": "wrr_", "type": "WorkflowRunRevisionId", "constructor": "crates/workflow/src/workflow_reconciliation_validation.rs", "wave": 30},
-    {"prefix": "wcr_", "type": "WorkflowContinuationReadinessId", "constructor": "crates/workflow/src/workflow_continuation_validation.rs", "wave": 31},
-    {"prefix": "wnap_", "type": "WorkflowNextActionProposalId", "constructor": "crates/workflow/src/workflow_continuation_validation.rs", "wave": 31},
-    {"prefix": "wnar_", "type": "WorkflowNextActionReviewId", "constructor": "crates/app/src/main.rs", "wave": 32},
-    {"prefix": "wrrd_", "type": "WorkflowRoutingReadinessId", "constructor": "crates/workflow/src/workflow_routing_readiness_gate.rs", "wave": 32},
-    {"prefix": "wnaroute_", "type": "WorkflowNextActionRoutingId", "constructor": "crates/workflow/src/workflow_next_action_routing_gate.rs", "wave": 33},
-    {"prefix": "wlc_", "type": "WorkflowLoopControllerId", "constructor": "crates/workflow/src/workflow_loop_controller.rs", "wave": 34},
-    {"prefix": "wcc_", "type": "WorkflowCommandComposerId", "constructor": "crates/workflow/src/workflow_command_composer.rs", "wave": 35},
-    {"prefix": "wcrv_", "type": "WorkflowCommandReviewId", "constructor": "crates/workflow/src/workflow_command_review.rs", "wave": 36},
-    {"prefix": "wmr_", "type": "WorkflowManualResultId", "constructor": "crates/workflow/src/workflow_manual_result_validation.rs", "wave": 37}
+    {
+      "prefix": "tpl_",
+      "type": "TaskPlanId",
+      "constructor": "crates/workflow/src/validation.rs",
+      "wave": 23
+    },
+    {
+      "prefix": "tpr_",
+      "type": "TaskPlanReviewId",
+      "constructor": "crates/workflow/src/plan_review.rs",
+      "wave": 23
+    },
+    {
+      "prefix": "wfp_",
+      "type": "WorkflowProposalId",
+      "constructor": "crates/workflow/src/workflow_proposal_validation.rs",
+      "wave": 24
+    },
+    {
+      "prefix": "wfr_",
+      "type": "WorkflowProposalReviewId",
+      "constructor": "crates/workflow/src/workflow_proposal_validation.rs",
+      "wave": 24
+    },
+    {
+      "prefix": "wfrd_",
+      "type": "WorkflowReadinessId",
+      "constructor": "crates/workflow/src/workflow_readiness_validation.rs",
+      "wave": 25
+    },
+    {
+      "prefix": "wfx_",
+      "type": "WorkflowExecutionId",
+      "constructor": "crates/workflow/src/workflow_run.rs",
+      "wave": 26
+    },
+    {
+      "prefix": "war_",
+      "type": "WorkflowActionRouteId",
+      "constructor": "crates/workflow/src/workflow_action_route_validation.rs",
+      "wave": 27
+    },
+    {
+      "prefix": "wao_",
+      "type": "WorkflowActionOutcomeId",
+      "constructor": "crates/workflow/src/workflow_action_outcome_validation.rs",
+      "wave": 29
+    },
+    {
+      "prefix": "wrc_",
+      "type": "WorkflowReconciliationId",
+      "constructor": "crates/workflow/src/workflow_reconciliation_validation.rs",
+      "wave": 30
+    },
+    {
+      "prefix": "wrr_",
+      "type": "WorkflowRunRevisionId",
+      "constructor": "crates/workflow/src/workflow_reconciliation_validation.rs",
+      "wave": 30
+    },
+    {
+      "prefix": "wcr_",
+      "type": "WorkflowContinuationReadinessId",
+      "constructor": "crates/workflow/src/workflow_continuation_validation.rs",
+      "wave": 31
+    },
+    {
+      "prefix": "wnap_",
+      "type": "WorkflowNextActionProposalId",
+      "constructor": "crates/workflow/src/workflow_continuation_validation.rs",
+      "wave": 31
+    },
+    {
+      "prefix": "wnar_",
+      "type": "WorkflowNextActionReviewId",
+      "constructor": "crates/app/src/main.rs",
+      "wave": 32
+    },
+    {
+      "prefix": "wrrd_",
+      "type": "WorkflowRoutingReadinessId",
+      "constructor": "crates/workflow/src/workflow_routing_readiness_gate.rs",
+      "wave": 32
+    },
+    {
+      "prefix": "wnaroute_",
+      "type": "WorkflowNextActionRoutingId",
+      "constructor": "crates/workflow/src/workflow_next_action_routing_gate.rs",
+      "wave": 33
+    },
+    {
+      "prefix": "wlc_",
+      "type": "WorkflowLoopControllerId",
+      "constructor": "crates/workflow/src/workflow_loop_controller.rs",
+      "wave": 34
+    },
+    {
+      "prefix": "wcc_",
+      "type": "WorkflowCommandComposerId",
+      "constructor": "crates/workflow/src/workflow_command_composer.rs",
+      "wave": 35
+    },
+    {
+      "prefix": "wcrv_",
+      "type": "WorkflowCommandReviewId",
+      "constructor": "crates/workflow/src/workflow_command_review.rs",
+      "wave": 36
+    },
+    {
+      "prefix": "wmr_",
+      "type": "WorkflowManualResultId",
+      "constructor": "crates/workflow/src/workflow_manual_result_validation.rs",
+      "wave": 37
+    },
+    {
+      "prefix": "wmrr_",
+      "type": "WorkflowManualResultReviewId",
+      "constructor": "crates/workflow/src/workflow_manual_result_review_validation.rs",
+      "wave": 41
+    },
+    {
+      "prefix": "wmrrr_",
+      "type": "WorkflowManualResultReconciliationReadinessId",
+      "constructor": "crates/workflow/src/workflow_manual_result_reconciliation_readiness_validation.rs",
+      "wave": 42
+    }
   ]
 }

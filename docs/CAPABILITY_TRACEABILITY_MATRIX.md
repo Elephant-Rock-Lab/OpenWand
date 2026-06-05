@@ -28,6 +28,9 @@ These 15 capabilities form the core evidence chain. Each has a workflow source, 
 
 ---
 
+| 16 | Manual Result Review | 41 | workflow_manual_result_review.rs, workflow_manual_result_review_validation.rs | workflow_manual_result_review.rs | workflow-manual-result-review (review-accept/reject/request-changes/show/latest) | workflow_manual_result_review_state.rs | workflow_manual_result_review_components.rs | workflow_manual_result_review_cli.rs | workflow_manual_result_review_guards.rs | workflow_manual_result_reviews/ | wmrr_ | WorkflowManualResultReviewId | workflow_manual_result_review_validation.rs | WAVE41_MANUAL_RESULT_REVIEW_LOCK.md | wave-41-lock |
+| 17 | Reconciliation Readiness | 42 | workflow_manual_result_reconciliation_readiness.rs, workflow_manual_result_reconciliation_readiness_evaluator.rs, workflow_manual_result_reconciliation_readiness_validation.rs | workflow_manual_result_reconciliation_readiness.rs | workflow-manual-result-reconciliation-readiness (evaluate/show/latest) | workflow_manual_result_reconciliation_readiness_state.rs | workflow_manual_result_reconciliation_readiness_components.rs | workflow_manual_result_reconciliation_readiness_cli.rs | workflow_manual_result_reconciliation_readiness_guards.rs | workflow_manual_result_reconciliation_readiness/ | wmrrr_ | WorkflowManualResultReconciliationReadinessId | workflow_manual_result_reconciliation_readiness_validation.rs | WAVE42_MANUAL_RESULT_RECONCILIATION_READINESS_LOCK.md | wave-42-lock |
+
 ## Supporting Code Rows
 
 These modules support primary capabilities but do not have their own persistence root, ID prefix, CLI command, or lock doc.
@@ -79,6 +82,9 @@ These CLI commands exist in the binary but are out of scope for the workflow cap
 | `wcrv_` | WorkflowCommandReviewId | `crates/workflow/src/workflow_command_review.rs` | 36 |
 | `wmr_` | WorkflowManualResultId | `crates/workflow/src/workflow_manual_result_validation.rs` | 37 |
 
+| wmrr_ | WorkflowManualResultReviewId | crates/workflow/src/workflow_manual_result_review_validation.rs | 41 |
+| wmrrr_ | WorkflowManualResultReconciliationReadinessId | crates/workflow/src/workflow_manual_result_reconciliation_readiness_validation.rs | 42 |
+
 **Note:** `wnar_` (WorkflowNextActionReviewId) is the only ID prefix constructed in the app crate rather than the workflow crate. All others are content-addressed in workflow validation modules.
 
 ---
@@ -103,7 +109,7 @@ OpenWand records what it can prove.
 - **Pre-workflow lock docs (Waves 00–22):** 57 files
 - **Workflow evidence lock docs (Waves 23–37):** 15 files
 - **Doctrine lock docs (Waves 38–39):** 2 files
-- **Total before Wave 40:** 74 files
+- **Total before Wave 42:** 76 files
 
 ---
 

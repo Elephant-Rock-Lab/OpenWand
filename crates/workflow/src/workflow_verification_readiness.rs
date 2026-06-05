@@ -204,7 +204,7 @@ pub fn build_readiness_record(
     }
 }
 
-pub(crate) fn p(predicate: VerificationReadinessPredicate, passed: bool, reason: &str) -> VerificationReadinessPredicateResult {
+pub fn p(predicate: VerificationReadinessPredicate, passed: bool, reason: &str) -> VerificationReadinessPredicateResult {
     VerificationReadinessPredicateResult { predicate, passed, reason: reason.into() }
 }
 

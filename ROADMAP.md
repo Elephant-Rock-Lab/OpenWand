@@ -102,7 +102,9 @@ Calibrated from disk-verified repository state at Wave 38.
 
 ---
 
-### Wave 45 — Evidence Chain Inspector and Audit Packet
+### ~~Wave 45 — Evidence Chain Inspector and Audit Packet~~ ✅ Locked
+
+**Tests:** 3139 (+60)
 
 **Purpose:** Export a complete evidence packet for one workflow run.
 

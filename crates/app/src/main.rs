@@ -5648,3 +5648,100 @@ fn cmd_evidence_chain(cmd: WorkflowEvidenceChainCommands, store_dir: String) -> 
     }
     Ok(())
 }
+
+#[derive(clap::Subcommand)]
+enum WorkflowExternalAttestationCommands {
+    /// Attach an external attestation to an evidence record
+    Attach {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] target_kind: String,
+        #[arg(long)] target_id: String,
+        #[arg(long)] kind: String,
+        #[arg(long)] source_name: String,
+        #[arg(long, default_value = "operator")] source_role: String,
+        #[arg(long)] claim: String,
+        #[arg(long, default_value = "key1")] idempotency_key: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show an attestation by ID
+    Show {
+        #[arg(long)] attestation_id: String,
+        #[arg(long)] json: bool,
+    },
+    /// List attestations for a workflow run
+    List {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_external_attestation(cmd: WorkflowExternalAttestationCommands, store_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_external_attestation::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    let store = std::path::Path::new(&store_dir);
+    match cmd {
+        WorkflowExternalAttestationCommands::Attach {
+            workflow_execution_id, target_kind, target_id, kind,
+            source_name, source_role, claim, idempotency_key, json,
+        } => {
+            let tk: ExternalAttestationTargetKind = serde_json::from_str(&format!("\"{}\"", target_kind))
+                .map_err(|e| anyhow::anyhow!("Invalid target_kind '{}': {}", target_kind, e))?;
+            let k: ExternalAttestationKind = serde_json::from_str(&format!("\"{}\"", kind))
+                .map_err(|e| anyhow::anyhow!("Invalid kind '{}': {}", kind, e))?;
+            let request = ExternalAttestationRequest {
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                target_kind: tk,
+                target_id,
+                expected_target_hash: None,
+                kind: k,
+                source_name,
+                source_role,
+                source_system_identifier: None,
+                claim,
+                references: vec![],
+                reported_signature: None,
+                attested_at: chrono::Utc::now(),
+                idempotency_key,
+            };
+            let attestation = build_external_attestation(request);
+            openwand_app::workflow_external_attestation::save_external_attestation(store, &attestation)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&attestation).context("Serialize")?);
+            } else {
+                println!("Attestation: {} — {} → {}",
+                    attestation.attestation_id.0,
+                    attestation.claim,
+                    attestation.target.target_id);
+            }
+        }
+        WorkflowExternalAttestationCommands::Show { attestation_id, json } => {
+            let att = openwand_app::workflow_external_attestation::load_external_attestation(
+                store, &WorkflowExternalAttestationId(attestation_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&att).context("Serialize")?);
+            } else {
+                println!("Attestation: {}", att.attestation_id.0);
+                println!("  Target: {:?} → {}", att.target.target_kind, att.target.target_id);
+                println!("  Claim: {}", att.claim);
+                println!("  Source: {} ({})", att.source.name, att.source.role);
+                println!("  Verified: {}", att.verified_by_openwand);
+            }
+        }
+        WorkflowExternalAttestationCommands::List { workflow_execution_id, json } => {
+            let results = openwand_app::workflow_external_attestation::attestations_by_workflow_run(
+                store, &workflow_execution_id,
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results).context("Serialize")?);
+            } else {
+                println!("Attestations for {} ({}):", workflow_execution_id, results.len());
+                for att in &results {
+                    println!("  {} — {:?} — {}", att.attestation_id.0, att.kind, att.claim);
+                }
+            }
+        }
+    }
+    Ok(())
+}

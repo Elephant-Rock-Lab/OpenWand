@@ -5559,7 +5559,26 @@ fn cmd_manual_reconciliation_gate(cmd: WorkflowManualResultReconciliationGateCom
 
 #[derive(Subcommand, Debug)]
 enum WorkflowOperatorConsoleCommands {
+    /// Show full console state as JSON
     Show {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Brief status summary
+    Summary {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// List evidence links grouped by section
+    Evidence {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    /// Explain detected state in human terms
+    Explain {
         #[arg(long)] workflow_execution_id: String,
         #[arg(long, default_value = "eval_reports")] output_dir: String,
         #[arg(long)] json: bool,
@@ -5567,9 +5586,9 @@ enum WorkflowOperatorConsoleCommands {
 }
 
 fn cmd_operator_console(cmd: WorkflowOperatorConsoleCommands, _output_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
     match cmd {
         WorkflowOperatorConsoleCommands::Show { workflow_execution_id, output_dir, json } => {
-            use openwand_workflow::workflow_run::WorkflowExecutionId;
             let store = std::path::Path::new(&output_dir);
             let state = openwand_app::workflow_operator_console::assemble_console_state(
                 store, &WorkflowExecutionId(workflow_execution_id),
@@ -5584,6 +5603,74 @@ fn cmd_operator_console(cmd: WorkflowOperatorConsoleCommands, _output_dir: Strin
                 }
                 for w in &state.chain_warnings {
                     println!("  WARNING: {} — {}", w.link_kind, w.reason);
+                }
+            }
+        }
+        WorkflowOperatorConsoleCommands::Summary { workflow_execution_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let state = openwand_app::workflow_operator_console::assemble_console_state(
+                store, &WorkflowExecutionId(workflow_execution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            let summary = openwand_app::ui::workflow_operator_console_state::console_summary_lines(&state);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "workflow_execution_id": summary.workflow_execution_id,
+                    "run_status": summary.run_status,
+                    "detected_state": summary.detected_state,
+                    "chain_consistent": summary.chain_consistent,
+                    "evidence_count": summary.evidence_chain_count,
+                    "warnings": summary.warning_count,
+                    "sections": summary.section_count,
+                    "attestation_groups": summary.attestation_group_count,
+                    "readiness_summaries": summary.readiness_summary_count,
+                })).context("Serialize")?);
+            } else {
+                println!("Summary: {} — {} — {} — chain: {} — evidence: {} — warnings: {}",
+                    summary.workflow_execution_id, summary.run_status, summary.detected_state,
+                    if summary.chain_consistent { "OK" } else { "WARNINGS" },
+                    summary.evidence_chain_count, summary.warning_count);
+                println!("  Sections: {} — Attestation groups: {} — Readiness summaries: {}",
+                    summary.section_count, summary.attestation_group_count, summary.readiness_summary_count);
+            }
+        }
+        WorkflowOperatorConsoleCommands::Evidence { workflow_execution_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let state = openwand_app::workflow_operator_console::assemble_console_state(
+                store, &WorkflowExecutionId(workflow_execution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            let sections = openwand_app::ui::workflow_operator_console_state::section_display_rows(&state);
+            if json {
+                let sections_json: Vec<serde_json::Value> = sections.iter().map(|s| serde_json::json!({
+                    "section": s.section, "present": s.present, "missing": s.missing, "total": s.total,
+                })).collect();
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "sections": sections_json,
+                    "chain": state.evidence_chain,
+                })).context("Serialize")?);
+            } else {
+                for sec in &sections {
+                    println!("{}: {}/{} present, {} missing",
+                        sec.section, sec.present, sec.total, sec.missing);
+                }
+                for link in &state.evidence_chain {
+                    println!("  {} — {} — {}", link.link_kind, link.record_id, link.status);
+                }
+            }
+        }
+        WorkflowOperatorConsoleCommands::Explain { workflow_execution_id, output_dir, json } => {
+            let store = std::path::Path::new(&output_dir);
+            let state = openwand_app::workflow_operator_console::assemble_console_state(
+                store, &WorkflowExecutionId(workflow_execution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "detected_state": state.detected_state,
+                    "explanation": state.detected_state_explanation,
+                })).context("Serialize")?);
+            } else {
+                println!("State: {}", state.detected_state);
+                if let Some(exp) = &state.detected_state_explanation {
+                    println!("Explanation: {}", exp);
                 }
             }
         }

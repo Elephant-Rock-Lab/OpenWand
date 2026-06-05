@@ -505,7 +505,8 @@
       "id_type": "none",
       "id_constructor_location": "none",
       "lock_doc": "WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md",
-      "tag": "wave-44-lock"
+      "tag": "wave-44-lock",
+      "wave_note": "Hardened in Wave 48A: extended sections, attestation grouping, verification readiness eligibility, detected state explanations, CLI subcommands summary/evidence/explain"
     },
     {
       "capability": "Evidence Chain Inspector",

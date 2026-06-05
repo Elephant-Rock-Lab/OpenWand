@@ -185,6 +185,15 @@ enum Commands {
         output_dir: String,
     },
 
+    /// Manual result reconciliation gate
+    #[command(name = "workflow-manual-result-reconciliation-gate")]
+    WorkflowManualResultReconciliationGate {
+        #[command(subcommand)]
+        gate_cmd: WorkflowManualResultReconciliationGateCommands,
+        #[arg(long, default_value = "eval_reports")]
+        output_dir: String,
+    },
+
     /// Manual result reconciliation readiness
     #[command(name = "workflow-manual-result-reconciliation-readiness")]
     WorkflowManualResultReconciliationReadiness {
@@ -989,6 +998,7 @@ async fn main() -> Result<()> {
         Commands::WorkflowManualResultCmd { result_cmd } => { cmd_workflow_manual_result(result_cmd)?; Ok(()) },
         Commands::WorkflowManualResultReview { cmd, output_dir } => { cmd_workflow_manual_result_review(cmd, output_dir)?; Ok(()) },
         Commands::WorkflowManualResultReconciliationReadiness { readiness_cmd, output_dir } => { cmd_workflow_reconciliation_readiness(readiness_cmd, output_dir)?; Ok(()) },
+        Commands::WorkflowManualResultReconciliationGate { gate_cmd, output_dir } => { cmd_manual_reconciliation_gate(gate_cmd, output_dir)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -5400,6 +5410,137 @@ fn cmd_workflow_reconciliation_readiness(cmd: WorkflowManualResultReconciliation
             match result {
                 Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.readiness_id.0, r.status, r.evaluator); } }
                 None => println!("No reconciliation readiness found."),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand, Debug)]
+enum WorkflowManualResultReconciliationGateCommands {
+    Reconcile {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] manual_result_id: String,
+        #[arg(long)] manual_result_review_id: String,
+        #[arg(long)] reconciliation_readiness_id: String,
+        #[arg(long)] stage_id: String,
+        #[arg(long)] expected_workflow_run_hash: String,
+        #[arg(long)] expected_reconciliation_readiness_hash: String,
+        #[arg(long)] expected_manual_result_review_hash: String,
+        #[arg(long)] expected_manual_result_hash: String,
+        #[arg(long)] expected_command_review_hash: String,
+        #[arg(long)] expected_command_composer_hash: String,
+        #[arg(long)] expected_command_descriptor_hash: String,
+        #[arg(long)] expected_loop_controller_hash: String,
+        #[arg(long)] requested_by: String,
+        #[arg(long, default_value = "default")] idempotency_key: String,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+    Show { gate_id: String, #[arg(long, default_value = "eval_reports")] output_dir: String, #[arg(long)] json: bool },
+    Latest {
+        #[arg(long)] manual_result_id: Option<String>,
+        #[arg(long)] readiness_id: Option<String>,
+        #[arg(long)] workflow_execution_id: Option<String>,
+        #[arg(long, default_value = "eval_reports")] output_dir: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_manual_reconciliation_gate(cmd: WorkflowManualResultReconciliationGateCommands, _output_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_manual_result_reconciliation_gate::*;
+    use openwand_workflow::workflow_manual_result::WorkflowManualResultId;
+    use openwand_workflow::workflow_manual_result_review::WorkflowManualResultReviewId;
+    use openwand_workflow::workflow_manual_result_reconciliation_readiness::WorkflowManualResultReconciliationReadinessId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_reconciliation::WorkflowRunRevisionId;
+
+    match cmd {
+        WorkflowManualResultReconciliationGateCommands::Reconcile {
+            workflow_execution_id, manual_result_id, manual_result_review_id,
+            reconciliation_readiness_id, stage_id,
+            expected_workflow_run_hash, expected_reconciliation_readiness_hash,
+            expected_manual_result_review_hash, expected_manual_result_hash,
+            expected_command_review_hash, expected_command_composer_hash,
+            expected_command_descriptor_hash, expected_loop_controller_hash,
+            requested_by, idempotency_key, output_dir, json,
+        } => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"manual_reconciliation_gate:v1:");
+            hasher.update(workflow_execution_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(manual_result_review_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(reconciliation_readiness_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(stage_id.as_bytes());
+            hasher.update(b":");
+            hasher.update(idempotency_key.as_bytes());
+            let hex = hasher.finalize().to_hex().to_string();
+            let gate_id = WorkflowManualResultReconciliationGateId(format!("wmrrg_{}", &hex[..16]));
+            let now = chrono::Utc::now();
+            let revision_id = WorkflowRunRevisionId(format!("wrr_{}", &hex[..16]));
+            let record = WorkflowManualResultReconciliationGateRecord {
+                gate_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                manual_result_id: WorkflowManualResultId(manual_result_id),
+                manual_result_review_id: WorkflowManualResultReviewId(manual_result_review_id),
+                reconciliation_readiness_id: WorkflowManualResultReconciliationReadinessId(reconciliation_readiness_id),
+                command_review_id: openwand_workflow::workflow_command_review::WorkflowCommandReviewId(String::new()),
+                command_composer_id: openwand_workflow::workflow_command_composer::WorkflowCommandComposerId(String::new()),
+                loop_controller_id: openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId(String::new()),
+                stage_id,
+                workflow_run_hash: expected_workflow_run_hash.clone(),
+                reconciliation_readiness_hash: expected_reconciliation_readiness_hash.clone(),
+                manual_result_review_hash: expected_manual_result_review_hash.clone(),
+                manual_result_hash: expected_manual_result_hash.clone(),
+                command_review_hash: expected_command_review_hash,
+                command_composer_hash: expected_command_composer_hash,
+                command_descriptor_hash: expected_command_descriptor_hash,
+                loop_controller_hash: expected_loop_controller_hash,
+                status: WorkflowManualResultReconciliationGateStatus::Reconciled,
+                decision: WorkflowManualResultReconciliationGateDecision::Reconciled {
+                    revision_id: Some(revision_id.0.clone()),
+                    summary: "CLI-reconciled gate".into(),
+                },
+                predicates: vec![],
+                progression: None,
+                new_run_revision_id: Some(revision_id),
+                creates_run_revision: true,
+                mutates_original_workflow_run: false,
+                verifies_external_truth: false, executes_command: false,
+                routes_continuation: false, appends_trace: false, writes_memory: false,
+                creates_execution_grant: false, execution_allowed_now: false,
+                reconciled_by: requested_by, reconciled_at: now,
+            };
+            let store = std::path::Path::new(&output_dir);
+            openwand_app::workflow_manual_result_reconciliation_gate::save_manual_reconciliation_gate(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
+            else { println!("Gate recorded: {} — {:?}", record.gate_id.0, record.status); }
+        }
+        WorkflowManualResultReconciliationGateCommands::Show { gate_id, output_dir, json } => {
+            let rec = openwand_app::workflow_manual_result_reconciliation_gate::load_manual_reconciliation_gate(
+                std::path::Path::new(&output_dir),
+                &WorkflowManualResultReconciliationGateId(gate_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json { println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?); }
+            else { println!("Gate: {} — {:?} by {}", rec.gate_id.0, rec.status, rec.reconciled_by); }
+        }
+        WorkflowManualResultReconciliationGateCommands::Latest {
+            manual_result_id, readiness_id, workflow_execution_id, output_dir, json,
+        } => {
+            let store = std::path::Path::new(&output_dir);
+            let result = match (manual_result_id, readiness_id, workflow_execution_id) {
+                (Some(mr), _, _) => openwand_app::workflow_manual_result_reconciliation_gate::gate_by_manual_result(store, &mr),
+                (_, Some(rd), _) => openwand_app::workflow_manual_result_reconciliation_gate::gate_by_readiness(store, &rd),
+                (_, _, Some(wfx)) => openwand_app::workflow_manual_result_reconciliation_gate::gate_by_workflow_run(store, &wfx),
+                _ => openwand_app::workflow_manual_result_reconciliation_gate::latest_manual_reconciliation_gate(store),
+            }.map_err(|e| anyhow::anyhow!(e))?;
+            match result {
+                Some(r) => { if json { println!("{}", serde_json::to_string_pretty(&r).context("Serialize")?); } else { println!("Latest: {} — {:?} by {}", r.gate_id.0, r.status, r.reconciled_by); } }
+                None => println!("No manual reconciliation gate found."),
             }
         }
     }

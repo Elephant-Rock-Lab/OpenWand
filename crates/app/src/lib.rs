@@ -40,3 +40,4 @@ pub mod workflow_loop_controller;
 pub mod workflow_command_composer;
 pub mod workflow_command_review;
 pub mod workflow_manual_result;
+pub mod workflow_manual_result_review;

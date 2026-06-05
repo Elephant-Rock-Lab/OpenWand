@@ -25,6 +25,7 @@ Calibrated from disk-verified repository state at Wave 38.
 | 36 | Command review | — | ✅ Locked |
 | 37 | Manual result capture | 2824 | ✅ Locked |
 | 38 | Repository reality map + calibration | 2824 | ✅ Locked |
+| 39 | Disk-verified wave template + guardrails | 2824 | ✅ Locked |
 
 ---
 
@@ -58,6 +59,8 @@ Calibrated from disk-verified repository state at Wave 38.
 - Known coverage gaps
 
 **Non-scope:** No new runtime behavior. No workflow execution changes.
+
+**Key invariant:** Every capability maps to code. Every code path maps to tests. Every test maps to a lock doc. Every gap is documented, not hidden.
 
 ---
 

@@ -54,3 +54,4 @@ pub mod workflow_manual_result_reconciliation_readiness_evaluator;
 pub mod workflow_manual_result_reconciliation_readiness_validation;
 pub mod workflow_manual_result_reconciliation_gate;
 pub mod workflow_manual_result_reconciliation_gate_evaluator;
+pub mod workflow_manual_result_reconciliation_gate_validation;

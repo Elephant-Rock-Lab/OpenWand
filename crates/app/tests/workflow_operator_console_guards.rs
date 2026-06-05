@@ -145,7 +145,7 @@ fn console_record_serialized_json_has_no_authority() {
     let state = build_console_state(
         WorkflowExecutionId("wfx_g".into()), "suspended".into(),
         vec![], &WorkflowDetectedLoopState::Inconclusive,
-        None, vec![], vec![],
+        None, vec![], vec![], vec![], vec![], vec![],
     );
     let json = serde_json::to_string_pretty(&state).unwrap().to_lowercase();
     assert!(json.contains("\"creates_route\": false"));

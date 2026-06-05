@@ -83,6 +83,9 @@ mod tests {
                 latest_reconciliation_id: None, latest_continuation_readiness_id: None,
                 latest_next_action_proposal_id: None, latest_next_action_review_id: None,
                 latest_routing_readiness_id: None, latest_next_action_routing_id: None,
+                latest_command_composer_id: None, latest_command_review_id: None,
+                latest_manual_result_id: None, latest_manual_result_review_id: None,
+                latest_reconciliation_readiness_id: None, latest_manual_reconciliation_gate_id: None,
                 detected_state: WorkflowDetectedLoopState::NeedsInitialContinuationProposal,
             }),
             recommendation: Some(WorkflowLoopRecommendation {

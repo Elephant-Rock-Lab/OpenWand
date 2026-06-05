@@ -56,3 +56,5 @@ pub mod workflow_manual_result_reconciliation_gate;
 pub mod workflow_manual_result_reconciliation_gate_evaluator;
 pub mod workflow_manual_result_reconciliation_gate_validation;
 pub mod workflow_operator_console;
+pub mod workflow_evidence_chain_inspector;
+pub mod workflow_evidence_chain_inspector_validation;

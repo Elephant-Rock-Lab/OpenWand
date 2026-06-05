@@ -40,7 +40,7 @@ The following crates are protected by default during ordinary workflow/doctrine 
 
 All lock documents in `docs/WAVE*.md` are sealed after their respective wave completes. They must not be modified after seal except by an explicit correction wave that records the reason in its own lock doc.
 
-**Current count:** 68 lock documents (WAVE00 through WAVE38)
+**Current count:** 73 lock documents before Wave 39, 74 after Wave 39 lock (WAVE00 through WAVE39). The initial reconnaissance count of 68 was incorrect.
 
 ---
 

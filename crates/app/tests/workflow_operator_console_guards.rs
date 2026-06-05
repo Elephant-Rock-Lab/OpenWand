@@ -1,4 +1,9 @@
 //! Guard tests for workflow operator console.
+//!
+//! Wave 48A: Extended guards for attestation grouping, verification readiness,
+//! linkage-aware warnings, and extended authority flags.
+
+// --- Crate import guards ---
 
 #[test] fn console_crate_does_not_import_tool_executor() {
     let src = include_str!("../../workflow/src/workflow_operator_console.rs");
@@ -42,7 +47,6 @@
     assert!(!src.contains("verify_shell") && !src.contains("verify_git"));
 }
 
-// Check fn lines only (guard test reconciliation check pattern)
 #[test] fn console_app_does_not_mutate_workflow_state() {
     let src = include_str!("../src/workflow_operator_console.rs");
     let fn_lines: Vec<&str> = src.lines().filter(|l| l.trim().starts_with("pub fn") || l.trim().starts_with("fn ")).collect();
@@ -137,6 +141,58 @@ fn workflow_crate_dependency_guard_still_allows_only_6_deps() {
     assert_eq!(6, dep_count, "Workflow crate must have exactly 6 dependencies");
 }
 
+// Patch 7 (48A): Extended authority guards
+
+#[test]
+fn extended_operator_console_has_no_new_authority() {
+    let src = include_str!("../../workflow/src/workflow_operator_console.rs");
+    // Check that certifies_evidence, promotes_trust, schedules_verification are all false
+    assert!(src.contains("certifies_evidence: false"));
+    assert!(src.contains("promotes_trust: false"));
+    assert!(src.contains("schedules_verification: false"));
+}
+
+#[test]
+fn console_does_not_certify_or_promote_trust() {
+    use openwand_workflow::workflow_operator_console::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_loop_state::WorkflowDetectedLoopState;
+    let state = build_console_state(
+        WorkflowExecutionId("wfx_g".into()), "suspended".into(),
+        vec![], &WorkflowDetectedLoopState::Inconclusive,
+        None, vec![], vec![], vec![], vec![], vec![],
+    );
+    assert!(!state.certifies_evidence, "console must not certify evidence");
+    assert!(!state.promotes_trust, "console must not promote trust");
+}
+
+#[test]
+fn console_does_not_schedule_verification() {
+    use openwand_workflow::workflow_operator_console::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_loop_state::WorkflowDetectedLoopState;
+    let state = build_console_state(
+        WorkflowExecutionId("wfx_g".into()), "suspended".into(),
+        vec![], &WorkflowDetectedLoopState::Inconclusive,
+        None, vec![], vec![], vec![], vec![], vec![],
+    );
+    assert!(!state.schedules_verification, "console must not schedule verification");
+}
+
+#[test]
+fn console_does_not_create_run_revision() {
+    use openwand_workflow::workflow_operator_console::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    use openwand_workflow::workflow_loop_state::WorkflowDetectedLoopState;
+    let state = build_console_state(
+        WorkflowExecutionId("wfx_g".into()), "suspended".into(),
+        vec![], &WorkflowDetectedLoopState::Inconclusive,
+        None, vec![], vec![], vec![], vec![], vec![],
+    );
+    assert!(!state.creates_run_revision, "console must not create run revisions");
+}
+
+// Serialized authority guard
 #[test]
 fn console_record_serialized_json_has_no_authority() {
     use openwand_workflow::workflow_operator_console::*;
@@ -152,4 +208,44 @@ fn console_record_serialized_json_has_no_authority() {
     assert!(json.contains("\"executes_tool\": false"));
     assert!(json.contains("\"verifies_external_state\": false"));
     assert!(json.contains("\"mutates_workflow_state\": false"));
+    assert!(json.contains("\"certifies_evidence\": false"));
+    assert!(json.contains("\"promotes_trust\": false"));
+    assert!(json.contains("\"schedules_verification\": false"));
+}
+
+// Patch 1: no duplicate chain assembly logic
+#[test]
+fn console_app_delegates_to_evidence_chain_inspector() {
+    let src = include_str!("../src/workflow_operator_console.rs");
+    assert!(src.contains("assemble_inspector_links"), "Console must delegate to inspector");
+    assert!(src.contains("workflow_evidence_chain_inspector"), "Console must reference inspector");
+}
+
+// Patch 3: readiness is always eligibility-only
+#[test]
+fn console_readiness_display_is_eligibility_only() {
+    let src = include_str!("../src/workflow_operator_console.rs");
+    assert!(src.contains("is_eligibility_only: true"), "Readiness must be eligibility-only");
+}
+
+// Patch 4: attestations always unverified
+#[test]
+fn console_attestation_display_always_unverified() {
+    let src = include_str!("../src/workflow_operator_console.rs");
+    assert!(src.contains("verified_by_openwand: false"), "Attestations must be unverified in console");
+    assert!(src.contains("promotes_trust: false"), "Attestations must not promote trust in console");
+}
+
+// UI safety warning guard
+#[test]
+fn console_ui_safety_warning_covers_extended_flags() {
+    let src = include_str!("../src/ui/workflow_operator_console_state.rs");
+    let warning_fn = src.lines()
+        .filter(|l| l.contains("pub fn console_safety_warning"))
+        .count();
+    assert_eq!(1, warning_fn, "Must have safety warning function");
+    // The warning should mention certify, promote, schedule
+    assert!(src.contains("certify") || src.contains("certifies"));
+    assert!(src.contains("promote trust") || src.contains("promotes trust"));
+    assert!(src.contains("schedule") || src.contains("schedules"));
 }

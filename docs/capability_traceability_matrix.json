@@ -506,6 +506,30 @@
       "id_constructor_location": "none",
       "lock_doc": "WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md",
       "tag": "wave-44-lock"
+    },
+    {
+      "capability": "Evidence Chain Inspector",
+      "wave": 45,
+      "workflow_source": [
+        "workflow_evidence_chain_inspector.rs",
+        "workflow_evidence_chain_inspector_validation.rs"
+      ],
+      "app_persistence": "workflow_evidence_chain_inspector.rs (assembler + export)",
+      "cli_command": "workflow-evidence-chain",
+      "cli_subcommands": [
+        "inspect",
+        "export-packet"
+      ],
+      "ui_state": "workflow_evidence_chain_inspector_state.rs",
+      "ui_components": "workflow_evidence_chain_inspector_components.rs",
+      "cli_test": "workflow_evidence_chain_inspector_cli.rs",
+      "guard_test": "workflow_evidence_chain_inspector_guards.rs",
+      "persistence_root": "none (reads existing records)",
+      "id_prefix": "weci_",
+      "id_type": "WorkflowEvidenceChainInspectionId",
+      "id_constructor_location": "workflow_evidence_chain_inspector_validation.rs",
+      "lock_doc": "WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md",
+      "tag": "wave-45-lock"
     }
   ],
   "supporting_modules": [

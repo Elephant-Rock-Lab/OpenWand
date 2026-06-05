@@ -35,6 +35,8 @@ These 15 capabilities form the core evidence chain. Each has a workflow source, 
 
 | 19 | Operator Console | 44 | workflow_operator_console.rs, workflow_loop_state.rs, workflow_loop_recommendation.rs, workflow_loop_controller.rs | workflow_operator_console.rs (assembler) | workflow-operator-console (show) | workflow_operator_console_state.rs | workflow_operator_console_components.rs | workflow_operator_console_cli.rs | workflow_operator_console_guards.rs | none (recomputed) | none | none | none | WAVE44_WORKFLOW_OPERATOR_CONSOLE_LOCK.md | wave-44-lock |
 
+| 20 | Evidence Chain Inspector | 45 | workflow_evidence_chain_inspector.rs, workflow_evidence_chain_inspector_validation.rs | workflow_evidence_chain_inspector.rs (assembler + export) | workflow-evidence-chain (inspect, export-packet) | workflow_evidence_chain_inspector_state.rs | workflow_evidence_chain_inspector_components.rs | workflow_evidence_chain_inspector_cli.rs | workflow_evidence_chain_inspector_guards.rs | none (reads existing records) | weci_ | WorkflowEvidenceChainInspectionId | workflow_evidence_chain_inspector_validation.rs | WAVE45_EVIDENCE_CHAIN_INSPECTOR_LOCK.md | wave-45-lock |
+
 ## Supporting Code Rows
 
 These modules support primary capabilities but do not have their own persistence root, ID prefix, CLI command, or lock doc.
@@ -115,7 +117,7 @@ OpenWand records what it can prove.
 - **Pre-workflow lock docs (Waves 00–22):** 57 files
 - **Workflow evidence lock docs (Waves 23–37):** 15 files
 - **Doctrine lock docs (Waves 38–39):** 2 files
-- **Total before Wave 44:** 78 files
+- **Total before Wave 45:** 80 files
 
 ---
 

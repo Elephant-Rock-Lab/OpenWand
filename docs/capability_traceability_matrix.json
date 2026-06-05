@@ -455,6 +455,32 @@
       "id_constructor_location": "crates/workflow/src/workflow_manual_result_reconciliation_readiness_validation.rs",
       "lock_doc": "WAVE42_MANUAL_RESULT_RECONCILIATION_READINESS_LOCK.md",
       "tag": "wave-42-lock"
+    },
+    {
+      "capability": "Manual Result Reconciliation Gate",
+      "wave": 43,
+      "workflow_source": [
+        "workflow_manual_result_reconciliation_gate.rs",
+        "workflow_manual_result_reconciliation_gate_evaluator.rs",
+        "workflow_manual_result_reconciliation_gate_validation.rs"
+      ],
+      "app_persistence": "workflow_manual_result_reconciliation_gate.rs",
+      "cli_command": "workflow-manual-result-reconciliation-gate",
+      "cli_subcommands": [
+        "reconcile",
+        "show",
+        "latest"
+      ],
+      "ui_state": "workflow_manual_result_reconciliation_gate_state.rs",
+      "ui_components": "workflow_manual_result_reconciliation_gate_components.rs",
+      "cli_test": "workflow_manual_result_reconciliation_gate_cli.rs",
+      "guard_test": "workflow_manual_result_reconciliation_gate_guards.rs",
+      "persistence_root": "workflow_manual_result_reconciliation_gates/",
+      "id_prefix": "wmrrg_",
+      "id_type": "WorkflowManualResultReconciliationGateId",
+      "id_constructor_location": "crates/workflow/src/workflow_manual_result_reconciliation_gate_validation.rs",
+      "lock_doc": "WAVE43_MANUAL_RESULT_RECONCILIATION_GATE_LOCK.md",
+      "tag": "wave-43-lock"
     }
   ],
   "supporting_modules": [
@@ -612,6 +638,12 @@
       "type": "WorkflowManualResultReconciliationReadinessId",
       "constructor": "crates/workflow/src/workflow_manual_result_reconciliation_readiness_validation.rs",
       "wave": 42
+    },
+    {
+      "prefix": "wmrrg_",
+      "type": "WorkflowManualResultReconciliationGateId",
+      "constructor": "crates/workflow/src/workflow_manual_result_reconciliation_gate_validation.rs",
+      "wave": 43
     }
   ]
 }

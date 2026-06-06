@@ -41,6 +41,9 @@ These 15 capabilities form the core evidence chain. Each has a workflow source, 
 
 | 22 | Verification Readiness | 47 | workflow_verification_readiness.rs, workflow_verification_readiness_evaluator.rs | workflow_verification_readiness.rs (save, load, list, by_workflow_run, by_target, by_target_id) | workflow-verification-readiness (evaluate, show, latest) | workflow_verification_readiness_state.rs | workflow_verification_readiness_components.rs | workflow_verification_readiness_cli.rs | workflow_verification_readiness_guards.rs | workflow_verification_readiness/ | wvr_ | WorkflowVerificationReadinessId | workflow_verification_readiness.rs | WAVE47_READ_ONLY_VERIFICATION_READINESS_LOCK.md | wave-47-lock |
 
+| 23 | Audit Packet Review | 49A | workflow_audit_packet_review.rs | workflow_audit_packet_review.rs (save, load, list, by_workflow_run, by_inspection, by_audit_packet_hash) | audit-packet-review (record, show, list) | workflow_audit_packet_review_state.rs | workflow_audit_packet_review_components.rs | workflow_audit_packet_cli.rs | workflow_audit_packet_guards.rs | audit_packet_reviews/ | wapr_ | AuditPacketReviewId | workflow_audit_packet_review.rs | WAVE49A | wave-49a-lock |
+| 24 | Audit Packet Distribution | 49A | workflow_audit_packet_distribution.rs | workflow_audit_packet_distribution.rs (save, load, list, by_workflow_run, by_review, by_inspection, by_audit_packet_hash, by_destination_kind) | audit-packet-distribution (record, show, list) | workflow_audit_packet_distribution_state.rs | workflow_audit_packet_distribution_components.rs | workflow_audit_packet_cli.rs | workflow_audit_packet_guards.rs | audit_packet_distributions/ | wapd_ | AuditPacketDistributionId | workflow_audit_packet_distribution.rs | WAVE49A | wave-49a-lock |
+
 ## Supporting Code Rows
 
 These modules support primary capabilities but do not have their own persistence root, ID prefix, CLI command, or lock doc.

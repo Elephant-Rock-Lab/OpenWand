@@ -5925,3 +5925,184 @@ fn cmd_verification_readiness(cmd: WorkflowVerificationReadinessCommands, store_
     }
     Ok(())
 }
+
+#[derive(clap::Subcommand)]
+enum AuditPacketReviewCommands {
+    /// Record an audit packet review
+    Record {
+        #[arg(long)] inspection_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_audit_packet_hash: String,
+        #[arg(long)] expected_chain_hash: String,
+        #[arg(long)] reviewer: String,
+        #[arg(long)] decision: String,
+        #[arg(long)] scope: String,
+        #[arg(long)] caveat: Vec<String>,
+        #[arg(long, default_value = "key1")] idempotency_key: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a review by ID
+    Show {
+        #[arg(long)] review_id: String,
+        #[arg(long)] json: bool,
+    },
+    /// List reviews for a workflow run
+    List {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_audit_packet_review(cmd: AuditPacketReviewCommands, store_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_audit_packet_review::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    let store = std::path::Path::new(&store_dir);
+    match cmd {
+        AuditPacketReviewCommands::Record {
+            inspection_id, workflow_execution_id,
+            expected_audit_packet_hash, expected_chain_hash,
+            reviewer, decision, scope, caveat, idempotency_key, json,
+        } => {
+            let dec: AuditPacketReviewDecision = serde_json::from_str(&format!("\"{}\"", decision))
+                .map_err(|e| anyhow::anyhow!("Invalid decision '{}': {}", decision, e))?;
+            let request = AuditPacketReviewRequest {
+                inspection_id,
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                expected_audit_packet_hash,
+                expected_chain_hash,
+                reviewer,
+                decision: dec,
+                scope,
+                caveats: caveat,
+                idempotency_key,
+            };
+            let rec = build_audit_packet_review(request);
+            openwand_app::workflow_audit_packet_review::save_audit_packet_review(store, &rec)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Review: {} — {:?} — {}", rec.review_id.0, rec.decision, rec.reviewer);
+            }
+        }
+        AuditPacketReviewCommands::Show { review_id, json } => {
+            let rec = openwand_app::workflow_audit_packet_review::load_audit_packet_review(
+                store, &AuditPacketReviewId(review_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Review: {} — {:?} — {}", rec.review_id.0, rec.decision, rec.reviewer);
+            }
+        }
+        AuditPacketReviewCommands::List { workflow_execution_id, json } => {
+            let results = openwand_app::workflow_audit_packet_review::review_by_workflow_run(
+                store, &workflow_execution_id,
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results).context("Serialize")?);
+            } else {
+                for rec in &results {
+                    println!("{} — {:?} — {}", rec.review_id.0, rec.decision, rec.reviewer);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(clap::Subcommand)]
+enum AuditPacketDistributionCommands {
+    /// Record an audit packet distribution
+    Record {
+        #[arg(long)] review_id: String,
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] expected_review_hash: String,
+        #[arg(long)] expected_audit_packet_hash: String,
+        #[arg(long)] expected_chain_hash: String,
+        #[arg(long)] inspection_id: String,
+        #[arg(long)] destination_kind: String,
+        #[arg(long)] destination_label: String,
+        #[arg(long)] destination_reference: String,
+        #[arg(long)] operator_supplied_hash: Option<String>,
+        #[arg(long)] note: Vec<String>,
+        #[arg(long, default_value = "dkey1")] idempotency_key: String,
+        #[arg(long)] json: bool,
+    },
+    /// Show a distribution by ID
+    Show {
+        #[arg(long)] distribution_id: String,
+        #[arg(long)] json: bool,
+    },
+    /// List distributions for a workflow run
+    List {
+        #[arg(long)] workflow_execution_id: String,
+        #[arg(long)] json: bool,
+    },
+}
+
+fn cmd_audit_packet_distribution(cmd: AuditPacketDistributionCommands, store_dir: String) -> Result<()> {
+    use openwand_workflow::workflow_audit_packet_distribution::*;
+    use openwand_workflow::workflow_audit_packet_review::AuditPacketReviewId;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
+    let store = std::path::Path::new(&store_dir);
+    match cmd {
+        AuditPacketDistributionCommands::Record {
+            review_id, workflow_execution_id,
+            expected_review_hash, expected_audit_packet_hash, expected_chain_hash,
+            inspection_id, destination_kind, destination_label, destination_reference,
+            operator_supplied_hash, note, idempotency_key, json,
+        } => {
+            let dk: AuditPacketDestinationKind = serde_json::from_str(&format!("\"{}\"", destination_kind))
+                .map_err(|e| anyhow::anyhow!("Invalid destination_kind '{}': {}", destination_kind, e))?;
+            let request = AuditPacketDistributionRequest {
+                review_id: AuditPacketReviewId(review_id),
+                workflow_execution_id: WorkflowExecutionId(workflow_execution_id),
+                expected_review_hash,
+                audit_packet_hash: expected_audit_packet_hash,
+                chain_hash: expected_chain_hash,
+                inspection_id,
+                destination: AuditPacketDistributionDestination {
+                    destination_kind: dk,
+                    label: destination_label,
+                    reference: destination_reference,
+                    operator_supplied_hash,
+                    notes: note,
+                },
+                distribution_notes: vec![],
+                idempotency_key,
+            };
+            let rec = build_audit_packet_distribution(request);
+            openwand_app::workflow_audit_packet_distribution::save_audit_packet_distribution(store, &rec)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Distribution: {} → {:?}", rec.distribution_id.0, rec.destination.destination_kind);
+            }
+        }
+        AuditPacketDistributionCommands::Show { distribution_id, json } => {
+            let rec = openwand_app::workflow_audit_packet_distribution::load_audit_packet_distribution(
+                store, &AuditPacketDistributionId(distribution_id),
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rec).context("Serialize")?);
+            } else {
+                println!("Distribution: {} → {:?}", rec.distribution_id.0, rec.destination.destination_kind);
+            }
+        }
+        AuditPacketDistributionCommands::List { workflow_execution_id, json } => {
+            let results = openwand_app::workflow_audit_packet_distribution::distribution_by_workflow_run(
+                store, &workflow_execution_id,
+            ).map_err(|e| anyhow::anyhow!(e))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results).context("Serialize")?);
+            } else {
+                for rec in &results {
+                    println!("{} → {:?}", rec.distribution_id.0, rec.destination.destination_kind);
+                }
+            }
+        }
+    }
+    Ok(())
+}

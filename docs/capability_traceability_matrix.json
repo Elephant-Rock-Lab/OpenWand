@@ -581,6 +581,54 @@
       "id_constructor_location": "workflow_verification_readiness.rs",
       "lock_doc": "WAVE47_READ_ONLY_VERIFICATION_READINESS_LOCK.md",
       "tag": "wave-47-lock"
+    },
+    {
+      "capability": "Audit Packet Review",
+      "wave": "49A",
+      "workflow_source": [
+        "workflow_audit_packet_review.rs"
+      ],
+      "app_persistence": "workflow_audit_packet_review.rs (save, load, list, by_workflow_run, by_inspection, by_audit_packet_hash)",
+      "cli_command": "audit-packet-review",
+      "cli_subcommands": [
+        "record",
+        "show",
+        "list"
+      ],
+      "ui_state": "workflow_audit_packet_review_state.rs",
+      "ui_components": "workflow_audit_packet_review_components.rs",
+      "cli_test": "workflow_audit_packet_cli.rs",
+      "guard_test": "workflow_audit_packet_guards.rs",
+      "persistence_root": "audit_packet_reviews/",
+      "id_prefix": "wapr_",
+      "id_type": "AuditPacketReviewId",
+      "id_constructor_location": "workflow_audit_packet_review.rs",
+      "lock_doc": "WAVE49A_AUDIT_PACKET_REVIEW_AND_DISTRIBUTION_LOCK.md",
+      "tag": "wave-49a-lock"
+    },
+    {
+      "capability": "Audit Packet Distribution",
+      "wave": "49A",
+      "workflow_source": [
+        "workflow_audit_packet_distribution.rs"
+      ],
+      "app_persistence": "workflow_audit_packet_distribution.rs (save, load, list, by_workflow_run, by_review, by_inspection, by_audit_packet_hash, by_destination_kind)",
+      "cli_command": "audit-packet-distribution",
+      "cli_subcommands": [
+        "record",
+        "show",
+        "list"
+      ],
+      "ui_state": "workflow_audit_packet_distribution_state.rs",
+      "ui_components": "workflow_audit_packet_distribution_components.rs",
+      "cli_test": "workflow_audit_packet_cli.rs",
+      "guard_test": "workflow_audit_packet_guards.rs",
+      "persistence_root": "audit_packet_distributions/",
+      "id_prefix": "wapd_",
+      "id_type": "AuditPacketDistributionId",
+      "id_constructor_location": "workflow_audit_packet_distribution.rs",
+      "lock_doc": "WAVE49A_AUDIT_PACKET_REVIEW_AND_DISTRIBUTION_LOCK.md",
+      "tag": "wave-49a-lock"
     }
   ],
   "supporting_modules": [

@@ -28,9 +28,21 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tokio_util::sync::CancellationToken;
 
+/// Why inference stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InferenceStopReason {
+    /// Stream completed normally (Done delta received).
+    Done,
+    /// Stream ended without Done delta (connection closed).
+    StreamEnded,
+    /// Cancellation token fired during inference.
+    Cancelled,
+}
+
 struct InferenceOutput {
     text: String,
     tool_calls: Vec<ToolCall>,
+    stop_reason: InferenceStopReason,
 }
 
 /// Cache entry linking a live pending tool to its approval_request_id.
@@ -237,6 +249,14 @@ impl SessionRunner {
         &self.working_directory
     }
 
+    /// Cancel the current or next run.
+    ///
+    /// Safe to call from any thread. The runner checks this token
+    /// at loop start, before stream creation, and during SSE streaming.
+    pub fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+
     /// Get the approval_request_id from the cache, if any.
     async fn pending_approval_hint(&self) -> Option<openwand_core::ApprovalRequestId> {
         self.pending_approval
@@ -290,6 +310,15 @@ impl SessionRunner {
             // Inference
             self.emit_phase(Phase::Inference, step).await;
             let inference_output = self.run_inference(llm_request).await?;
+
+            // Patch 3: cancelled inference is terminal — skip tool gating, record partial text
+            if matches!(inference_output.stop_reason, InferenceStopReason::Cancelled) {
+                stop_reason = RunStopReason::Cancelled;
+                if !inference_output.text.is_empty() {
+                    self.record_assistant_message(&inference_output.text).await?;
+                }
+                break;
+            }
 
             // AfterInference
             self.emit_phase(Phase::AfterInference, step).await;
@@ -792,43 +821,67 @@ impl SessionRunner {
         &self,
         request: LlmRequest,
     ) -> Result<InferenceOutput, SessionError> {
-        let mut stream = self
-            .llm
-            .chat_stream(request)
-            .await
-            .map_err(SessionError::Llm)?;
+        // Patch 2: cancellation before stream creation
+        let mut stream = tokio::select! {
+            result = self.llm.chat_stream(request) => result.map_err(SessionError::Llm)?,
+            _ = self.cancellation.cancelled() => {
+                return Ok(InferenceOutput {
+                    text: String::new(),
+                    tool_calls: Vec::new(),
+                    stop_reason: InferenceStopReason::Cancelled,
+                });
+            }
+        };
 
         let mut text = String::new();
         let mut tool_calls = Vec::new();
+        let mut stop_reason = InferenceStopReason::StreamEnded;
 
         use futures::StreamExt;
-        while let Some(delta_result) = stream.next().await {
-            match delta_result {
-                Ok(LlmDelta::Text { delta }) => {
-                    text.push_str(&delta);
-                    let _ = self.agent_event_tx.send(AgentEvent::TextDelta {
-                        session_id: self.session_id.clone(),
-                        delta,
+        loop {
+            tokio::select! {
+                delta_result = stream.next() => {
+                    match delta_result {
+                        Some(Ok(LlmDelta::Text { delta })) => {
+                            text.push_str(&delta);
+                            let _ = self.agent_event_tx.send(AgentEvent::TextDelta {
+                                session_id: self.session_id.clone(),
+                                delta,
+                            });
+                        }
+                        Some(Ok(LlmDelta::ToolCallComplete {
+                            id,
+                            name,
+                            arguments,
+                        })) => {
+                            tool_calls.push(ToolCall {
+                                id: openwand_core::ToolCallId(id),
+                                name,
+                                arguments,
+                            });
+                        }
+                        Some(Ok(LlmDelta::Done { .. })) => {
+                            stop_reason = InferenceStopReason::Done;
+                            break;
+                        }
+                        Some(Ok(_)) => {}
+                        Some(Err(e)) => return Err(SessionError::Llm(e)),
+                        None => break, // StreamEnded
+                    }
+                }
+                _ = self.cancellation.cancelled() => {
+                    // Patch 4: cancellation during streaming
+                    // Discard tool calls — do not allow partial tool execution
+                    return Ok(InferenceOutput {
+                        text,
+                        tool_calls: Vec::new(),
+                        stop_reason: InferenceStopReason::Cancelled,
                     });
                 }
-                Ok(LlmDelta::ToolCallComplete {
-                    id,
-                    name,
-                    arguments,
-                }) => {
-                    tool_calls.push(ToolCall {
-                        id: openwand_core::ToolCallId(id),
-                        name,
-                        arguments,
-                    });
-                }
-                Ok(LlmDelta::Done { .. }) => break,
-                Ok(_) => {}
-                Err(e) => return Err(SessionError::Llm(e)),
             }
         }
 
-        Ok(InferenceOutput { text, tool_calls })
+        Ok(InferenceOutput { text, tool_calls, stop_reason })
     }
 
     async fn gate_tool_calls(

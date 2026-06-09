@@ -30,21 +30,21 @@ pub fn start_bridge(
                     match result {
                         Ok(agent_event) => {
                             if let Some(event) = translate_event(&agent_event) {
-                                let mut state = state.lock().unwrap();
+                                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                                 state.apply(event);
                             }
                         }
                         Err(broadcast::error::RecvError::Lagged(count)) => {
                             // Some events were dropped. Record a warning
                             // but do not crash the bridge.
-                            let mut state = state.lock().unwrap();
+                            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                             state.error = Some(format!(
                                 "Warning: {count} events lagged (UI may have missed text deltas)"
                             ));
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             // Sender dropped — run is done.
-                            let mut state = state.lock().unwrap();
+                            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                             if state.status == UiRunStatus::Running {
                                 state.status = UiRunStatus::Completed;
                             }
@@ -54,7 +54,7 @@ pub fn start_bridge(
                     }
                 }
                 _ = cancellation.cancelled() => {
-                    let mut state = state.lock().unwrap();
+                    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     state.status = UiRunStatus::Cancelled;
                     break;
                 }

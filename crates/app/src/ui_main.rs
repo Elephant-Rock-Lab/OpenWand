@@ -561,15 +561,25 @@ async fn handle_send(
 
     // Open store connections
     let trace_store: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> =
-        Arc::new(
-            SqliteStore::open(SqliteStoreConfig::file(&path))
-                .await
-                .expect("Failed to open trace store")
-        );
+        match SqliteStore::open(SqliteStoreConfig::file(&path)).await {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                *STATUS_TEXT.write() = format!("Failed to open trace store: {e}");
+                *RUN_STATE.write() = UiRunState { status: UiRunStatus::Failed, error: Some(format!("Database error: {e}")), ..UiRunState::new_running() };
+                return;
+            }
+        };
 
-    let llm: Arc<dyn openwand_llm::LlmClient> = Arc::new(
-        openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient::new()
-    );
+    let llm: Arc<dyn openwand_llm::LlmClient> = match
+        openwand_llm::adapters::openai_compatible::OpenAiCompatibleClient::try_new()
+    {
+        Ok(client) => Arc::new(client),
+        Err(e) => {
+            *STATUS_TEXT.write() = format!("Failed to create LLM client: {e}");
+            *RUN_STATE.write() = UiRunState { status: UiRunStatus::Failed, error: Some(format!("LLM client error: {e}")), ..UiRunState::new_running() };
+            return;
+        }
+    };
     let tools: Arc<dyn openwand_tools::executor::ToolExecutor> = Arc::new(
         openwand_tools::composite::CompositeToolExecutor::local_only(
             openwand_tools::local::batch1_local_tools()
@@ -653,11 +663,13 @@ async fn poll_and_project(
     // Run memory projection
     let path = db_path();
     let trace_for_coordinator: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> =
-        Arc::new(
-            SqliteStore::open(SqliteStoreConfig::file(&path))
-                .await
-                .expect("Failed to open trace for coordinator")
-        );
+        match SqliteStore::open(SqliteStoreConfig::file(&path)).await {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                *STATUS_TEXT.write() = format!("Memory coord error: {e}");
+                return;
+            }
+        };
 
     let memory_write: Arc<dyn MemoryStore> = memory.clone() as Arc<dyn MemoryStore>;
     let extractor: Arc<dyn openwand_memory::MemoryExtractor> =

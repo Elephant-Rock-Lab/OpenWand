@@ -227,7 +227,7 @@ impl GovernedGitCommitBackend for TestGitBackend {
         let hash = hasher.finalize();
         let commit_hash = format!("testcommit_{}", hash.to_hex());
 
-        self.committed.lock().unwrap().push(request.clone());
+        self.committed.lock().unwrap_or_else(|e| e.into_inner()).push(request.clone());
 
         Ok(GitCommitSnapshot {
             commit_hash,

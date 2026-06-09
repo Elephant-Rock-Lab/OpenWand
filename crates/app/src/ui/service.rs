@@ -197,20 +197,20 @@ impl UiSessionService {
         tokio::spawn(async move {
             match runner.run_turn(user_text, config).await {
                 Ok(_summary) => {
-                    let mut s = state_clone.lock().unwrap();
+                    let mut s = state_clone.lock().unwrap_or_else(|e| e.into_inner());
                     if s.status == UiRunStatus::Running {
                         s.status = UiRunStatus::Completed;
                     }
                 }
                 Err(e) => {
-                    let mut s = state_clone.lock().unwrap();
+                    let mut s = state_clone.lock().unwrap_or_else(|e| e.into_inner());
                     s.status = UiRunStatus::Failed;
                     s.error = Some(e.to_string());
                 }
             }
             // Update registry — set last_message_preview from streamed text
             let preview = {
-                let s = state_clone.lock().unwrap();
+                let s = state_clone.lock().unwrap_or_else(|e| e.into_inner());
                 s.streamed_text.chars().take(80).collect::<String>()
             };
             let _ = registry_clone.update_session(SessionRegistryUpdate {

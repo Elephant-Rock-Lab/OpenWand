@@ -29,14 +29,28 @@ pub struct OpenAiCompatibleClient {
 }
 
 impl OpenAiCompatibleClient {
-    pub fn new() -> Self {
-        Self {
-            http: Client::builder()
-                .timeout(std::time::Duration::from_secs(120))
-                .build()
-                .expect("Failed to build HTTP client"),
+    /// Fallible constructor for production callers.
+    ///
+    /// Returns `Err` if the HTTP client cannot be built (e.g., TLS backend missing).
+    /// Production code should call this and propagate the error to the user.
+    pub fn try_new() -> Result<Self, LlmError> {
+        let http = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| LlmError::Network {
+                message: format!("Failed to build HTTP client: {e}"),
+                retryable: false,
+            })?;
+        Ok(Self {
+            http,
             buffer: Arc::new(Mutex::new(ToolCallBuffer::new())),
-        }
+        })
+    }
+
+    /// Panicking constructor for test code only.
+    /// Production callers must use `try_new()`.
+    pub fn new() -> Self {
+        Self::try_new().expect("OpenAiCompatibleClient::new() failed — use try_new() in production")
     }
 
     /// Build the full URL for chat completions.

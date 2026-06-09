@@ -77,18 +77,18 @@ impl MockLlmClient {
 
     /// Push a stream script with explicit results (allows errors mid-stream).
     pub fn push_stream_results(&self, results: Vec<Result<LlmDelta, LlmError>>) {
-        let mut actions = self.actions.lock().unwrap();
+        let mut actions = self.actions.lock().unwrap_or_else(|e| e.into_inner());
         actions.push_back(MockLlmAction::Stream(results));
     }
 
     /// Push a complete response.
     pub fn push_response(&self, response: LlmResponse) {
-        let mut actions = self.actions.lock().unwrap();
+        let mut actions = self.actions.lock().unwrap_or_else(|e| e.into_inner());
         actions.push_back(MockLlmAction::Complete(Ok(response)));
     }
 
     fn pop_stream_script(&self) -> Option<Vec<Result<LlmDelta, LlmError>>> {
-        let mut actions = self.actions.lock().unwrap();
+        let mut actions = self.actions.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             let action = actions.pop_front()?;
             match action {
@@ -100,7 +100,7 @@ impl MockLlmClient {
     }
 
     fn pop_complete_script(&self) -> Option<Result<LlmResponse, LlmError>> {
-        let mut actions = self.actions.lock().unwrap();
+        let mut actions = self.actions.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             let action = actions.pop_front()?;
             match action {
@@ -111,7 +111,7 @@ impl MockLlmClient {
     }
 
     fn pop_health_script(&self) -> Option<Result<(), LlmError>> {
-        let mut actions = self.actions.lock().unwrap();
+        let mut actions = self.actions.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             let action = actions.pop_front()?;
             match action {
@@ -382,7 +382,7 @@ mod tests {
     async fn mock_llm_health_check_returns_error() {
         let client = MockLlmClient::new();
         {
-            let mut actions = client.actions.lock().unwrap();
+            let mut actions = client.actions.lock().unwrap_or_else(|e| e.into_inner());
             actions.push_back(MockLlmAction::Health(Err(LlmError::Network {
                 message: "timeout".into(),
                 retryable: true,

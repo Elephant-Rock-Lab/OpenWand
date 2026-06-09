@@ -67,6 +67,12 @@ pub fn review_hash_for(proposal_id: &str, decision: &WorkflowNextActionReviewDec
     hasher.finalize().to_hex().to_string()
 }
 
+/// Content-addressed review ID. Format: wnar_<blake3_hex_16>
+pub fn next_action_review_id_for(proposal_id: &str, decision: &WorkflowNextActionReviewDecision, reviewer: &str) -> WorkflowNextActionReviewId {
+    let hex = review_hash_for(proposal_id, decision, reviewer);
+    WorkflowNextActionReviewId(format!("wnar_{}", &hex[..16]))
+}
+
 /// Validate review constraints.
 pub fn validate_review(
     reviewer: &str,

@@ -193,6 +193,7 @@ impl UiSessionService {
         let runner = Arc::clone(&runner);
         let session_id_owned = session_id.to_string();
         let state_clone = Arc::clone(&state);
+        let registry_clone = Arc::clone(&self.registry);
         tokio::spawn(async move {
             match runner.run_turn(user_text, config).await {
                 Ok(_summary) => {
@@ -207,8 +208,24 @@ impl UiSessionService {
                     s.error = Some(e.to_string());
                 }
             }
-            // Update registry
-            // TODO: update last_message_preview from registry
+            // Update registry — set last_message_preview from streamed text
+            let preview = {
+                let s = state_clone.lock().unwrap();
+                s.streamed_text.chars().take(80).collect::<String>()
+            };
+            let _ = registry_clone.update_session(SessionRegistryUpdate {
+                session_id: session_id_owned,
+                title: None,
+                status: None,
+                current_phase: None,
+                current_step: None,
+                last_message_preview: Some(preview),
+                last_trace_id: None,
+                last_global_sequence: None,
+                snapshot_key: None,
+                projection_stale: None,
+                metadata_json: None,
+            }).ok();
         });
 
         Ok(RunHandle {

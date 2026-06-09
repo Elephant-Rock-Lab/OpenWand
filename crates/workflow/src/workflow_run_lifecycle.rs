@@ -62,7 +62,7 @@ pub fn advance_stages(
     let mut completed_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (i, stage) in stages.iter_mut().enumerate() {
-        let (ref kind, ref deps, ref tool_intents) = &stage_info[i];
+        let (kind, deps, tool_intents) = &stage_info[i];
         let deps_met = deps.iter().all(|dep| completed_ids.contains(dep));
 
         if !deps_met {

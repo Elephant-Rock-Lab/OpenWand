@@ -8,6 +8,7 @@ use openwand_app::ui::memory_dto::UiFilteredMemoryPanel;
 use openwand_app::memory_coordinator::PromptInputProductionConfig;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
+use openwand_app::settings;
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
 use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
@@ -163,11 +164,12 @@ fn App() -> Element {
                             move |_| {
                                 let svc = svc.clone();
                                 spawn(async move {
+                                    let s = settings::load_settings();
                                     match svc.create_session(CreateSessionRequest {
                                         title: Some("New Session".into()),
-                                        model: Some("qwen3-4b".into()),
-                                        base_url: Some("http://100.64.0.1:1234/v1".into()),
-                                        provider: Some("lm-studio".into()),
+                                        model: Some(settings::resolve_model(&s)),
+                                        base_url: Some(settings::resolve_base_url(&s)),
+                                        provider: Some(settings::resolve_provider(&s)),
                                         working_directory: Some(".".into()),
                                         interaction_mode: "direct".into(),
                                     }) {
@@ -547,11 +549,12 @@ async fn handle_send(
     *STATUS_TEXT.write() = "Starting run...".into();
     *RUN_STATE.write() = UiRunState::new_running();
 
+    let s = settings::load_settings();
     let llm_target = LlmTarget {
-        provider: openwand_llm::LlmProvider::Custom { name: "lm-studio".into() },
-        model: "qwen/qwen3-4b-2507".into(),
-        base_url: Some("http://100.64.0.1:1234/v1".into()),
-        api_key: Some("lm-studio".into()),
+        provider: openwand_llm::LlmProvider::Custom { name: settings::resolve_provider(&s) },
+        model: settings::resolve_model(&s),
+        base_url: Some(settings::resolve_base_url(&s)),
+        api_key: Some(settings::resolve_api_key(&s)),
     };
 
     let path = db_path();

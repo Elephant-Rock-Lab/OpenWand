@@ -4320,16 +4320,13 @@ fn cmd_workflow_next_action_review(cmd: WorkflowNextActionReviewCommands) -> Res
     use openwand_workflow::workflow_next_action_review::*;
     use openwand_workflow::workflow_continuation::WorkflowNextActionProposalId;
     use openwand_workflow::workflow_reconciliation::WorkflowRunRevisionId;
-    use blake3::Hasher;
 
     match cmd {
         WorkflowNextActionReviewCommands::Approve { proposal_id, reviewer, rationale, output_dir, json } => {
             openwand_workflow::workflow_next_action_review::validate_review(&reviewer, &rationale, &WorkflowNextActionReviewDecision::Approved, None).map_err(|e| anyhow::anyhow!(e))?;
-            let mut hasher = Hasher::new();
-            hasher.update(b"review:v1:"); hasher.update(proposal_id.as_bytes()); hasher.update(b":approved:"); hasher.update(reviewer.as_bytes());
-            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = next_action_review_id_for(&proposal_id, &WorkflowNextActionReviewDecision::Approved, &reviewer);
             let review = WorkflowNextActionReview {
-                review_id: WorkflowNextActionReviewId(format!("wnar_{}", &hex[..16])),
+                review_id,
                 proposal_id: WorkflowNextActionProposalId(proposal_id), proposal_hash: String::new(),
                 source_run_revision_id: WorkflowRunRevisionId(String::new()), source_run_revision_hash: String::new(),
                 decision: WorkflowNextActionReviewDecision::Approved, reviewer, rationale,
@@ -4343,11 +4340,9 @@ fn cmd_workflow_next_action_review(cmd: WorkflowNextActionReviewCommands) -> Res
         WorkflowNextActionReviewCommands::Reject { proposal_id, reviewer, rationale, feedback, output_dir, json } => {
             let fb = WorkflowNextActionFeedback { summary: feedback.clone(), blocking_reasons: vec![feedback], requested_changes: vec![], evidence_gaps: vec![] };
             openwand_workflow::workflow_next_action_review::validate_review(&reviewer, &rationale, &WorkflowNextActionReviewDecision::Rejected, Some(&fb)).map_err(|e| anyhow::anyhow!(e))?;
-            let mut hasher = Hasher::new();
-            hasher.update(b"review:v1:"); hasher.update(proposal_id.as_bytes()); hasher.update(b":rejected:"); hasher.update(reviewer.as_bytes());
-            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = next_action_review_id_for(&proposal_id, &WorkflowNextActionReviewDecision::Rejected, &reviewer);
             let review = WorkflowNextActionReview {
-                review_id: WorkflowNextActionReviewId(format!("wnar_{}", &hex[..16])),
+                review_id,
                 proposal_id: WorkflowNextActionProposalId(proposal_id), proposal_hash: String::new(),
                 source_run_revision_id: WorkflowRunRevisionId(String::new()), source_run_revision_hash: String::new(),
                 decision: WorkflowNextActionReviewDecision::Rejected, reviewer, rationale,
@@ -4361,11 +4356,9 @@ fn cmd_workflow_next_action_review(cmd: WorkflowNextActionReviewCommands) -> Res
         WorkflowNextActionReviewCommands::RequestChanges { proposal_id, reviewer, rationale, feedback, output_dir, json } => {
             let fb = WorkflowNextActionFeedback { summary: feedback.clone(), blocking_reasons: vec![], requested_changes: vec![feedback], evidence_gaps: vec![] };
             openwand_workflow::workflow_next_action_review::validate_review(&reviewer, &rationale, &WorkflowNextActionReviewDecision::ChangesRequested, Some(&fb)).map_err(|e| anyhow::anyhow!(e))?;
-            let mut hasher = Hasher::new();
-            hasher.update(b"review:v1:"); hasher.update(proposal_id.as_bytes()); hasher.update(b":changes:"); hasher.update(reviewer.as_bytes());
-            let hex = hasher.finalize().to_hex().to_string();
+            let review_id = next_action_review_id_for(&proposal_id, &WorkflowNextActionReviewDecision::ChangesRequested, &reviewer);
             let review = WorkflowNextActionReview {
-                review_id: WorkflowNextActionReviewId(format!("wnar_{}", &hex[..16])),
+                review_id,
                 proposal_id: WorkflowNextActionProposalId(proposal_id), proposal_hash: String::new(),
                 source_run_revision_id: WorkflowRunRevisionId(String::new()), source_run_revision_hash: String::new(),
                 decision: WorkflowNextActionReviewDecision::ChangesRequested, reviewer, rationale,

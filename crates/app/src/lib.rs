@@ -49,3 +49,4 @@ pub mod workflow_external_attestation;
 pub mod workflow_verification_readiness;
 pub mod workflow_audit_packet_review;
 pub mod workflow_audit_packet_distribution;
+pub mod settings;

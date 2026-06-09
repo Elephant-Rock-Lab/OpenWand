@@ -39,6 +39,8 @@ pub mod workflow_continuation_components;
 pub mod workflow_continuation_state;
 pub mod workflow_routing_readiness_components;
 pub mod workflow_routing_readiness_state;
+pub mod workflow_next_action_review_components;
+pub mod workflow_next_action_review_state;
 pub mod workflow_next_action_routing_components;
 pub mod workflow_next_action_routing_state;
 pub mod workflow_loop_controller_components;

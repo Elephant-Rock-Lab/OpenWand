@@ -6,6 +6,9 @@ use openwand_workflow::workflow_manual_result::*;
 pub struct WorkflowManualResultSummaryRow {
     pub result_id: String, pub status: String, pub operator: String,
     pub caveat: String,
+    pub workflow_execution_id: String,
+    pub command_review_hash: String, pub command_composer_hash: String,
+    pub command_descriptor_hash: String, pub loop_controller_hash: String,
 }
 #[derive(Debug, Clone)]
 pub struct WorkflowManualResultValidationRow {
@@ -33,6 +36,11 @@ pub fn workflow_manual_result_summary_lines(record: &WorkflowManualResult) -> Wo
         status: serde_json::to_string(&record.status).unwrap().trim_matches('"').to_string(),
         operator: record.operator.clone(),
         caveat: record.summary.caveat.clone(),
+        workflow_execution_id: record.workflow_execution_id.0.clone(),
+        command_review_hash: record.command_review_hash.clone(),
+        command_composer_hash: record.command_composer_hash.clone(),
+        command_descriptor_hash: record.command_descriptor_hash.clone(),
+        loop_controller_hash: record.loop_controller_hash.clone(),
     }
 }
 

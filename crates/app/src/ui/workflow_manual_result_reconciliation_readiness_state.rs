@@ -9,11 +9,26 @@ pub struct WorkflowManualResultReconciliationReadinessSummaryRow {
     pub evaluator: String,
     pub manual_result_id: String,
     pub manual_result_review_id: String,
+    pub manual_result_hash: String,
+    pub manual_result_review_hash: String,
+    pub command_review_hash: String,
+    pub command_composer_hash: String,
+    pub command_descriptor_hash: String,
+    pub loop_controller_hash: String,
+}
+
+/// Textual predicate row for Patch 5 — not just tone-coded.
+#[derive(Debug, Clone)]
+pub struct ReadinessPredicateDisplayRow {
+    pub name: String,
+    pub passed: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkflowManualResultReconciliationReadinessUiState {
     pub latest_readiness: Option<WorkflowManualResultReconciliationReadinessSummaryRow>,
+    pub predicates: Vec<ReadinessPredicateDisplayRow>,
     pub warnings: Vec<String>,
 }
 
@@ -24,7 +39,28 @@ pub fn workflow_reconciliation_readiness_summary_lines(record: &WorkflowManualRe
         evaluator: record.evaluator.clone(),
         manual_result_id: record.manual_result_id.0.clone(),
         manual_result_review_id: record.manual_result_review_id.0.clone(),
+        manual_result_hash: record.manual_result_hash.clone(),
+        manual_result_review_hash: record.manual_result_review_hash.clone(),
+        command_review_hash: record.command_review_hash.clone(),
+        command_composer_hash: record.command_composer_hash.clone(),
+        command_descriptor_hash: record.command_descriptor_hash.clone(),
+        loop_controller_hash: record.loop_controller_hash.clone(),
     }
+}
+
+/// Convert workflow predicates to display rows (Patch 5).
+pub fn readiness_predicate_display_rows(predicates: &[WorkflowManualResultReconciliationReadinessPredicateResult]) -> Vec<ReadinessPredicateDisplayRow> {
+    predicates.iter().map(|p| {
+        let name = serde_json::to_string(&p.predicate)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .replace('_', " ");
+        ReadinessPredicateDisplayRow {
+            name,
+            passed: p.passed,
+            reason: p.reason.clone(),
+        }
+    }).collect()
 }
 
 pub fn workflow_reconciliation_readiness_safety_warning() -> String {
@@ -58,7 +94,12 @@ mod tests {
             command_descriptor_hash: "cdh".into(), loop_controller_hash: "lch".into(),
             status: WorkflowManualResultReconciliationReadinessStatus::Ready,
             decision: WorkflowManualResultReconciliationReadinessDecision::Ready { summary: "ok".into() },
-            predicates: vec![], reconciliation_preview: None,
+            predicates: vec![WorkflowManualResultReconciliationReadinessPredicateResult {
+                predicate: WorkflowManualResultReconciliationReadinessPredicate::ManualResultRecordExists,
+                passed: true,
+                reason: "Record found".into(),
+            }],
+            reconciliation_preview: None,
             verifies_external_state: false, reconciles_now: false,
             mutates_workflow_state: false, creates_run_revision: false,
             appends_trace: false, writes_memory: false,
@@ -72,6 +113,7 @@ mod tests {
     fn ui_state_loads_latest_readiness() {
         let state = WorkflowManualResultReconciliationReadinessUiState {
             latest_readiness: Some(workflow_reconciliation_readiness_summary_lines(&test_record())),
+            predicates: vec![],
             warnings: vec![],
         };
         assert!(state.latest_readiness.is_some());
@@ -83,6 +125,33 @@ mod tests {
         let row = workflow_reconciliation_readiness_summary_lines(&test_record());
         assert_eq!("ready", row.status);
         assert_eq!("wmrrr_t", row.readiness_id);
+    }
+
+    #[test]
+    fn summary_lines_include_hashes() {
+        let row = workflow_reconciliation_readiness_summary_lines(&test_record());
+        assert_eq!("mrh", row.manual_result_hash);
+        assert_eq!("rrh", row.manual_result_review_hash);
+        assert_eq!("crh", row.command_review_hash);
+    }
+
+    #[test]
+    fn predicate_display_rows_have_name_status_reason() {
+        let rows = readiness_predicate_display_rows(&test_record().predicates);
+        assert_eq!(1, rows.len());
+        assert!(!rows[0].name.is_empty());
+        assert!(rows[0].passed);
+        assert_eq!("Record found", rows[0].reason);
+    }
+
+    #[test]
+    fn predicate_display_rows_are_not_color_only() {
+        let rows = readiness_predicate_display_rows(&test_record().predicates);
+        // Must have textual content, not just tone codes
+        for row in &rows {
+            assert!(!row.name.is_empty(), "predicate name must not be empty");
+            assert!(!row.reason.is_empty(), "predicate reason must not be empty");
+        }
     }
 
     #[test]

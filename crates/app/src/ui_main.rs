@@ -289,6 +289,34 @@ fn App() -> Element {
                                                         .map(|d| openwand_app::ui::workflow_audit_packet_distribution_state::distribution_summary(d))
                                                         .collect();
                                                     *DISTRIBUTION_ROWS.write() = distributions;
+                                                    // Load manual result ladder (read-only)
+                                                    if let Ok(Some(mr)) = openwand_app::workflow_manual_result::result_by_workflow_run(&path, &wfx_id.0) {
+                                                        let row = openwand_app::ui::workflow_manual_result_state::workflow_manual_result_summary_lines(&mr);
+                                                        *LADDER_RESULT_ROWS.write() = vec![row];
+                                                    } else {
+                                                        *LADDER_RESULT_ROWS.write() = vec![];
+                                                    }
+                                                    if let Ok(Some(mrr)) = openwand_app::workflow_manual_result_review::review_by_workflow_run(&path, &wfx_id.0) {
+                                                        let row = openwand_app::ui::workflow_manual_result_review_state::workflow_manual_result_review_summary_lines(&mrr);
+                                                        *LADDER_REVIEW_ROWS.write() = vec![row];
+                                                    } else {
+                                                        *LADDER_REVIEW_ROWS.write() = vec![];
+                                                    }
+                                                    if let Ok(Some(rdy)) = openwand_app::workflow_manual_result_reconciliation_readiness::readiness_by_workflow_run(&path, &wfx_id.0) {
+                                                        let row = openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::workflow_reconciliation_readiness_summary_lines(&rdy);
+                                                        let preds = openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::readiness_predicate_display_rows(&rdy.predicates);
+                                                        *LADDER_READINESS_ROWS.write() = vec![row];
+                                                        *LADDER_PREDICATES.write() = preds;
+                                                    } else {
+                                                        *LADDER_READINESS_ROWS.write() = vec![];
+                                                        *LADDER_PREDICATES.write() = vec![];
+                                                    }
+                                                    if let Ok(Some(gate)) = openwand_app::workflow_manual_result_reconciliation_gate::gate_by_workflow_run(&path, &wfx_id.0) {
+                                                        let row = openwand_app::ui::workflow_manual_result_reconciliation_gate_state::gate_summary_lines(&gate);
+                                                        *LADDER_GATE_ROWS.write() = vec![row];
+                                                    } else {
+                                                        *LADDER_GATE_ROWS.write() = vec![];
+                                                    }
                                                     *STATUS_TEXT.write() = "Inspector loaded".into();
                                                 }
                                                 Err(e) => {
@@ -355,6 +383,12 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                     spawn(async move {
                         *SELECTED_SESSION_ID.write() = Some(id.clone());
                         *MEMORY_PROMPT_INPUTS.write() = None; // Clear on session switch
+                        // Patch 8: Clear ladder state on session switch
+                        *LADDER_RESULT_ROWS.write() = vec![];
+                        *LADDER_REVIEW_ROWS.write() = vec![];
+                        *LADDER_READINESS_ROWS.write() = vec![];
+                        *LADDER_GATE_ROWS.write() = vec![];
+                        *LADDER_PREDICATES.write() = vec![];
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);
@@ -464,16 +498,24 @@ fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_evidence_chain_inspector_components::*;
     use openwand_app::ui::workflow_audit_packet_review_components::*;
     use openwand_app::ui::workflow_audit_packet_distribution_components::*;
+    use openwand_app::ui::workflow_manual_result_components::render_manual_result_ladder_panel;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
     let reviews = REVIEW_ROWS.read().clone();
     let distributions = DISTRIBUTION_ROWS.read().clone();
+    let ladder_results = LADDER_RESULT_ROWS.read().clone();
+    let ladder_reviews = LADDER_REVIEW_ROWS.read().clone();
+    let ladder_readiness = LADDER_READINESS_ROWS.read().clone();
+    let ladder_gates = LADDER_GATE_ROWS.read().clone();
+    let ladder_preds = LADDER_PREDICATES.read().clone();
+    let wfx_id = CURRENT_SESSION.read().as_ref().map(|v| v.summary.session_id.clone()).unwrap_or_default();
 
     match inspector_state {
         Some(state) => rsx! {
-            div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0;",
+            div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto;",
                 { render_evidence_chain_inspector(&state) }
                 { render_audit_packet_review_distribution_panel(&reviews, &distributions) }
+                { render_manual_result_ladder_panel(&ladder_results, &ladder_reviews, &ladder_readiness, &ladder_gates, &ladder_preds, &wfx_id) }
             }
         },
         None => render_inspector_empty_state(),
@@ -688,6 +730,13 @@ static REVIEW_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_audit_packet_rev
 
 /// Cached audit packet distribution summaries for the Inspector tab.
 static DISTRIBUTION_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_audit_packet_distribution_state::DistributionSummaryRow>> = Signal::global(Vec::new);
+
+/// Cached manual result ladder rows for the Inspector tab.
+static LADDER_RESULT_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_state::WorkflowManualResultSummaryRow>> = Signal::global(Vec::new);
+static LADDER_REVIEW_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_review_state::WorkflowManualResultReviewSummaryRow>> = Signal::global(Vec::new);
+static LADDER_READINESS_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::WorkflowManualResultReconciliationReadinessSummaryRow>> = Signal::global(Vec::new);
+static LADDER_GATE_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_gate_state::WorkflowManualResultReconciliationGateSummaryRow>> = Signal::global(Vec::new);
+static LADDER_PREDICATES: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::ReadinessPredicateDisplayRow>> = Signal::global(Vec::new);
 
 // ── Send Handler ──────────────────────────────────────────
 

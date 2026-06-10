@@ -10,6 +10,14 @@ pub struct WorkflowManualResultReconciliationGateSummaryRow {
     pub manual_result_id: String,
     pub stage_id: String,
     pub revision_id: Option<String>,
+    pub readiness_id: String,
+    pub readiness_hash: String,
+    pub manual_result_review_hash: String,
+    pub manual_result_hash: String,
+    pub command_review_hash: String,
+    pub command_composer_hash: String,
+    pub command_descriptor_hash: String,
+    pub loop_controller_hash: String,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +35,14 @@ pub fn gate_summary_lines(record: &WorkflowManualResultReconciliationGateRecord)
         manual_result_id: record.manual_result_id.0.clone(),
         stage_id: record.stage_id.clone(),
         revision_id: revision,
+        readiness_id: record.reconciliation_readiness_id.0.clone(),
+        readiness_hash: record.reconciliation_readiness_hash.clone(),
+        manual_result_review_hash: record.manual_result_review_hash.clone(),
+        manual_result_hash: record.manual_result_hash.clone(),
+        command_review_hash: record.command_review_hash.clone(),
+        command_composer_hash: record.command_composer_hash.clone(),
+        command_descriptor_hash: record.command_descriptor_hash.clone(),
+        loop_controller_hash: record.loop_controller_hash.clone(),
     }
 }
 

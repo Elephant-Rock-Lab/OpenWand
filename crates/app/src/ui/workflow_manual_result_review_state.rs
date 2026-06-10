@@ -8,6 +8,11 @@ pub struct WorkflowManualResultReviewSummaryRow {
     pub decision: String,
     pub reviewer: String,
     pub manual_result_id: String,
+    pub manual_result_hash: String,
+    pub command_review_hash: String,
+    pub command_composer_hash: String,
+    pub command_descriptor_hash: String,
+    pub loop_controller_hash: String,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +36,11 @@ pub fn workflow_manual_result_review_summary_lines(record: &WorkflowManualResult
         decision: serde_json::to_string(&record.decision).unwrap().trim_matches('"').to_string(),
         reviewer: record.reviewer.clone(),
         manual_result_id: record.manual_result_id.0.clone(),
+        manual_result_hash: record.manual_result_hash.clone(),
+        command_review_hash: record.command_review_hash.clone(),
+        command_composer_hash: record.command_composer_hash.clone(),
+        command_descriptor_hash: record.command_descriptor_hash.clone(),
+        loop_controller_hash: record.loop_controller_hash.clone(),
     }
 }
 

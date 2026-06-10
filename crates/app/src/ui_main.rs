@@ -276,6 +276,19 @@ fn App() -> Element {
                                             match openwand_app::workflow_evidence_chain_inspector::assemble_evidence_chain(&path, &wfx_id, false) {
                                                 Ok(state) => {
                                                     *INSPECTOR_STATE.write() = Some(state);
+                                                    // Load review/distribution records (read-only)
+                                                    let reviews = openwand_app::workflow_audit_packet_review::review_by_workflow_run(&path, &wfx_id.0)
+                                                        .unwrap_or_default()
+                                                        .iter()
+                                                        .map(|r| openwand_app::ui::workflow_audit_packet_review_state::review_summary(r))
+                                                        .collect();
+                                                    *REVIEW_ROWS.write() = reviews;
+                                                    let distributions = openwand_app::workflow_audit_packet_distribution::distribution_by_workflow_run(&path, &wfx_id.0)
+                                                        .unwrap_or_default()
+                                                        .iter()
+                                                        .map(|d| openwand_app::ui::workflow_audit_packet_distribution_state::distribution_summary(d))
+                                                        .collect();
+                                                    *DISTRIBUTION_ROWS.write() = distributions;
                                                     *STATUS_TEXT.write() = "Inspector loaded".into();
                                                 }
                                                 Err(e) => {
@@ -449,10 +462,20 @@ fn render_console_pane() -> Element {
 
 fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_evidence_chain_inspector_components::*;
+    use openwand_app::ui::workflow_audit_packet_review_components::*;
+    use openwand_app::ui::workflow_audit_packet_distribution_components::*;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
+    let reviews = REVIEW_ROWS.read().clone();
+    let distributions = DISTRIBUTION_ROWS.read().clone();
+
     match inspector_state {
-        Some(state) => render_evidence_chain_inspector(&state),
+        Some(state) => rsx! {
+            div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0;",
+                { render_evidence_chain_inspector(&state) }
+                { render_audit_packet_review_distribution_panel(&reviews, &distributions) }
+            }
+        },
         None => render_inspector_empty_state(),
     }
 }
@@ -659,6 +682,12 @@ static CONSOLE_STATE: GlobalSignal<Option<openwand_workflow::workflow_operator_c
 
 /// Cached evidence chain inspector state for the selected workflow run.
 static INSPECTOR_STATE: GlobalSignal<Option<openwand_workflow::workflow_evidence_chain_inspector::EvidenceChainInspectionState>> = Signal::global(|| None);
+
+/// Cached audit packet review summaries for the Inspector tab.
+static REVIEW_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_audit_packet_review_state::ReviewSummaryRow>> = Signal::global(Vec::new);
+
+/// Cached audit packet distribution summaries for the Inspector tab.
+static DISTRIBUTION_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_audit_packet_distribution_state::DistributionSummaryRow>> = Signal::global(Vec::new);
 
 // ── Send Handler ──────────────────────────────────────────
 

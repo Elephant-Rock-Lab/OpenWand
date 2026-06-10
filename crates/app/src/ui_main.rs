@@ -317,6 +317,42 @@ fn App() -> Element {
                                                     } else {
                                                         *LADDER_GATE_ROWS.write() = vec![];
                                                     }
+                                                    // Load routing ladder (read-only)
+                                                    if let Ok(Some(route)) = openwand_app::workflow_action_routing::route_by_workflow_run(&path, &wfx_id.0) {
+                                                        *ROUTING_ROUTE_ROW.write() = Some(openwand_app::ui::workflow_action_routing_state::workflow_action_route_summary(&route));
+                                                        *ROUTING_SESSION_ROW.write() = openwand_app::ui::workflow_action_routing_state::workflow_session_route_row(&route);
+                                                        *ROUTING_ROUTE_PREDICATES.write() = openwand_app::ui::workflow_action_routing_state::workflow_action_route_predicate_rows(&route);
+                                                        *ROUTING_ROUTE_PROMPT.write() = Some(openwand_app::ui::workflow_action_routing_state::workflow_action_route_prompt_row(&route));
+                                                    } else {
+                                                        *ROUTING_ROUTE_ROW.write() = None;
+                                                        *ROUTING_SESSION_ROW.write() = None;
+                                                        *ROUTING_ROUTE_PREDICATES.write() = vec![];
+                                                        *ROUTING_ROUTE_PROMPT.write() = None;
+                                                    }
+                                                    if let Ok(Some(rdy)) = openwand_app::workflow_routing_readiness::readiness_by_workflow_run(&path, &wfx_id.0) {
+                                                        let mut ui_state = openwand_app::ui::workflow_routing_readiness_state::WorkflowRoutingReadinessUiState {
+                                                            latest_readiness: Some(openwand_app::ui::workflow_routing_readiness_state::workflow_routing_readiness_summary(&rdy)),
+                                                            predicates: openwand_app::ui::workflow_routing_readiness_state::workflow_routing_readiness_predicate_rows(&rdy),
+                                                            latest_review: None, candidate: None, route_preview: None, feedback: vec![], warnings: vec![],
+                                                        };
+                                                        if let Some(ref preview) = rdy.route_request_preview {
+                                                            ui_state.route_preview = Some(openwand_app::ui::workflow_routing_readiness_state::workflow_route_request_preview_lines(preview));
+                                                        }
+                                                        *ROUTING_READINESS_STATE.write() = Some(ui_state);
+                                                    } else {
+                                                        *ROUTING_READINESS_STATE.write() = None;
+                                                    }
+                                                    if let Ok(Some(nar)) = openwand_app::workflow_next_action_routing::routing_by_workflow_run(&path, &wfx_id.0) {
+                                                        let mut ui_state = openwand_app::ui::workflow_next_action_routing_state::WorkflowNextActionRoutingUiState {
+                                                            latest_routing: Some(openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_routing_summary_lines(&nar)),
+                                                            predicates: openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_routing_predicate_rows(&nar),
+                                                            route_link: openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_route_link_lines(&nar),
+                                                            warnings: vec![],
+                                                        };
+                                                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = Some(ui_state);
+                                                    } else {
+                                                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
+                                                    }
                                                     *STATUS_TEXT.write() = "Inspector loaded".into();
                                                 }
                                                 Err(e) => {
@@ -389,6 +425,14 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                         *LADDER_READINESS_ROWS.write() = vec![];
                         *LADDER_GATE_ROWS.write() = vec![];
                         *LADDER_PREDICATES.write() = vec![];
+                        // Patch 8: Clear routing ladder state on session switch
+                        *ROUTING_ROUTE_ROW.write() = None;
+                        *ROUTING_SESSION_ROW.write() = None;
+                        *ROUTING_ROUTE_PREDICATES.write() = vec![];
+                        *ROUTING_ROUTE_PROMPT.write() = None;
+                        *ROUTING_READINESS_STATE.write() = None;
+                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
+                        *ROUTING_REVIEW_ROW.write() = None;
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);
@@ -499,6 +543,10 @@ fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_audit_packet_review_components::*;
     use openwand_app::ui::workflow_audit_packet_distribution_components::*;
     use openwand_app::ui::workflow_manual_result_components::render_manual_result_ladder_panel;
+    use openwand_app::ui::workflow_action_routing_components::*;
+    use openwand_app::ui::workflow_routing_readiness_components::*;
+    use openwand_app::ui::workflow_next_action_routing_components::*;
+    use openwand_app::ui::workflow_next_action_review_components::*;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
     let reviews = REVIEW_ROWS.read().clone();
@@ -508,6 +556,13 @@ fn render_inspector_pane() -> Element {
     let ladder_readiness = LADDER_READINESS_ROWS.read().clone();
     let ladder_gates = LADDER_GATE_ROWS.read().clone();
     let ladder_preds = LADDER_PREDICATES.read().clone();
+    let route_row = ROUTING_ROUTE_ROW.read().clone();
+    let session_row = ROUTING_SESSION_ROW.read().clone();
+    let route_preds = ROUTING_ROUTE_PREDICATES.read().clone();
+    let route_prompt = ROUTING_ROUTE_PROMPT.read().clone();
+    let routing_readiness = ROUTING_READINESS_STATE.read().clone();
+    let routing_next_action = ROUTING_NEXT_ACTION_ROUTING_STATE.read().clone();
+    let routing_review = ROUTING_REVIEW_ROW.read().clone();
     let wfx_id = CURRENT_SESSION.read().as_ref().map(|v| v.summary.session_id.clone()).unwrap_or_default();
 
     match inspector_state {
@@ -516,6 +571,28 @@ fn render_inspector_pane() -> Element {
                 { render_evidence_chain_inspector(&state) }
                 { render_audit_packet_review_distribution_panel(&reviews, &distributions) }
                 { render_manual_result_ladder_panel(&ladder_results, &ladder_reviews, &ladder_readiness, &ladder_gates, &ladder_preds, &wfx_id) }
+                // Routing ladder
+                if let Some(ref route) = route_row {
+                    { render_route_summary(route) }
+                }
+                if let Some(ref session) = session_row {
+                    { render_session_route(session) }
+                }
+                if !route_preds.is_empty() {
+                    { render_route_predicate_rows(&route_preds) }
+                }
+                if let Some(ref prompt) = route_prompt {
+                    { render_route_prompt(prompt) }
+                }
+                if let Some(ref rdy) = routing_readiness {
+                    { render_routing_readiness_panel(rdy) }
+                }
+                if let Some(ref nar) = routing_next_action {
+                    { render_next_action_routing_panel(nar) }
+                }
+                if let Some(ref rev) = routing_review {
+                    { render_next_action_review_summary(rev) }
+                }
             }
         },
         None => render_inspector_empty_state(),
@@ -737,6 +814,15 @@ static LADDER_REVIEW_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_re
 static LADDER_READINESS_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::WorkflowManualResultReconciliationReadinessSummaryRow>> = Signal::global(Vec::new);
 static LADDER_GATE_ROWS: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_gate_state::WorkflowManualResultReconciliationGateSummaryRow>> = Signal::global(Vec::new);
 static LADDER_PREDICATES: GlobalSignal<Vec<openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::ReadinessPredicateDisplayRow>> = Signal::global(Vec::new);
+
+/// Cached routing ladder state for the Inspector tab.
+static ROUTING_ROUTE_ROW: GlobalSignal<Option<openwand_app::ui::workflow_action_routing_state::WorkflowActionRouteSummaryRow>> = Signal::global(|| None);
+static ROUTING_SESSION_ROW: GlobalSignal<Option<openwand_app::ui::workflow_action_routing_state::WorkflowSessionRouteRow>> = Signal::global(|| None);
+static ROUTING_ROUTE_PREDICATES: GlobalSignal<Vec<openwand_app::ui::workflow_action_routing_state::WorkflowActionRoutePredicateRow>> = Signal::global(Vec::new);
+static ROUTING_ROUTE_PROMPT: GlobalSignal<Option<openwand_app::ui::workflow_action_routing_state::WorkflowActionRoutePromptRow>> = Signal::global(|| None);
+static ROUTING_READINESS_STATE: GlobalSignal<Option<openwand_app::ui::workflow_routing_readiness_state::WorkflowRoutingReadinessUiState>> = Signal::global(|| None);
+static ROUTING_NEXT_ACTION_ROUTING_STATE: GlobalSignal<Option<openwand_app::ui::workflow_next_action_routing_state::WorkflowNextActionRoutingUiState>> = Signal::global(|| None);
+static ROUTING_REVIEW_ROW: GlobalSignal<Option<openwand_app::ui::workflow_next_action_review_state::ReviewSummaryRow>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

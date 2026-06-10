@@ -207,9 +207,66 @@ fn App() -> Element {
                 }
             }
 
-            // Center — main content
+            // Center — main content with tabs
             div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0;",
-                { render_detail_pane(service.clone(), memory.clone()) }
+                // Tab bar
+                div { style: "display: flex; border-bottom: 1px solid #ddd; background: #f7f7f7;",
+                    {{
+                        let tab_session_active = ACTIVE_TAB.read() == "session";
+                        let tab_console_active = ACTIVE_TAB.read() == "console";
+                        let session_bg = if tab_session_active { "#fff" } else { "#f7f7f7" };
+                        let session_border = if tab_session_active { "#ddd #ddd #fff #ddd" } else { "transparent" };
+                        let console_bg = if tab_console_active { "#fff" } else { "#f7f7f7" };
+                        let console_border = if tab_console_active { "#ddd #ddd #fff #ddd" } else { "transparent" };
+                        rsx! {
+                            button {
+                                style: "padding: 8px 16px; font-size: 13px; font-weight: 600; border: 1px solid; \
+                                         border-color: {session_border}; background: {session_bg}; cursor: pointer; \
+                                         border-bottom: none; font-family: system-ui;",
+                                onclick: move |_| {
+                                    *ACTIVE_TAB.write() = "session".into();
+                                },
+                                "Session"
+                            }
+                            button {
+                                style: "padding: 8px 16px; font-size: 13px; font-weight: 600; border: 1px solid; \
+                                         border-color: {console_border}; background: {console_bg}; cursor: pointer; \
+                                         border-bottom: none; font-family: system-ui;",
+                                onclick: move |_| {
+                                    *ACTIVE_TAB.write() = "console".into();
+                                    // Load console state if we have a session
+                                    if let Some(ref view) = *CURRENT_SESSION.read() {
+                                        let session_id = view.summary.session_id.clone();
+                                        let path = db_path();
+                                        spawn(async move {
+                                            use openwand_workflow::workflow_run::WorkflowExecutionId;
+                                            // Try to find a workflow run for this session
+                                            // For now, try the session ID as workflow execution ID
+                                            let wfx_id = WorkflowExecutionId(session_id.clone());
+                                            match openwand_app::workflow_operator_console::assemble_console_state(&path, &wfx_id) {
+                                                Ok(state) => {
+                                                    *CONSOLE_STATE.write() = Some(state);
+                                                    *STATUS_TEXT.write() = "Console loaded".into();
+                                                }
+                                                Err(e) => {
+                                                    *CONSOLE_STATE.write() = None;
+                                                    *STATUS_TEXT.write() = format!("Console: {e}");
+                                                }
+                                            }
+                                        });
+                                    }
+                                },
+                                "Console"
+                            }
+                        }
+                    }}
+                }
+                // Tab content
+                if ACTIVE_TAB.read() == "console" {
+                    { render_console_pane() }
+                } else {
+                    { render_detail_pane(service.clone(), memory.clone()) }
+                }
             }
 
             // Right sidebar — memory panel
@@ -341,6 +398,18 @@ fn render_conflicts(title: &str, color: &str, conflicts: &[openwand_app::ui::mem
                 }
             }
         }
+    }
+}
+
+// ── Console Pane ──────────────────────────────────────────
+
+fn render_console_pane() -> Element {
+    use openwand_app::ui::workflow_operator_console_components::*;
+
+    let console_state = CONSOLE_STATE.read().clone();
+    match console_state {
+        Some(state) => render_operator_console(&state),
+        None => render_operator_console_empty_state(),
     }
 }
 
@@ -537,6 +606,12 @@ fn render_tool_event(event: UiRunEvent) -> Element {
 // ── Input Text ────────────────────────────────────────────
 
 static INPUT_TEXT: GlobalSignal<String> = Signal::global(String::new);
+
+/// Active view tab: "session" or "console"
+static ACTIVE_TAB: GlobalSignal<String> = Signal::global(|| "session".into());
+
+/// Cached operator console state for the selected workflow run.
+static CONSOLE_STATE: GlobalSignal<Option<openwand_workflow::workflow_operator_console::WorkflowOperatorConsoleState>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

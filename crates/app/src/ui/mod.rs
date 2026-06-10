@@ -3,12 +3,15 @@
 //! Contains DTOs, services, bridges, and replay. The UI consumes these types,
 //! never raw store internals.
 
+pub mod components;
+pub mod design_tokens;
 pub mod dto;
 pub mod governance_actions;
 pub mod governance_components;
 pub mod governance_state;
 pub mod inspector_components;
 pub mod inspector_state;
+pub mod layout;
 pub mod memory_dto;
 pub mod memory_service;
 pub mod provider_components;

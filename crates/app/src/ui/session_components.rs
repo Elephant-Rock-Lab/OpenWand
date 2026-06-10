@@ -3,7 +3,15 @@
 //! Pure helpers extract display data without Dioxus dependency.
 //! Render functions consume helpers for UI display.
 //! Neither mutates any state or calls backends.
+//!
+//! Wave 52A: migrated to design-system tokens and component style builders.
 
+#[cfg(feature = "desktop")]
+use crate::ui::components::*;
+#[cfg(feature = "desktop")]
+use crate::ui::design_tokens::*;
+#[cfg(feature = "desktop")]
+use crate::ui::layout::*;
 use crate::ui::run_dto::{
     UiMemoryContextSummary, UiPendingApproval, UiRunState, UiRunStatus,
     UiSessionMessage, UiTraceSummary,
@@ -100,8 +108,9 @@ use dioxus::prelude::*;
 #[cfg(feature = "desktop")]
 pub fn render_status_bar(state: &UiRunState) -> Element {
     let text = status_bar_text(state.status);
+    let style = status_bar_style();
     rsx! {
-        div { style: "padding: 8px; font-family: monospace; font-size: 12px; border-bottom: 1px solid #ddd;",
+        div { style: "{style}",
             "{text}"
         }
     }
@@ -110,8 +119,9 @@ pub fn render_status_bar(state: &UiRunState) -> Element {
 #[cfg(feature = "desktop")]
 pub fn render_chat_transcript(state: &UiRunState) -> Element {
     let lines = chat_transcript_lines(&state.messages, &state.streamed_text);
+    let style = scroll_area_style();
     rsx! {
-        div { style: "padding: 16px; font-family: monospace; font-size: 13px; white-space: pre-wrap;",
+        div { style: "{style}",
             for line in lines {
                 div { "{line}" }
             }
@@ -124,10 +134,16 @@ pub fn render_approval_panel(state: &UiRunState) -> Element {
     match &state.pending_approval {
         Some(approval) => {
             let lines = approval_panel_text(approval);
+            let style = banner_style(UiTone::Warning);
+            let line_style = format!(
+                "font-size: {}; font-family: {};",
+                typo::TEXT_BASE,
+                typo::FONT_MONO,
+            );
             rsx! {
-                div { style: "background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin: 8px 0;",
+                div { style: "{style}",
                     for line in lines {
-                        div { style: "font-size: 12px; font-family: monospace;", "{line}" }
+                        div { style: "{line_style}", "{line}" }
                     }
                 }
             }
@@ -141,8 +157,16 @@ pub fn render_memory_indicator(state: &UiRunState) -> Element {
     match &state.memory_context {
         Some(ctx) => {
             let text = memory_context_text(ctx);
+            let style = format!(
+                "font-size: {}; color: {}; padding: {} {}; font-family: {};",
+                typo::TEXT_SM,
+                colors::TEXT_SECONDARY,
+                spacing::SPACE_SM,
+                spacing::SPACE_MD,
+                typo::FONT_MONO,
+            );
             rsx! {
-                div { style: "font-size: 11px; color: #666; padding: 4px 8px; font-family: monospace;",
+                div { style: "{style}",
                     "{text}"
                 }
             }
@@ -156,8 +180,9 @@ pub fn render_error_panel(state: &UiRunState) -> Element {
     match &state.error {
         Some(err) => {
             let text = error_panel_text(err);
+            let style = banner_style(UiTone::Error);
             rsx! {
-                div { style: "background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 12px; color: #721c24; font-size: 12px; font-family: monospace;",
+                div { style: "{style}",
                     "{text}"
                 }
             }

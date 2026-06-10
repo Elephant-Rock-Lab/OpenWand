@@ -3,6 +3,24 @@ use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
 use openwand_policy::OutputGuardConfig;
 use serde::{Deserialize, Serialize};
 
+/// Typed capability context block from skills/goals registries.
+/// Carried through RunConfig for deterministic prompt assembly.
+/// Text-only, no executable fields.
+#[derive(Debug, Clone)]
+pub struct CapabilityContextBlock {
+    /// Manifest state at assembly time.
+    pub skills_manifest_state: String,
+    pub goals_manifest_state: String,
+    /// IDs of skills included in the block.
+    pub included_skill_ids: Vec<String>,
+    /// IDs of goals included in the block.
+    pub included_goal_ids: Vec<String>,
+    /// IDs excluded due to readiness gaps.
+    pub excluded_item_ids: Vec<String>,
+    /// The assembled prompt text (bounded, sanitized).
+    pub text: String,
+}
+
 /// Configuration for a single run_turn invocation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
@@ -29,6 +47,11 @@ pub struct RunConfig {
     /// This does NOT guarantee the user never saw the raw text.
     #[serde(skip)]
     pub output_guard: Option<OutputGuardConfig>,
+    /// Pre-assembled capability context from skills/goals registries.
+    /// Gated by readiness: only ReadyForContext entries are included.
+    /// This is contextual information only — never parsed as executable instructions.
+    #[serde(skip)]
+    pub capability_context: Option<CapabilityContextBlock>,
 }
 
 impl Default for RunConfig {
@@ -41,6 +64,7 @@ impl Default for RunConfig {
             llm_target: None,
             memory_prompt_inputs: None,
             output_guard: None,
+            capability_context: None,
         }
     }
 }

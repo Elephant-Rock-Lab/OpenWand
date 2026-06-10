@@ -138,6 +138,7 @@ pub async fn execute_session_action(
                 llm_target: None,
                 memory_prompt_inputs: None,
                 output_guard: None,
+                capability_context: None,
             };
 
             match UiSessionService::resolve_approval(r, decision, config).await {
@@ -185,6 +186,7 @@ pub async fn execute_session_action(
                 llm_target: None,
                 memory_prompt_inputs: None,
                 output_guard: None,
+                capability_context: None,
             };
 
             match UiSessionService::resolve_approval(r, decision, config).await {

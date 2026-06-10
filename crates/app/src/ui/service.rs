@@ -165,6 +165,7 @@ impl UiSessionService {
         runner: Arc<SessionRunner>,
         working_directory: std::path::PathBuf,
         memory_prompt_inputs: Option<openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs>,
+        capability_context: Option<openwand_session::config::CapabilityContextBlock>,
     ) -> Result<RunHandle, UiServiceError> {
         // Check run lock via try_run — if runner has an active run, it fails
         let cancellation = CancellationToken::new();
@@ -187,6 +188,7 @@ impl UiSessionService {
             llm_target: Some(llm_target),
             memory_prompt_inputs,
             output_guard: None,
+            capability_context,
         };
 
         // Spawn the run in background

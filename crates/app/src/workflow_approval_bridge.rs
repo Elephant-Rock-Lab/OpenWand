@@ -154,6 +154,7 @@ impl LiveApprovalBridge {
             llm_target: None,
             memory_prompt_inputs: None,
             output_guard: None,
+            capability_context: None,
         };
 
         // Subscribe before resolving

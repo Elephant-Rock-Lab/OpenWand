@@ -21,6 +21,7 @@ pub mod memory_coordinator;
 pub mod memory_evaluation_model;
 pub mod memory_evaluation;
 pub mod session_capability;
+pub mod session_capability_prompt;
 pub mod session_runtime;
 pub mod task_planning;
 pub mod ui;

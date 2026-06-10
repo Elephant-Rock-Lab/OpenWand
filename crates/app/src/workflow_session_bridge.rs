@@ -168,6 +168,7 @@ impl LiveSessionBridge_ {
             llm_target: None,
             memory_prompt_inputs: None,
             output_guard: None,
+            capability_context: None,
         };
 
         let run_result = self.runner.run_turn(user_text, config).await

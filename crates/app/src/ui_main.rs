@@ -716,6 +716,20 @@ async fn handle_send(
         .filter(|cached| cached.working_directory == std::path::PathBuf::from(&working_dir))
         .map(|cached| cached.inputs.clone());
 
+    // Build capability context from current registries (Patch 3: recomputes, not UI signal)
+    let openwand_dir = std::path::Path::new(&working_dir).join(".openwand");
+    let skill_registry = openwand_skills::registry::load_skill_registry(&openwand_dir.join("skills.toml"));
+    let goal_registry = openwand_goals::registry::load_goal_registry(&openwand_dir.join("goals.toml"));
+    let cap_block = openwand_app::session_capability_prompt::build_capability_prompt_inputs(
+        &skill_registry,
+        &goal_registry,
+    );
+    let capability_context = if openwand_app::session_capability_prompt::capability_block_has_content(&cap_block) {
+        Some(cap_block)
+    } else {
+        None
+    };
+
     match service.start_run(
         &session_id,
         text.clone(),
@@ -723,6 +737,7 @@ async fn handle_send(
         runner.clone(),
         std::path::PathBuf::from(&working_dir),
         cached_inputs,
+        capability_context,
     ).await {
         Ok(handle) => {
             *ACTIVE_RUNNER.write() = Some(ActiveRun {

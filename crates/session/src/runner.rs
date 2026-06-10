@@ -806,6 +806,12 @@ impl SessionRunner {
                         base.push_str(&format!("\n\n## Retrieved Memory Context\n\n{}\n\nUse this context when relevant to the user's request.", block));
                     }
                 }
+                // Capability context: bounded skills/goals data, separate section (Patch 7)
+                if let Some(ref cap) = config.capability_context {
+                    if !cap.text.is_empty() {
+                        base.push_str(&format!("\n\n{}", cap.text));
+                    }
+                }
                 base
             }),
             tools: llm_tools.clone(),

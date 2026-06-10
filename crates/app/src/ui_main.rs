@@ -23,6 +23,8 @@ use openwand_llm::LlmTarget;
 use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
 use openwand_memory::{MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_session::runner::SessionRunner;
+use openwand_skills;
+use openwand_goals;
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::SessionRegistryStore;
 use std::sync::Arc;
@@ -46,6 +48,9 @@ static CURRENT_SESSION: GlobalSignal<Option<UiSessionView>> = Signal::global(|| 
 static RUN_STATE: GlobalSignal<UiRunState> = Signal::global(UiRunState::default);
 static STATUS_TEXT: GlobalSignal<String> = Signal::global(|| "Ready".into());
 static MEMORY_PANEL: GlobalSignal<UiFilteredMemoryPanel> = Signal::global(UiFilteredMemoryPanel::empty);
+
+/// Cached skills/goals readiness report for the selected session.
+static SKILLS_GOALS_REPORT: GlobalSignal<Option<openwand_app::ui::skills_goals_state::SkillGoalReadinessReport>> = Signal::global(|| None);
 
 /// Active runner + handle for the selected session.
 static ACTIVE_RUNNER: GlobalSignal<Option<ActiveRun>> = Signal::global(|| None);
@@ -268,6 +273,10 @@ fn App() -> Element {
 
                 div { style: "flex: 1; overflow-y: auto;",
                     { render_memory_buckets(&MEMORY_PANEL.read()) }
+                    // Skills & Goals readiness panel (Patch 6: reachable UI)
+                    if let Some(ref report) = *SKILLS_GOALS_REPORT.read() {
+                        { openwand_app::ui::skills_goals_components::render_skills_goals_readiness_panel(report) }
+                    }
                 }
             }
         }
@@ -319,6 +328,17 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);
+                                // Load skills/goals readiness for the session's working directory
+                                let working_dir = CURRENT_SESSION
+                                    .read()
+                                    .as_ref()
+                                    .and_then(|s| s.working_directory.clone())
+                                    .unwrap_or_else(|| ".".to_string());
+                                let openwand_dir = std::path::Path::new(&working_dir).join(".openwand");
+                                let sr = openwand_skills::registry::load_skill_registry(&openwand_dir.join("skills.toml"));
+                                let gr = openwand_goals::registry::load_goal_registry(&openwand_dir.join("goals.toml"));
+                                let report = openwand_app::ui::skills_goals_state::build_readiness_report(&sr, &gr);
+                                *SKILLS_GOALS_REPORT.write() = Some(report);
                             }
                             Err(e) => {
                                 *STATUS_TEXT.write() = format!("Error: {e}");

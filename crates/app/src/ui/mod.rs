@@ -79,5 +79,6 @@ pub mod workflow_audit_packet_review_components;
 pub mod workflow_audit_packet_distribution_state;
 pub mod workflow_audit_packet_distribution_components;
 pub mod console_shell;
+pub mod desktop_bootstrap;
 pub mod inspector_shell;
 pub mod session_shell;

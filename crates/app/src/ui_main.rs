@@ -1,6 +1,15 @@
-//! OpenWand Desktop UI — Wave 02g Real Memory Wiring.
+//! OpenWand Desktop UI — main entry point.
 //!
 //! Run with: cargo run --bin openwand-ui --features desktop
+//!
+//! Ownership:
+//! - ui_main.rs owns the desktop runtime loop: send handling, run polling/projection,
+//!   cancellation state, active runner state, and signal mutation during a run.
+//!   These are not render-shell responsibilities.
+//! - ui/desktop_bootstrap.rs owns construction helpers: policy, path, service, memory.
+//! - ui/console_shell.rs owns console loading/clearing.
+//! - ui/inspector_shell.rs owns inspector loading/clearing.
+//! - ui/session_shell.rs owns session/detail/memory/tool-event rendering.
 
 use dioxus::prelude::*;
 use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
@@ -63,74 +72,19 @@ pub struct ActiveRun {
 // ── App Init ──────────────────────────────────────────────
 
 fn build_smoke_policy() -> openwand_policy::BuiltinPolicyEngine {
-    openwand_policy::BuiltinPolicyEngine::new(vec![
-        openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("smoke-allow-read".into()),
-            name: "Allow read-effect tools (smoke)".into(),
-            enabled: true,
-            priority: 0,
-            class: openwand_policy::RuleClass::BuiltinDefault,
-            matcher: openwand_policy::ToolMatcher::ToolEffect {
-                effect: openwand_core::tool_vocab::ToolEffect::Read,
-            },
-            effect: openwand_policy::PolicyEffect::Allow {
-                risk: openwand_core::risk::RiskLevelSnapshot::Low,
-                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-            },
-            reason_code: "smoke_allow_read".into(),
-            summary: "Allow read-effect tools.".into(),
-        },
-        openwand_policy::PolicyRule {
-            id: openwand_policy::PolicyRuleId("smoke-allow-search".into()),
-            name: "Allow search-effect tools (smoke)".into(),
-            enabled: true,
-            priority: 0,
-            class: openwand_policy::RuleClass::BuiltinDefault,
-            matcher: openwand_policy::ToolMatcher::ToolEffect {
-                effect: openwand_core::tool_vocab::ToolEffect::Search,
-            },
-            effect: openwand_policy::PolicyEffect::Allow {
-                risk: openwand_core::risk::RiskLevelSnapshot::Low,
-                confirmation: openwand_core::mode::ConfirmationLevel::Auto,
-            },
-            reason_code: "smoke_allow_search".into(),
-            summary: "Allow search-effect tools.".into(),
-        },
-    ])
+    openwand_app::ui::desktop_bootstrap::build_smoke_policy()
 }
 
 fn db_path() -> std::path::PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("openwand")
-        .join("openwand.db")
+    openwand_app::ui::desktop_bootstrap::db_path()
 }
 
 fn init_service() -> Arc<UiSessionService> {
-    let path = db_path();
-
-    let store_registry = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(
-            SqliteStore::open(SqliteStoreConfig::file(&path))
-        )
-    }).expect("Failed to open store");
-
-    let store_trace = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(
-            SqliteStore::open(SqliteStoreConfig::file(&path))
-        )
-    }).expect("Failed to open trace store");
-
-    let registry: Arc<dyn SessionRegistryStore> = Arc::new(store_registry);
-    let trace: Arc<dyn openwand_trace::TraceStore<openwand_store::StoredEvent>> = Arc::new(store_trace);
-    Arc::new(UiSessionService::new(registry, trace))
+    openwand_app::ui::desktop_bootstrap::init_service()
 }
 
 fn init_memory() -> Arc<SqliteMemoryStore> {
-    let path = db_path();
-    Arc::new(
-        SqliteMemoryStore::open(&path).expect("Failed to open memory store")
-    )
+    openwand_app::ui::desktop_bootstrap::init_memory()
 }
 
 // ── Root Component ────────────────────────────────────────

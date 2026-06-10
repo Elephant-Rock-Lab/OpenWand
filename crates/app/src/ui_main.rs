@@ -353,6 +353,21 @@ fn App() -> Element {
                                                     } else {
                                                         *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
                                                     }
+                                                    // Load execution timeline (read-only)
+                                                    if let Ok(wfr) = openwand_app::workflow_execution::load_workflow_run(&path, &wfx_id) {
+                                                        let ui_state = openwand_app::ui::workflow_execution_state::WorkflowExecutionUiState {
+                                                            latest_run: Some(openwand_app::ui::workflow_execution_state::workflow_execution_summary(&wfr)),
+                                                            predicates: openwand_app::ui::workflow_execution_state::workflow_execution_predicate_rows(&wfr),
+                                                            stages: openwand_app::ui::workflow_execution_state::workflow_stage_run_rows(&wfr),
+                                                            lifecycle_events: openwand_app::ui::workflow_execution_state::workflow_lifecycle_event_rows(&wfr),
+                                                            action_requests: openwand_app::ui::workflow_execution_state::workflow_action_request_rows(&wfr),
+                                                            abort_snapshot: Some(openwand_app::ui::workflow_execution_state::workflow_abort_snapshot_lines(&wfr)),
+                                                            warnings: vec![],
+                                                        };
+                                                        *EXECUTION_TIMELINE_STATE.write() = Some(ui_state);
+                                                    } else {
+                                                        *EXECUTION_TIMELINE_STATE.write() = None;
+                                                    }
                                                     *STATUS_TEXT.write() = "Inspector loaded".into();
                                                 }
                                                 Err(e) => {
@@ -433,6 +448,8 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                         *ROUTING_READINESS_STATE.write() = None;
                         *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
                         *ROUTING_REVIEW_ROW.write() = None;
+                        // Patch 8: Clear execution timeline state on session switch
+                        *EXECUTION_TIMELINE_STATE.write() = None;
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);
@@ -547,6 +564,7 @@ fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_routing_readiness_components::*;
     use openwand_app::ui::workflow_next_action_routing_components::*;
     use openwand_app::ui::workflow_next_action_review_components::*;
+    use openwand_app::ui::workflow_execution_components::*;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
     let reviews = REVIEW_ROWS.read().clone();
@@ -563,6 +581,7 @@ fn render_inspector_pane() -> Element {
     let routing_readiness = ROUTING_READINESS_STATE.read().clone();
     let routing_next_action = ROUTING_NEXT_ACTION_ROUTING_STATE.read().clone();
     let routing_review = ROUTING_REVIEW_ROW.read().clone();
+    let execution_timeline = EXECUTION_TIMELINE_STATE.read().clone();
     let wfx_id = CURRENT_SESSION.read().as_ref().map(|v| v.summary.session_id.clone()).unwrap_or_default();
 
     match inspector_state {
@@ -592,6 +611,10 @@ fn render_inspector_pane() -> Element {
                 }
                 if let Some(ref rev) = routing_review {
                     { render_next_action_review_summary(rev) }
+                }
+                // Execution timeline
+                if let Some(ref timeline) = execution_timeline {
+                    { render_workflow_execution_timeline(timeline) }
                 }
             }
         },
@@ -823,6 +846,9 @@ static ROUTING_ROUTE_PROMPT: GlobalSignal<Option<openwand_app::ui::workflow_acti
 static ROUTING_READINESS_STATE: GlobalSignal<Option<openwand_app::ui::workflow_routing_readiness_state::WorkflowRoutingReadinessUiState>> = Signal::global(|| None);
 static ROUTING_NEXT_ACTION_ROUTING_STATE: GlobalSignal<Option<openwand_app::ui::workflow_next_action_routing_state::WorkflowNextActionRoutingUiState>> = Signal::global(|| None);
 static ROUTING_REVIEW_ROW: GlobalSignal<Option<openwand_app::ui::workflow_next_action_review_state::ReviewSummaryRow>> = Signal::global(|| None);
+
+/// Cached workflow execution timeline state for the Inspector tab.
+static EXECUTION_TIMELINE_STATE: GlobalSignal<Option<openwand_app::ui::workflow_execution_state::WorkflowExecutionUiState>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

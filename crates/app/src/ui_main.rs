@@ -237,23 +237,13 @@ fn App() -> Element {
                                          border-bottom: none; font-family: system-ui;",
                                 onclick: move |_| {
                                     *ACTIVE_TAB.write() = "console".into();
-                                    // Load console state if we have a session
+                                    // Load console state via shell
                                     if let Some(ref view) = *CURRENT_SESSION.read() {
                                         let session_id = view.summary.session_id.clone();
                                         let path = db_path();
                                         spawn(async move {
-                                            use openwand_workflow::workflow_run::WorkflowExecutionId;
-                                            let wfx_id = WorkflowExecutionId(session_id.clone());
-                                            match openwand_app::workflow_operator_console::assemble_console_state(&path, &wfx_id) {
-                                                Ok(state) => {
-                                                    *CONSOLE_STATE.write() = Some(state);
-                                                    *STATUS_TEXT.write() = "Console loaded".into();
-                                                }
-                                                Err(e) => {
-                                                    *CONSOLE_STATE.write() = None;
-                                                    *STATUS_TEXT.write() = format!("Console: {e}");
-                                                }
-                                            }
+                                            openwand_app::ui::console_shell::load_console_shell(&CONSOLE_STATE, &path, &session_id);
+                                            *STATUS_TEXT.write() = "Console loaded".into();
                                         });
                                     }
                                 },
@@ -265,116 +255,33 @@ fn App() -> Element {
                                          border-bottom: none; font-family: system-ui;",
                                 onclick: move |_| {
                                     *ACTIVE_TAB.write() = "inspector".into();
-                                    // Load inspector state if we have a session
+                                    // Load inspector state via shell
                                     if let Some(ref view) = *CURRENT_SESSION.read() {
                                         let session_id = view.summary.session_id.clone();
                                         let path = db_path();
                                         spawn(async move {
                                             use openwand_workflow::workflow_run::WorkflowExecutionId;
                                             let wfx_id = WorkflowExecutionId(session_id.clone());
-                                            // Read-only inspection only — no export
-                                            match openwand_app::workflow_evidence_chain_inspector::assemble_evidence_chain(&path, &wfx_id, false) {
-                                                Ok(state) => {
-                                                    *INSPECTOR_STATE.write() = Some(state);
-                                                    // Load review/distribution records (read-only)
-                                                    let reviews = openwand_app::workflow_audit_packet_review::review_by_workflow_run(&path, &wfx_id.0)
-                                                        .unwrap_or_default()
-                                                        .iter()
-                                                        .map(|r| openwand_app::ui::workflow_audit_packet_review_state::review_summary(r))
-                                                        .collect();
-                                                    *REVIEW_ROWS.write() = reviews;
-                                                    let distributions = openwand_app::workflow_audit_packet_distribution::distribution_by_workflow_run(&path, &wfx_id.0)
-                                                        .unwrap_or_default()
-                                                        .iter()
-                                                        .map(|d| openwand_app::ui::workflow_audit_packet_distribution_state::distribution_summary(d))
-                                                        .collect();
-                                                    *DISTRIBUTION_ROWS.write() = distributions;
-                                                    // Load manual result ladder (read-only)
-                                                    if let Ok(Some(mr)) = openwand_app::workflow_manual_result::result_by_workflow_run(&path, &wfx_id.0) {
-                                                        let row = openwand_app::ui::workflow_manual_result_state::workflow_manual_result_summary_lines(&mr);
-                                                        *LADDER_RESULT_ROWS.write() = vec![row];
-                                                    } else {
-                                                        *LADDER_RESULT_ROWS.write() = vec![];
-                                                    }
-                                                    if let Ok(Some(mrr)) = openwand_app::workflow_manual_result_review::review_by_workflow_run(&path, &wfx_id.0) {
-                                                        let row = openwand_app::ui::workflow_manual_result_review_state::workflow_manual_result_review_summary_lines(&mrr);
-                                                        *LADDER_REVIEW_ROWS.write() = vec![row];
-                                                    } else {
-                                                        *LADDER_REVIEW_ROWS.write() = vec![];
-                                                    }
-                                                    if let Ok(Some(rdy)) = openwand_app::workflow_manual_result_reconciliation_readiness::readiness_by_workflow_run(&path, &wfx_id.0) {
-                                                        let row = openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::workflow_reconciliation_readiness_summary_lines(&rdy);
-                                                        let preds = openwand_app::ui::workflow_manual_result_reconciliation_readiness_state::readiness_predicate_display_rows(&rdy.predicates);
-                                                        *LADDER_READINESS_ROWS.write() = vec![row];
-                                                        *LADDER_PREDICATES.write() = preds;
-                                                    } else {
-                                                        *LADDER_READINESS_ROWS.write() = vec![];
-                                                        *LADDER_PREDICATES.write() = vec![];
-                                                    }
-                                                    if let Ok(Some(gate)) = openwand_app::workflow_manual_result_reconciliation_gate::gate_by_workflow_run(&path, &wfx_id.0) {
-                                                        let row = openwand_app::ui::workflow_manual_result_reconciliation_gate_state::gate_summary_lines(&gate);
-                                                        *LADDER_GATE_ROWS.write() = vec![row];
-                                                    } else {
-                                                        *LADDER_GATE_ROWS.write() = vec![];
-                                                    }
-                                                    // Load routing ladder (read-only)
-                                                    if let Ok(Some(route)) = openwand_app::workflow_action_routing::route_by_workflow_run(&path, &wfx_id.0) {
-                                                        *ROUTING_ROUTE_ROW.write() = Some(openwand_app::ui::workflow_action_routing_state::workflow_action_route_summary(&route));
-                                                        *ROUTING_SESSION_ROW.write() = openwand_app::ui::workflow_action_routing_state::workflow_session_route_row(&route);
-                                                        *ROUTING_ROUTE_PREDICATES.write() = openwand_app::ui::workflow_action_routing_state::workflow_action_route_predicate_rows(&route);
-                                                        *ROUTING_ROUTE_PROMPT.write() = Some(openwand_app::ui::workflow_action_routing_state::workflow_action_route_prompt_row(&route));
-                                                    } else {
-                                                        *ROUTING_ROUTE_ROW.write() = None;
-                                                        *ROUTING_SESSION_ROW.write() = None;
-                                                        *ROUTING_ROUTE_PREDICATES.write() = vec![];
-                                                        *ROUTING_ROUTE_PROMPT.write() = None;
-                                                    }
-                                                    if let Ok(Some(rdy)) = openwand_app::workflow_routing_readiness::readiness_by_workflow_run(&path, &wfx_id.0) {
-                                                        let mut ui_state = openwand_app::ui::workflow_routing_readiness_state::WorkflowRoutingReadinessUiState {
-                                                            latest_readiness: Some(openwand_app::ui::workflow_routing_readiness_state::workflow_routing_readiness_summary(&rdy)),
-                                                            predicates: openwand_app::ui::workflow_routing_readiness_state::workflow_routing_readiness_predicate_rows(&rdy),
-                                                            latest_review: None, candidate: None, route_preview: None, feedback: vec![], warnings: vec![],
-                                                        };
-                                                        if let Some(ref preview) = rdy.route_request_preview {
-                                                            ui_state.route_preview = Some(openwand_app::ui::workflow_routing_readiness_state::workflow_route_request_preview_lines(preview));
-                                                        }
-                                                        *ROUTING_READINESS_STATE.write() = Some(ui_state);
-                                                    } else {
-                                                        *ROUTING_READINESS_STATE.write() = None;
-                                                    }
-                                                    if let Ok(Some(nar)) = openwand_app::workflow_next_action_routing::routing_by_workflow_run(&path, &wfx_id.0) {
-                                                        let mut ui_state = openwand_app::ui::workflow_next_action_routing_state::WorkflowNextActionRoutingUiState {
-                                                            latest_routing: Some(openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_routing_summary_lines(&nar)),
-                                                            predicates: openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_routing_predicate_rows(&nar),
-                                                            route_link: openwand_app::ui::workflow_next_action_routing_state::workflow_next_action_route_link_lines(&nar),
-                                                            warnings: vec![],
-                                                        };
-                                                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = Some(ui_state);
-                                                    } else {
-                                                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
-                                                    }
-                                                    // Load execution timeline (read-only)
-                                                    if let Ok(wfr) = openwand_app::workflow_execution::load_workflow_run(&path, &wfx_id) {
-                                                        let ui_state = openwand_app::ui::workflow_execution_state::WorkflowExecutionUiState {
-                                                            latest_run: Some(openwand_app::ui::workflow_execution_state::workflow_execution_summary(&wfr)),
-                                                            predicates: openwand_app::ui::workflow_execution_state::workflow_execution_predicate_rows(&wfr),
-                                                            stages: openwand_app::ui::workflow_execution_state::workflow_stage_run_rows(&wfr),
-                                                            lifecycle_events: openwand_app::ui::workflow_execution_state::workflow_lifecycle_event_rows(&wfr),
-                                                            action_requests: openwand_app::ui::workflow_execution_state::workflow_action_request_rows(&wfr),
-                                                            abort_snapshot: Some(openwand_app::ui::workflow_execution_state::workflow_abort_snapshot_lines(&wfr)),
-                                                            warnings: vec![],
-                                                        };
-                                                        *EXECUTION_TIMELINE_STATE.write() = Some(ui_state);
-                                                    } else {
-                                                        *EXECUTION_TIMELINE_STATE.write() = None;
-                                                    }
-                                                    *STATUS_TEXT.write() = "Inspector loaded".into();
-                                                }
-                                                Err(e) => {
-                                                    *INSPECTOR_STATE.write() = None;
-                                                    *STATUS_TEXT.write() = format!("Inspector: {e}");
-                                                }
-                                            }
+                                            let sigs = openwand_app::ui::inspector_shell::InspectorSignals {
+                                                inspector_state: &INSPECTOR_STATE,
+                                                review_rows: &REVIEW_ROWS,
+                                                distribution_rows: &DISTRIBUTION_ROWS,
+                                                ladder_result_rows: &LADDER_RESULT_ROWS,
+                                                ladder_review_rows: &LADDER_REVIEW_ROWS,
+                                                ladder_readiness_rows: &LADDER_READINESS_ROWS,
+                                                ladder_gate_rows: &LADDER_GATE_ROWS,
+                                                ladder_predicates: &LADDER_PREDICATES,
+                                                routing_route_row: &ROUTING_ROUTE_ROW,
+                                                routing_session_row: &ROUTING_SESSION_ROW,
+                                                routing_route_predicates: &ROUTING_ROUTE_PREDICATES,
+                                                routing_route_prompt: &ROUTING_ROUTE_PROMPT,
+                                                routing_readiness_state: &ROUTING_READINESS_STATE,
+                                                routing_next_action_state: &ROUTING_NEXT_ACTION_ROUTING_STATE,
+                                                routing_review_row: &ROUTING_REVIEW_ROW,
+                                                execution_timeline_state: &EXECUTION_TIMELINE_STATE,
+                                            };
+                                            sigs.load_inspector_shell(&path, &wfx_id);
+                                            *STATUS_TEXT.write() = "Inspector loaded".into();
                                         });
                                     }
                                 },
@@ -434,22 +341,27 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                     spawn(async move {
                         *SELECTED_SESSION_ID.write() = Some(id.clone());
                         *MEMORY_PROMPT_INPUTS.write() = None; // Clear on session switch
-                        // Patch 8: Clear ladder state on session switch
-                        *LADDER_RESULT_ROWS.write() = vec![];
-                        *LADDER_REVIEW_ROWS.write() = vec![];
-                        *LADDER_READINESS_ROWS.write() = vec![];
-                        *LADDER_GATE_ROWS.write() = vec![];
-                        *LADDER_PREDICATES.write() = vec![];
-                        // Patch 8: Clear routing ladder state on session switch
-                        *ROUTING_ROUTE_ROW.write() = None;
-                        *ROUTING_SESSION_ROW.write() = None;
-                        *ROUTING_ROUTE_PREDICATES.write() = vec![];
-                        *ROUTING_ROUTE_PROMPT.write() = None;
-                        *ROUTING_READINESS_STATE.write() = None;
-                        *ROUTING_NEXT_ACTION_ROUTING_STATE.write() = None;
-                        *ROUTING_REVIEW_ROW.write() = None;
-                        // Patch 8: Clear execution timeline state on session switch
-                        *EXECUTION_TIMELINE_STATE.write() = None;
+                        // Clear console/inspector shells via shell modules
+                        openwand_app::ui::console_shell::clear_console_shell(&CONSOLE_STATE);
+                        let sigs = openwand_app::ui::inspector_shell::InspectorSignals {
+                            inspector_state: &INSPECTOR_STATE,
+                            review_rows: &REVIEW_ROWS,
+                            distribution_rows: &DISTRIBUTION_ROWS,
+                            ladder_result_rows: &LADDER_RESULT_ROWS,
+                            ladder_review_rows: &LADDER_REVIEW_ROWS,
+                            ladder_readiness_rows: &LADDER_READINESS_ROWS,
+                            ladder_gate_rows: &LADDER_GATE_ROWS,
+                            ladder_predicates: &LADDER_PREDICATES,
+                            routing_route_row: &ROUTING_ROUTE_ROW,
+                            routing_session_row: &ROUTING_SESSION_ROW,
+                            routing_route_predicates: &ROUTING_ROUTE_PREDICATES,
+                            routing_route_prompt: &ROUTING_ROUTE_PROMPT,
+                            routing_readiness_state: &ROUTING_READINESS_STATE,
+                            routing_next_action_state: &ROUTING_NEXT_ACTION_ROUTING_STATE,
+                            routing_review_row: &ROUTING_REVIEW_ROW,
+                            execution_timeline_state: &EXECUTION_TIMELINE_STATE,
+                        };
+                        sigs.clear_inspector_shell();
                         match svc.open_session(&id).await {
                             Ok(view) => {
                                 *CURRENT_SESSION.write() = Some(view);

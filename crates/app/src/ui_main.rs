@@ -384,73 +384,15 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
 }
 
 fn render_memory_buckets(panel: &openwand_app::ui::memory_dto::UiFilteredMemoryPanel) -> Element {
-    if panel.is_empty() {
-        return rsx! {
-            div { style: "padding: 24px 16px; color: #999; font-size: 12px; text-align: center;",
-                "No memory analysis yet."
-                br {}
-                "Run a turn to populate."
-            }
-        };
-    }
-
-    rsx! {
-        div {
-            { render_bucket("✓ Trusted", "#4caf50", &panel.prompt_included) }
-            { render_bucket("⚠ Stale", "#ff9800", &panel.stale) }
-            { render_bucket("✗ Missing in repo", "#f44336", &panel.missing_in_repo) }
-            { render_bucket("? Missing in memory", "#9e9e9e", &panel.missing_in_memory) }
-            { render_conflicts("⚡ Conflicts", "#e91e63", &panel.conflicts) }
-            { render_bucket("○ Unverifiable", "#9e9e9e", &panel.unverifiable) }
-            { render_bucket("⊘ Superseded", "#bdbdbd", &panel.superseded_ignored) }
-        }
-    }
+    openwand_app::ui::session_shell::render_memory_buckets(panel)
 }
 
 fn render_bucket(title: &str, color: &str, rows: &[openwand_app::ui::memory_dto::UiMemoryPanelRow]) -> Element {
-    if rows.is_empty() {
-        return rsx! { div {} };
-    }
-
-    rsx! {
-        div { style: "border-bottom: 1px solid #eee;",
-            div { style: "padding: 8px 16px 4px; font-size: 11px; font-weight: 600; color: {color};",
-                "{title} ({rows.len()})"
-            }
-            for row in rows.iter() {
-                div { style: "padding: 4px 16px 2px; font-size: 11px; color: #333; line-height: 1.3;",
-                    "{row.claim}"
-                }
-                if !row.provenance_label.is_empty() {
-                    div { style: "padding: 0 16px 4px; font-size: 10px; color: #888; line-height: 1.2;",
-                        "{row.provenance_label}"
-                    }
-                }
-            }
-        }
-    }
+    openwand_app::ui::session_shell::render_bucket(title, color, rows)
 }
 
 fn render_conflicts(title: &str, color: &str, conflicts: &[openwand_app::ui::memory_dto::UiMemoryPanelConflict]) -> Element {
-    if conflicts.is_empty() {
-        return rsx! { div {} };
-    }
-    let total_claims: usize = conflicts.iter().map(|g| g.claims.len()).sum();
-
-    rsx! {
-        div { style: "border-bottom: 1px solid #eee;",
-            div { style: "padding: 8px 16px 4px; font-size: 11px; font-weight: 600; color: {color};",
-                "{title} ({total_claims})"
-            }
-            for group in conflicts.iter() {
-                for claim in group.claims.iter() {
-                    div { style: "padding: 4px 16px 6px; font-size: 11px; color: #333; line-height: 1.3;",
-                        "{claim.claim}"
-                    }
-                }
-            }
-        }
-    }
+    openwand_app::ui::session_shell::render_conflicts(title, color, conflicts)
 }
 
 // ── Console Pane ──────────────────────────────────────────
@@ -684,44 +626,7 @@ fn render_detail_pane(service: Arc<UiSessionService>, memory: Arc<SqliteMemorySt
 }
 
 fn render_tool_event(event: UiRunEvent) -> Element {
-    match event {
-        UiRunEvent::ToolCallStarted { id, name } => rsx! {
-            div { style: "margin-bottom: 8px; padding: 8px 12px; background: #f0f8e8;
-                         border: 1px solid #c8e0b0; border-radius: 6px;
-                         display: flex; align-items: center; gap: 8px;",
-                div { style: "width: 8px; height: 8px; background: #f0c040; border-radius: 50%;" }
-                div {
-                    div { style: "font-size: 11px; font-weight: 600; color: #888;", "Tool Call" }
-                    div { style: "font-size: 12px; color: #555;", "{name}" }
-                }
-            }
-        },
-        UiRunEvent::ToolCallCompleted { id, name, output, is_error } => {
-            let bg = if is_error { "#fde8e8" } else { "#e8f4e8" };
-            let border = if is_error { "#e8a0a0" } else { "#a0c8a0" };
-            let dot = if is_error { "#cc3333" } else { "#33aa33" };
-            rsx! {
-                div { style: "margin-bottom: 8px; padding: 8px 12px; background: {bg};
-                             border: 1px solid {border}; border-radius: 6px;
-                             display: flex; align-items: flex-start; gap: 8px;",
-                    div { style: "width: 8px; height: 8px; background: {dot}; border-radius: 50%; margin-top: 4px;" }
-                    div { style: "flex: 1;",
-                        div { style: "font-size: 11px; font-weight: 600; color: #888;",
-                            if is_error { "Tool Error" } else { "Tool Result" }
-                        }
-                        div { style: "font-size: 12px; color: #555;", "{name}" }
-                        if !output.is_empty() {
-                            div { style: "font-size: 11px; color: #777; margin-top: 4px;
-                                         max-height: 80px; overflow-y: auto; white-space: pre-wrap;",
-                                "{output}"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        _ => rsx! { div {} },
-    }
+    openwand_app::ui::session_shell::render_tool_event(event)
 }
 
 // ── Input Text ────────────────────────────────────────────

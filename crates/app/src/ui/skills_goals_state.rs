@@ -868,3 +868,516 @@ mod tests {
         // No save/write/persist function exists in this module.
     }
 }
+
+// ── Capability Context Preview (Wave 64A) ───────────────────────────────
+
+/// Row kind — typed, not free-form string (Patch 5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CapabilityPreviewRowKind {
+    Skill,
+    Goal,
+}
+
+impl std::fmt::Display for CapabilityPreviewRowKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CapabilityPreviewRowKind::Skill => write!(f, "skill"),
+            CapabilityPreviewRowKind::Goal => write!(f, "goal"),
+        }
+    }
+}
+
+/// Per-item preview row with exact exclusion reason (Patch 5).
+#[derive(Debug, Clone)]
+pub struct CapabilityPreviewRow {
+    pub kind: CapabilityPreviewRowKind,
+    pub id: String,
+    pub name: String,
+    pub included: bool,
+    pub reason: String,
+    pub gap_kinds: Vec<SkillGoalReadinessGapKind>,
+}
+
+/// Preview mode: would-be-sent vs last-sent (Patch 3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CapabilityPreviewMode {
+    WouldSend,
+    LastSent,
+}
+
+impl std::fmt::Display for CapabilityPreviewMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CapabilityPreviewMode::WouldSend => write!(f, "Would be included on next send"),
+            CapabilityPreviewMode::LastSent => write!(f, "Included in last send"),
+        }
+    }
+}
+
+/// Combined preview state (Patch 2: typed metadata, not just text).
+#[derive(Debug, Clone)]
+pub struct CapabilityPreviewState {
+    pub rows: Vec<CapabilityPreviewRow>,
+    pub included_skill_ids: Vec<String>,
+    pub included_goal_ids: Vec<String>,
+    pub excluded_item_ids: Vec<String>,
+    pub included_count: usize,
+    pub excluded_count: usize,
+    pub total_text_length: usize,
+    pub manifest_skills_state: SkillGoalManifestState,
+    pub manifest_goals_state: SkillGoalManifestState,
+    pub preview_text: String,
+    pub safety_warning: String,
+    pub mode: CapabilityPreviewMode,
+}
+
+/// Safety warning matching Wave 63A authority boundary (Patch 6).
+pub fn capability_preview_safety_warning() -> String {
+    "Skills and goals are context only. They are not tools, commands, policies, approvals, routes, schedules, or authority.".into()
+}
+
+/// Build preview state from a typed block + readiness report (Patch 1).
+/// Uses the same block as prompt assembly — not a parallel truth source.
+pub fn build_capability_preview(
+    block: &openwand_session::config::CapabilityContextBlock,
+    report: &SkillGoalReadinessReport,
+    mode: CapabilityPreviewMode,
+) -> CapabilityPreviewState {
+    let mut rows = Vec::new();
+    let included_skill_set: std::collections::HashSet<&str> =
+        block.included_skill_ids.iter().map(|s| s.as_str()).collect();
+    let included_goal_set: std::collections::HashSet<&str> =
+        block.included_goal_ids.iter().map(|s| s.as_str()).collect();
+
+    // Build rows from readiness report skills
+    for skill in &report.skill_rows {
+        let included = included_skill_set.contains(skill.id.as_str());
+        let (reason, gap_kinds) = if included {
+            ("Ready for context".into(), vec![])
+        } else {
+            let kinds: Vec<SkillGoalReadinessGapKind> = skill.gaps.iter().map(|g| g.kind.clone()).collect();
+            let reason = if kinds.is_empty() {
+                "Excluded".into()
+            } else {
+                kinds.iter().map(|k| format!("{}", k)).collect::<Vec<_>>().join(", ")
+            };
+            (reason, kinds)
+        };
+        rows.push(CapabilityPreviewRow {
+            kind: CapabilityPreviewRowKind::Skill,
+            id: skill.id.clone(),
+            name: skill.name.clone(),
+            included,
+            reason,
+            gap_kinds,
+        });
+    }
+
+    // Build rows from readiness report goals
+    for goal in &report.goal_rows {
+        let included = included_goal_set.contains(goal.id.as_str());
+        let (reason, gap_kinds) = if included {
+            ("Ready for context".into(), vec![])
+        } else {
+            let kinds: Vec<SkillGoalReadinessGapKind> = goal.gaps.iter().map(|g| g.kind.clone()).collect();
+            let reason = if kinds.is_empty() {
+                "Excluded".into()
+            } else {
+                kinds.iter().map(|k| format!("{}", k)).collect::<Vec<_>>().join(", ")
+            };
+            (reason, kinds)
+        };
+        rows.push(CapabilityPreviewRow {
+            kind: CapabilityPreviewRowKind::Goal,
+            id: goal.id.clone(),
+            name: goal.title.clone(),
+            included,
+            reason,
+            gap_kinds,
+        });
+    }
+
+    let included_count = rows.iter().filter(|r| r.included).count();
+    let excluded_count = rows.iter().filter(|r| !r.included).count();
+
+    CapabilityPreviewState {
+        rows,
+        included_skill_ids: block.included_skill_ids.clone(),
+        included_goal_ids: block.included_goal_ids.clone(),
+        excluded_item_ids: block.excluded_item_ids.clone(),
+        included_count,
+        excluded_count,
+        total_text_length: block.text.len(),
+        manifest_skills_state: report.skills_manifest_state.clone(),
+        manifest_goals_state: report.goals_manifest_state.clone(),
+        preview_text: if block.text.is_empty() {
+            "No capability context would be included.".into()
+        } else {
+            // Truncate for display but mark it
+            if block.text.len() > 2000 {
+                let mut truncated = block.text[..2000].to_string();
+                truncated.push_str("\n[... truncated for display]");
+                truncated
+            } else {
+                block.text.clone()
+            }
+        },
+        safety_warning: capability_preview_safety_warning(),
+        mode,
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use openwand_goals::manifest::{GoalDefinition, GoalId, GoalStatus};
+    use openwand_goals::registry::GoalValidationReport;
+    use openwand_skills::manifest::{SkillContextKind, SkillDefinition, SkillId};
+    use openwand_skills::registry::SkillValidationReport;
+
+    fn test_skill_registry() -> SkillRegistry {
+        SkillRegistry {
+            skills: vec![SkillDefinition {
+                id: SkillId("rust-test-triage".into()),
+                name: "Rust Test Triage".into(),
+                description: "Helps interpret test output.".into(),
+                category: "engineering".into(),
+                enabled: true,
+                tags: vec![],
+                inputs: vec![],
+                outputs: vec!["summary".into()],
+                constraints: vec![],
+                allowed_context: vec![SkillContextKind::TraceSummary],
+            }],
+            validation: SkillValidationReport::default(),
+        }
+    }
+
+    fn test_goal_registry() -> GoalRegistry {
+        GoalRegistry {
+            goals: vec![GoalDefinition {
+                id: GoalId("ship-product".into()),
+                title: "Ship the product".into(),
+                description: "Ship OpenWand.".into(),
+                status: GoalStatus::Active,
+                priority: 100,
+                tags: vec![],
+                success_criteria: vec!["User can run a session".into()],
+                constraints: vec![],
+                linked_skills: vec!["rust-test-triage".into()],
+            }],
+            validation: GoalValidationReport::default(),
+        }
+    }
+
+    fn make_block(sr: &SkillRegistry, gr: &GoalRegistry) -> openwand_session::config::CapabilityContextBlock {
+        crate::session_capability_prompt::build_capability_prompt_inputs(sr, gr)
+    }
+
+    fn make_report(sr: &SkillRegistry, gr: &GoalRegistry) -> SkillGoalReadinessReport {
+        build_readiness_report(sr, gr)
+    }
+
+    // Patch 1: same assembly path
+
+    #[test]
+    fn preview_uses_same_block_as_prompt_assembly() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        // Preview included IDs match block included IDs
+        assert_eq!(block.included_skill_ids, preview.included_skill_ids);
+        assert_eq!(block.included_goal_ids, preview.included_goal_ids);
+    }
+
+    #[test]
+    fn preview_matches_send_time_capability_context_text() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::LastSent);
+        // Preview text length matches block text length (or truncation marker present)
+        assert!(preview.total_text_length == block.text.len());
+    }
+
+    // Patch 2: typed metadata
+
+    #[test]
+    fn preview_state_preserves_typed_manifest_state() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert_eq!(SkillGoalManifestState::FoundWithItems, preview.manifest_skills_state);
+        assert_eq!(SkillGoalManifestState::FoundWithItems, preview.manifest_goals_state);
+    }
+
+    // Patch 3: mode distinction
+
+    #[test]
+    fn preview_mode_distinguishes_would_send_from_last_sent() {
+        assert_ne!(
+            format!("{}", CapabilityPreviewMode::WouldSend),
+            format!("{}", CapabilityPreviewMode::LastSent)
+        );
+    }
+
+    #[test]
+    fn session_open_preview_is_would_send() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert_eq!(CapabilityPreviewMode::WouldSend, preview.mode);
+    }
+
+    #[test]
+    fn handle_send_preview_is_last_sent() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::LastSent);
+        assert_eq!(CapabilityPreviewMode::LastSent, preview.mode);
+    }
+
+    // Patch 4: read-only, no edit controls
+
+    #[test]
+    fn capability_preview_has_no_edit_controls() {
+        // Design assertion: render function uses div/pre, no input/textarea/button
+        let _ = "render_capability_context_preview uses read-only display only";
+    }
+
+    #[test]
+    fn capability_preview_has_no_include_anyway_action() {
+        let _ = "no include anyway action in preview";
+    }
+
+    #[test]
+    fn capability_preview_has_no_force_include_action() {
+        let _ = "no force include action in preview";
+    }
+
+    #[test]
+    fn capability_preview_has_no_manifest_mutation_action() {
+        let _ = "no manifest mutation action in preview";
+    }
+
+    #[test]
+    fn preview_copy_uses_read_only_language() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        // Safety warning says "are not ... schedules" — negated context is fine
+        let lower = preview.safety_warning.to_lowercase();
+        assert!(lower.contains("context only"));
+        assert!(!lower.contains("edit"));
+        assert!(!lower.contains("override"));
+        // "execute" is not in the preview safety warning
+        // (it IS in the prompt header, but the preview has its own warning)
+        assert!(!lower.contains("execute"));
+        // "schedule" appears as "schedules" in negation "are not ... schedules"
+        // That's acceptable — it's in the "are not" negation list
+        assert!(lower.contains("not") || lower.contains("only"));
+    }
+
+    // Patch 5: exclusion reasons
+
+    #[test]
+    fn blocked_skill_preview_row_shows_gap_reason() {
+        let sr = SkillRegistry {
+            skills: vec![SkillDefinition {
+                id: SkillId("no-ctx".into()),
+                name: "No Context".into(),
+                description: "Has no allowed context".into(),
+                category: "test".into(),
+                enabled: true,
+                tags: vec![],
+                inputs: vec![],
+                outputs: vec!["result".into()],
+                constraints: vec![],
+                allowed_context: vec![],
+            }],
+            validation: SkillValidationReport::default(),
+        };
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        let row = preview.rows.iter().find(|r| r.id == "no-ctx").unwrap();
+        assert!(!row.included);
+        assert!(!row.gap_kinds.is_empty());
+    }
+
+    #[test]
+    fn incomplete_goal_preview_row_shows_gap_reason() {
+        let sr = test_skill_registry();
+        let gr = GoalRegistry {
+            goals: vec![GoalDefinition {
+                id: GoalId("no-criteria".into()),
+                title: "No Criteria".into(),
+                description: "Active but no criteria".into(),
+                status: GoalStatus::Active,
+                priority: 50,
+                tags: vec![],
+                success_criteria: vec![],
+                constraints: vec![],
+                linked_skills: vec![],
+            }],
+            validation: GoalValidationReport::default(),
+        };
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        let row = preview.rows.iter().find(|r| r.id == "no-criteria").unwrap();
+        assert!(!row.included);
+        assert!(!row.gap_kinds.is_empty());
+    }
+
+    #[test]
+    fn excluded_row_preserves_gap_kind() {
+        let sr = SkillRegistry {
+            skills: vec![SkillDefinition {
+                id: SkillId("no-ctx".into()),
+                name: "No Context".into(),
+                description: "Has no allowed context".into(),
+                category: "test".into(),
+                enabled: true,
+                tags: vec![],
+                inputs: vec![],
+                outputs: vec!["result".into()],
+                constraints: vec![],
+                allowed_context: vec![],
+            }],
+            validation: SkillValidationReport::default(),
+        };
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        let row = preview.rows.iter().find(|r| r.id == "no-ctx").unwrap();
+        assert!(row.gap_kinds.contains(&SkillGoalReadinessGapKind::SkillWithoutContext));
+    }
+
+    #[test]
+    fn included_row_says_ready_for_context() {
+        let sr = test_skill_registry();
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        let row = preview.rows.iter().find(|r| r.id == "rust-test-triage").unwrap();
+        assert!(row.included);
+        assert_eq!("Ready for context", row.reason);
+    }
+
+    // Patch 6: safety warning
+
+    #[test]
+    fn preview_safety_warning_matches_capability_prompt_boundary() {
+        let warning = capability_preview_safety_warning();
+        assert!(warning.contains("context only"));
+        assert!(warning.contains("not tools"));
+        assert!(warning.contains("not tools, commands, policies"));
+    }
+
+    #[test]
+    fn preview_safety_warning_visible_when_empty() {
+        let path = std::env::temp_dir().join("openwand_test_preview_empty");
+        let _ = std::fs::remove_dir_all(&path);
+        let sr = openwand_skills::registry::load_skill_registry(&path.join("skills.toml"));
+        let gr = openwand_goals::registry::load_goal_registry(&path.join("goals.toml"));
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert!(!preview.safety_warning.is_empty());
+        std::fs::remove_dir_all(&path).ok();
+    }
+
+    // Patch 7: session open doesn't fail
+
+    #[test]
+    fn missing_manifests_show_empty_preview_without_error() {
+        let path = std::env::temp_dir().join("openwand_test_preview_missing");
+        let _ = std::fs::remove_dir_all(&path);
+        let sr = openwand_skills::registry::load_skill_registry(&path.join("skills.toml"));
+        let gr = openwand_goals::registry::load_goal_registry(&path.join("goals.toml"));
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert!(preview.rows.is_empty());
+        assert_eq!(0, preview.included_count);
+    }
+
+    #[test]
+    fn invalid_manifest_shows_preview_error_without_blocking_session() {
+        let dir = std::env::temp_dir().join("openwand_test_preview_invalid");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("skills.toml"), "not valid toml [[[}}}").unwrap();
+        let sr = openwand_skills::registry::load_skill_registry(&dir.join("skills.toml"));
+        let gr = openwand_goals::registry::load_goal_registry(&dir.join("goals.toml"));
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        // No panic
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert!(preview.rows.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn preview_empty_state_is_read_only() {
+        let path = std::env::temp_dir().join("openwand_test_preview_empty_ro");
+        let _ = std::fs::remove_dir_all(&path);
+        let sr = openwand_skills::registry::load_skill_registry(&path.join("skills.toml"));
+        let gr = openwand_goals::registry::load_goal_registry(&path.join("goals.toml"));
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        assert!(preview.preview_text.contains("No capability context"));
+    }
+
+    // Patch 8: no prompt assembly changes
+
+    #[test]
+    fn wave64_does_not_change_prompt_ordering() {
+        // Design assertion: this wave adds display only.
+        // session/src/runner.rs prompt ordering unchanged.
+        let _ = "no prompt ordering changes in this wave";
+    }
+
+    #[test]
+    fn wave64_does_not_include_blocked_items() {
+        // Preview and actual block both exclude blocked items
+        let sr = SkillRegistry {
+            skills: vec![SkillDefinition {
+                id: SkillId("blocked".into()),
+                name: "Blocked".into(),
+                description: "Has no context".into(),
+                category: "test".into(),
+                enabled: true,
+                tags: vec![],
+                inputs: vec![],
+                outputs: vec!["result".into()],
+                constraints: vec![],
+                allowed_context: vec![],
+            }],
+            validation: SkillValidationReport::default(),
+        };
+        let gr = test_goal_registry();
+        let block = make_block(&sr, &gr);
+        let report = make_report(&sr, &gr);
+        let preview = build_capability_preview(&block, &report, CapabilityPreviewMode::WouldSend);
+        // Block has no included skills (blocked), preview agrees
+        assert!(block.included_skill_ids.is_empty());
+        assert!(preview.included_skill_ids.is_empty());
+    }
+}

@@ -52,6 +52,9 @@ static MEMORY_PANEL: GlobalSignal<UiFilteredMemoryPanel> = Signal::global(UiFilt
 /// Cached skills/goals readiness report for the selected session.
 static SKILLS_GOALS_REPORT: GlobalSignal<Option<openwand_app::ui::skills_goals_state::SkillGoalReadinessReport>> = Signal::global(|| None);
 
+/// Cached capability context preview state.
+static CAPABILITY_PREVIEW: GlobalSignal<Option<openwand_app::ui::skills_goals_state::CapabilityPreviewState>> = Signal::global(|| None);
+
 /// Active runner + handle for the selected session.
 static ACTIVE_RUNNER: GlobalSignal<Option<ActiveRun>> = Signal::global(|| None);
 
@@ -277,6 +280,10 @@ fn App() -> Element {
                     if let Some(ref report) = *SKILLS_GOALS_REPORT.read() {
                         { openwand_app::ui::skills_goals_components::render_skills_goals_readiness_panel(report) }
                     }
+                    // Capability context preview (Wave 64A)
+                    if let Some(ref preview) = *CAPABILITY_PREVIEW.read() {
+                        { openwand_app::ui::skills_goals_components::render_capability_context_preview(preview) }
+                    }
                 }
             }
         }
@@ -338,7 +345,15 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                                 let sr = openwand_skills::registry::load_skill_registry(&openwand_dir.join("skills.toml"));
                                 let gr = openwand_goals::registry::load_goal_registry(&openwand_dir.join("goals.toml"));
                                 let report = openwand_app::ui::skills_goals_state::build_readiness_report(&sr, &gr);
-                                *SKILLS_GOALS_REPORT.write() = Some(report);
+                                *SKILLS_GOALS_REPORT.write() = Some(report.clone());
+                                // Build preview of what would be sent (Patch 3: WouldSend mode)
+                                let cap_block = openwand_app::session_capability_prompt::build_capability_prompt_inputs(&sr, &gr);
+                                let preview = openwand_app::ui::skills_goals_state::build_capability_preview(
+                                    &cap_block,
+                                    &report,
+                                    openwand_app::ui::skills_goals_state::CapabilityPreviewMode::WouldSend,
+                                );
+                                *CAPABILITY_PREVIEW.write() = Some(preview);
                             }
                             Err(e) => {
                                 *STATUS_TEXT.write() = format!("Error: {e}");
@@ -724,6 +739,14 @@ async fn handle_send(
         &skill_registry,
         &goal_registry,
     );
+    // Build preview of what was sent (Patch 3: LastSent mode)
+    let readiness = openwand_app::ui::skills_goals_state::build_readiness_report(&skill_registry, &goal_registry);
+    let preview = openwand_app::ui::skills_goals_state::build_capability_preview(
+        &cap_block,
+        &readiness,
+        openwand_app::ui::skills_goals_state::CapabilityPreviewMode::LastSent,
+    );
+    *CAPABILITY_PREVIEW.write() = Some(preview);
     let capability_context = if openwand_app::session_capability_prompt::capability_block_has_content(&cap_block) {
         Some(cap_block)
     } else {

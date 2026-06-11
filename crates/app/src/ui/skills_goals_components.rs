@@ -268,3 +268,80 @@ mod tests {
         build_readiness_report(&sr, &gr)
     }
 }
+
+// ── Capability Context Preview (Wave 64A) ───────────────────────────────
+
+#[cfg(feature = "desktop")]
+mod desktop_preview {
+    use crate::ui::skills_goals_state::CapabilityPreviewState;
+    use dioxus::prelude::*;
+
+    /// Render the capability context preview card (Patch 4: read-only, no edit controls).
+    pub fn render_capability_context_preview(state: &CapabilityPreviewState) -> Element {
+        let mode_label = format!("{}", state.mode);
+        rsx! {
+            div { style: "border: 1px solid #ddd; border-radius: 6px; margin-top: 12px;",
+                // Header
+                div { style: "padding: 10px 14px; background: #f5f5f5; border-bottom: 1px solid #ddd;
+                              font-size: 13px; font-weight: 600; color: #333;",
+                    "Capability Context Preview"
+                    span { style: "font-size: 11px; font-weight: 400; color: #888; margin-left: 8px;",
+                        "{mode_label}"
+                    }
+                }
+
+                // Safety warning (Patch 6)
+                div { style: "padding: 8px 14px; background: #fff8e1; border-bottom: 1px solid #ffe082;
+                              font-size: 11px; color: #8d6e00; line-height: 1.4;",
+                    "{state.safety_warning}"
+                }
+
+                // Summary
+                div { style: "padding: 8px 14px; border-bottom: 1px solid #eee; font-size: 11px; color: #666;",
+                    div { "Included: {state.included_count} items ({state.included_skill_ids.len()} skills, {state.included_goal_ids.len()} goals)" }
+                    div { "Excluded: {state.excluded_count} items" }
+                    div { "Context block length: {state.total_text_length} chars" }
+                }
+
+                // Rows
+                if !state.rows.is_empty() {
+                    div { style: "padding: 8px 14px; border-bottom: 1px solid #eee;",
+                        for row in state.rows.iter() {
+                            {
+                                let dot = if row.included { "#33aa33" } else { "#cc3333" };
+                                let kind_label = format!("{}", row.kind);
+                                rsx! {
+                                    div { style: "padding: 3px 0; font-size: 11px; display: flex; gap: 6px; align-items: center;",
+                                        div { style: "width: 6px; height: 6px; border-radius: 50%; background: {dot};" }
+                                        div { style: "flex: 1;",
+                                            span { style: "color: #333;", "{row.name}" }
+                                            span { style: "color: #888; margin-left: 4px;", "[{kind_label}]" }
+                                            span { style: "color: #888; margin-left: 4px; font-size: 10px;", "{row.reason}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Preview text (monospace, read-only)
+                if !state.preview_text.is_empty() {
+                    div { style: "padding: 8px 14px; border-top: 1px solid #eee;",
+                        div { style: "font-size: 10px; font-weight: 600; color: #888; margin-bottom: 4px;",
+                            "Prompt context block"
+                        }
+                        pre { style: "font-size: 10px; color: #555; background: #fafafa; padding: 8px;
+                                     border: 1px solid #eee; border-radius: 4px; max-height: 200px;
+                                     overflow-y: auto; white-space: pre-wrap; word-break: break-word;",
+                            "{state.preview_text}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "desktop")]
+pub use desktop_preview::*;

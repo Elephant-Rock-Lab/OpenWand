@@ -175,11 +175,20 @@ async fn file_read_handler(args: serde_json::Value, ctx: ToolCallContext) -> Too
         }
     };
 
-    let path = std::path::Path::new(path_val);
-    let full_path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::path::Path::new(&ctx.working_directory).join(path)
+    let full_path = match crate::sandbox::resolve_workspace_path(
+        std::path::Path::new(&ctx.working_directory),
+        path_val,
+        crate::sandbox::PathAccessMode::ReadExisting,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                e.message,
+                start.elapsed().as_millis() as u64,
+            );
+        }
     };
 
     match tokio::fs::read_to_string(&full_path).await {
@@ -246,10 +255,20 @@ async fn file_list_handler(args: serde_json::Value, ctx: ToolCallContext) -> Too
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let full_path = if std::path::Path::new(path_val).is_absolute() {
-        std::path::PathBuf::from(path_val)
-    } else {
-        std::path::Path::new(&ctx.working_directory).join(path_val)
+    let full_path = match crate::sandbox::resolve_workspace_path(
+        std::path::Path::new(&ctx.working_directory),
+        path_val,
+        crate::sandbox::PathAccessMode::ListExisting,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                e.message,
+                start.elapsed().as_millis() as u64,
+            );
+        }
     };
 
     let mut entries = Vec::new();
@@ -376,11 +395,25 @@ async fn file_search_handler(args: serde_json::Value, ctx: ToolCallContext) -> T
         .and_then(|v| v.as_u64())
         .unwrap_or(50) as usize;
 
-    let full_path = if std::path::Path::new(path_val).is_absolute() {
-        std::path::PathBuf::from(path_val)
-    } else {
-        std::path::Path::new(&ctx.working_directory).join(path_val)
+    let full_path = match crate::sandbox::resolve_workspace_path(
+        std::path::Path::new(&ctx.working_directory),
+        path_val,
+        crate::sandbox::PathAccessMode::SearchExisting,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            return ToolResult::error(
+                call_id,
+                tool_name,
+                e.message,
+                start.elapsed().as_millis() as u64,
+            );
+        }
     };
+
+    let canonical_workspace = std::path::Path::new(&ctx.working_directory)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&ctx.working_directory));
 
     let mut results = Vec::new();
     let pattern_lower = pattern.to_lowercase();
@@ -389,6 +422,10 @@ async fn file_search_handler(args: serde_json::Value, ctx: ToolCallContext) -> T
     for entry in walker.into_iter().filter_map(|e| e.ok()) {
         if results.len() >= max_results {
             break;
+        }
+        // Patch 3: reject symlink directories that escape workspace
+        if !crate::sandbox::is_path_in_workspace(entry.path(), &canonical_workspace) {
+            continue;
         }
         if !entry.file_type().is_file() {
             continue;
@@ -480,46 +517,12 @@ pub(crate) fn validate_write_path(
     path_str: &str,
     working_directory: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let path = std::path::Path::new(path_str);
-
-    // Reject absolute paths
-    if path.is_absolute() {
-        return Err(format!("Absolute paths are not allowed: {}", path_str));
-    }
-
-    // Reject parent escape in path components
-    for component in path.components() {
-        if component == std::path::Component::ParentDir {
-            return Err(format!("Parent directory traversal (..) is not allowed: {}", path_str));
-        }
-    }
-
-    // Resolve to full path
-    let working = std::path::Path::new(working_directory);
-    let full_path = working.join(path);
-
-    // Symlink escape check: canonicalize parent if it exists
-    // This catches cases where a symlink in working_directory points outside
-    if let Some(parent_dir) = full_path.parent() {
-        if parent_dir.exists() {
-            let canonical_working = working
-                .canonicalize()
-                .map_err(|e| format!("Cannot canonicalize working directory: {e}"))?;
-            let canonical_parent = parent_dir
-                .canonicalize()
-                .map_err(|e| format!("Cannot canonicalize parent directory: {e}"))?;
-            if !canonical_parent.starts_with(&canonical_working) {
-                return Err("Path escapes working directory (possible symlink)".into());
-            }
-        }
-    }
-
-    // Reject if target is an existing directory
-    if full_path.is_dir() {
-        return Err(format!("Cannot write to a directory: {}", path_str));
-    }
-
-    Ok(full_path)
+    crate::sandbox::resolve_workspace_path(
+        std::path::Path::new(working_directory),
+        path_str,
+        crate::sandbox::PathAccessMode::WriteTarget,
+    )
+    .map_err(|e| e.message)
 }
 
 async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> ToolResult {
@@ -563,6 +566,11 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
             return ToolResult::error(call_id, tool_name, e, start.elapsed().as_millis() as u64);
         }
     };
+
+    // Reject if target is an existing directory
+    if full_path.is_dir() {
+        return ToolResult::error(call_id, tool_name, format!("Cannot write to a directory: {}", path_val), start.elapsed().as_millis() as u64);
+    }
 
     // Enforce size limit
     if content.len() > MAX_WRITE_SIZE {
@@ -874,7 +882,7 @@ mod tests {
             .await
             .unwrap();
         assert!(result.is_error);
-        assert!(result.output.contains("Parent directory traversal"));
+        assert!(result.output.contains("Parent traversal") || result.output.contains("not allowed"));
     }
 
     #[tokio::test]
@@ -2244,5 +2252,166 @@ mod git_observation_tests {
             .unwrap();
         assert!(result.is_error);
         assert!(result.output.contains("must not start with '-'"));
+    }
+
+    // ── Wave 69A hostile filesystem escape tests ────────────────────────
+
+    use tempfile::TempDir;
+
+    fn hostile_context(dir: &TempDir) -> ToolCallContext {
+        ToolCallContext {
+            working_directory: dir.path().to_string_lossy().to_string(),
+            session_id: openwand_core::SessionId::new(),
+            cancellation: tokio_util::sync::CancellationToken::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn read_rejects_absolute_path_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "path": "/etc/passwd",
+            "_call_id": "tc_hostile"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_read"), args, ctx).await.unwrap();
+        assert!(result.is_error, "Read should reject absolute path: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn read_rejects_parent_traversal_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "path": "../../../etc/passwd",
+            "_call_id": "tc_hostile"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_read"), args, ctx).await.unwrap();
+        assert!(result.is_error, "Read should reject parent traversal: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn list_rejects_absolute_path_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "path": "/etc",
+            "_call_id": "tc_hostile"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_list"), args, ctx).await.unwrap();
+        assert!(result.is_error, "List should reject absolute path: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn search_rejects_parent_traversal_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "pattern": "secret",
+            "path": "../../..",
+            "_call_id": "tc_hostile"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_search"), args, ctx).await.unwrap();
+        assert!(result.is_error, "Search should reject parent traversal: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn write_rejects_target_symlink_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+
+        // Create symlink inside workspace pointing outside
+        #[cfg(unix)]
+        let _ = std::os::unix::fs::symlink(outside.path(), dir.path().join("escape"));
+        #[cfg(windows)]
+        let _ = std::os::windows::fs::symlink_dir(outside.path(), dir.path().join("escape"));
+
+        if dir.path().join("escape").exists() {
+            let ctx = hostile_context(&dir);
+            let provider = batch2_local_tools();
+            let args = serde_json::json!({
+                "path": "escape/evil.txt",
+                "content": "hacked",
+                "_call_id": "tc_hostile"
+            });
+            let result = provider.execute(&canonical_local_tool_name("file_write"), args, ctx).await.unwrap();
+            assert!(result.is_error, "Write should reject symlink escape: {}", result.output);
+        }
+    }
+
+    #[tokio::test]
+    async fn patch_rejects_target_symlink_outside_workspace() {
+        let dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        tokio::fs::write(outside.path().join("target.txt"), "secret\ndata").await.unwrap();
+
+        #[cfg(unix)]
+        let _ = std::os::unix::fs::symlink(outside.path().join("target.txt"), dir.path().join("link.txt"));
+        #[cfg(windows)]
+        let _ = std::os::windows::fs::symlink_file(outside.path().join("target.txt"), dir.path().join("link.txt"));
+
+        if dir.path().join("link.txt").exists() {
+            let ctx = hostile_context(&dir);
+            let provider = batch2_local_tools();
+            let args = serde_json::json!({
+                "path": "link.txt",
+                "mode": "plan",
+                "line_number": 1,
+                "old_lines": ["secret"],
+                "new_lines": ["hacked"],
+                "_call_id": "tc_hostile"
+            });
+            let result = provider.execute(&canonical_local_tool_name("file_patch"), args, ctx).await.unwrap();
+            assert!(result.is_error, "Patch should reject symlink escape: {}", result.output);
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_allow_read_does_not_bypass_path_containment() {
+        // This test proves that even though policy auto-allows Read,
+        // the tool handler itself rejects path escapes before policy matters.
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "path": "/etc/shadow",
+            "_call_id": "tc_policy_bypass"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_read"), args, ctx).await.unwrap();
+        assert!(result.is_error, "Containment must block even if policy would allow: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn policy_allow_search_does_not_bypass_path_containment() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "pattern": "secret",
+            "path": "/etc",
+            "_call_id": "tc_policy_bypass"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_search"), args, ctx).await.unwrap();
+        assert!(result.is_error, "Containment must block even if policy would allow: {}", result.output);
+    }
+
+    #[tokio::test]
+    async fn workspace_boundary_errors_are_user_visible() {
+        let dir = TempDir::new().unwrap();
+        let ctx = hostile_context(&dir);
+        let provider = batch1_local_tools();
+        let args = serde_json::json!({
+            "path": "../../etc/passwd",
+            "_call_id": "tc_visible"
+        });
+        let result = provider.execute(&canonical_local_tool_name("file_read"), args, ctx).await.unwrap();
+        assert!(result.is_error);
+        // Error should be clear and not leak external paths
+        assert!(!result.output.contains("\\Users\\"));
+        assert!(!result.output.contains("/home/"));
     }
 }

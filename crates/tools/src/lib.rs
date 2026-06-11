@@ -13,6 +13,7 @@ pub mod file_patch;
 pub mod naming;
 pub mod normalize;
 pub mod result;
+pub mod sandbox;
 
 pub use composite::*;
 pub use descriptor::*;

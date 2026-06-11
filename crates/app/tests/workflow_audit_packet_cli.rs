@@ -1,3 +1,4 @@
+//! Handler-level unit tests (not binary CLI tests). Uses direct function calls.
 //! CLI tests for audit packet review and distribution.
 
 use openwand_workflow::workflow_audit_packet_review::*;

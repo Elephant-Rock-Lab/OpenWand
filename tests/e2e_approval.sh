@@ -1,96 +1,155 @@
 #!/usr/bin/env bash
-# Wave 03c — Automated binary E2E for approval approve/reject paths.
+# Binary E2E test: approval approve/reject paths through the real CLI binary.
 #
-# Prerequisites:
-#   - openwand.exe built at ../target/release/openwand.exe
-#   - LM Studio running at http://100.64.0.1:1234 with a loaded model
-#   - Model: qwen/qwen3-4b-2507
+# Proves:
+#   - Approval path: approved file-write creates the file with expected contents
+#   - Rejection path: rejected file-write creates no file
+#   - Summary reports honest stop reason (ToolDenied on rejection, not Natural)
 #
-# Usage: bash e2e_approval.sh [approve|reject]
+# Requires: a running LLM provider (LM Studio / Ollama / etc.)
+# Usage: bash tests/e2e_approval.sh [path-to-openwand-binary] [base-url] [model]
+#
+# Exit code 0 = all assertions passed
+# Exit code 1 = failure
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OPENWAND="$SCRIPT_DIR/../target/release/openwand.exe"
-
-if [ ! -f "$OPENWAND" ]; then
-    echo "ERROR: openwand.exe not found at $OPENWAND"
-    echo "Build with: cargo build --release -p openwand-app"
-    exit 1
-fi
-
-MODE="${1:-both}"
-BASE_URL="http://100.64.0.1:1234/v1"
-MODEL="qwen/qwen3-4b-2507"
+OPENWAND="${1:-$SCRIPT_DIR/../target/release/openwand.exe}"
+BASE_URL="${2:-http://100.64.0.1:1234/v1}"
+MODEL="${3:-qwen/qwen3-4b-2507}"
 API_KEY="lm-studio"
 
 PASS=0
 FAIL=0
 
+# Check binary exists
+if [ ! -f "$OPENWAND" ]; then
+    echo "ERROR: openwand binary not found at $OPENWAND"
+    echo "Build with: cargo build --release -p openwand-app"
+    exit 1
+fi
+
+# Check LLM is reachable
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/models" 2>/dev/null || echo "000")
+if [ "$HTTP_CODE" != "200" ]; then
+    echo "FAIL: LLM not reachable at $BASE_URL (HTTP $HTTP_CODE)"
+    exit 1
+fi
+
 run_test() {
     local name="$1"
     local input="$2"
+    local expect_approved="$3"
     local db="$SCRIPT_DIR/e2e_approval_${name}.db"
-    local expected_pattern="$3"
+    local workspace="$SCRIPT_DIR/e2e_workspace_${name}"
+    local target_file="$workspace/e2e_${name}.txt"
+    local target_content="test content from e2e ${name}"
 
-    rm -f "$db" 2>/dev/null || true
+    rm -rf "$db" "$workspace" 2>/dev/null || true
+    mkdir -p "$workspace"
 
     echo ""
     echo "=== Test: $name ==="
 
+    # Run the CLI with stdin piped for approval response
     output=$(echo "$input" | timeout 120 "$OPENWAND" \
+        run \
         --base-url "$BASE_URL" \
         --model "$MODEL" \
         --api-key "$API_KEY" \
         --db "$db" \
-        "Create a file called e2e_${name}.txt with the content 'test'" 2>&1 || true)
+        "Create a file called e2e_${name}.txt in the workspace with the content '${target_content}'" 2>&1 || true)
 
-    if echo "$output" | grep -q "$expected_pattern"; then
-        echo "✅ PASS: $name"
-        PASS=$((PASS + 1))
-    else
-        echo "❌ FAIL: $name"
-        echo "Expected pattern: $expected_pattern"
-        echo "Output:"
-        echo "$output" | tail -20
-        FAIL=$((FAIL + 1))
-    fi
+    echo "  Output (last 15 lines):"
+    echo "$output" | tail -15
 
-    # Check file was or wasn't created
-    if [ "$name" = "reject" ]; then
-        if [ -f "$SCRIPT_DIR/e2e_reject.txt" ]; then
-            echo "❌ FAIL: File should NOT exist after rejection"
+    if [ "$expect_approved" = true ]; then
+        # ── Approval assertions ──
+
+        # 1. Output says Approved
+        if echo "$output" | grep -q "Approved"; then
+            echo "  OK Output reports Approved"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL: Output does not report Approved"
+            FAIL=$((FAIL + 1))
+        fi
+
+        # 2. File exists
+        if [ -f "$target_file" ]; then
+            echo "  OK File exists at $target_file"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL: File does NOT exist at $target_file (approval should have created it)"
+            FAIL=$((FAIL + 1))
+        fi
+
+        # 3. File contents match
+        if [ -f "$target_file" ]; then
+            actual=$(cat "$target_file")
+            if [ "$actual" = "$target_content" ]; then
+                echo "  OK File contents match expected payload"
+                PASS=$((PASS + 1))
+            else
+                echo "  FAIL: File contents mismatch"
+                echo "    Expected: $target_content"
+                echo "    Actual:   $actual"
+                FAIL=$((FAIL + 1))
+            fi
+        fi
+
+        # 4. Stop reason is NOT ToolDenied
+        if echo "$output" | grep -q "ToolDenied"; then
+            echo "  FAIL: Approved run should NOT report ToolDenied"
             FAIL=$((FAIL + 1))
         else
-            echo "✅ File correctly not created after rejection"
+            echo "  OK Stop reason is not ToolDenied"
+            PASS=$((PASS + 1))
+        fi
+
+    else
+        # ── Rejection assertions ──
+
+        # 1. Output says Rejected
+        if echo "$output" | grep -qi "reject"; then
+            echo "  OK Output reports rejection"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL: Output does not report rejection"
+            FAIL=$((FAIL + 1))
+        fi
+
+        # 2. File does NOT exist
+        if [ -f "$target_file" ]; then
+            echo "  FAIL: File EXISTS at $target_file (rejection should NOT have created it)"
+            FAIL=$((FAIL + 1))
+        else
+            echo "  OK File correctly not created after rejection"
+            PASS=$((PASS + 1))
+        fi
+
+        # 3. Stop reason is ToolDenied (not Natural)
+        if echo "$output" | grep -q "ToolDenied"; then
+            echo "  OK Stop reason is ToolDenied"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL: Rejection should report ToolDenied, not Natural"
+            FAIL=$((FAIL + 1))
         fi
     fi
 
-    # Check trace in database
-    if [ -f "$db" ]; then
-        echo ""
-        echo "Trace events:"
-        python3 -c "
-import sqlite3, sys
-try:
-    conn = sqlite3.connect('$db')
-    for row in conn.execute('SELECT global_sequence, event_kind FROM trace_entry ORDER BY global_sequence'):
-        print(f'  seq={row[0]:3d}  {row[1]}')
-except Exception as e:
-    print(f'  Error reading DB: {e}')
-" 2>/dev/null || echo "  (could not read database)"
-    fi
-
-    rm -f "$db" "$SCRIPT_DIR/e2e_${name}.txt" 2>/dev/null || true
+    # Cleanup
+    rm -rf "$db" "$workspace" 2>/dev/null || true
 }
 
-if [ "$MODE" = "both" ] || [ "$MODE" = "reject" ]; then
-    run_test "reject" "n" "Rejected"
-fi
+echo "=== Approval E2E ==="
+echo "Binary:  $OPENWAND"
+echo "Base URL: $BASE_URL"
+echo "Model:   $MODEL"
 
-if [ "$MODE" = "both" ] || [ "$MODE" = "approve" ]; then
-    run_test "approve" "y" "Approved"
-fi
+run_test "reject" "n" false
+run_test "approve" "y" true
 
 echo ""
 echo "==============================="

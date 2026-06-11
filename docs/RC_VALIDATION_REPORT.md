@@ -71,17 +71,29 @@ Test imports are active only in `--all-targets` builds.
 | `approval_post_effect_tool_executes_with_correct_trace_order` | Trace: gate.evaluated → tool.suspended → tool.resumed → tool.called → tool.completed | ✅ |
 | `rejection_does_not_execute_tool` | Rejection → tool.denied, not tool.called | ✅ |
 
-### Real Filesystem Effect (70B)
+### Real Filesystem Effect (70B — test executor, not production path)
 
 **Test file:** `crates/session/tests/approval_real_file_effect.rs` (+2 tests)
 
 Uses `RealFileWriteExecutor` — a test executor that calls `std::fs::write` for real I/O.
 
-**Scope limitation (honest disclosure):** The test executor bypasses the production
+**Scope limitation:** The test executor bypasses the production
 `file_write_handler`, its schema validation, the sandbox (`resolve_workspace_path`),
 the composite `BuiltinToolProvider`, and runtime tool assembly. It proves real I/O
 occurs through *a* tool executor, not through *the production* tool executor.
-A production-path approval E2E remains deferred.
+
+### Production-Path Approval E2E (71B — NEW)
+
+**Test file:** `crates/session/tests/approval_production_path.rs` (+3 tests)
+
+Uses `CompositeToolExecutor::local_only(batch2_local_tools())` — the full production path:
+file_write_handler, JSON schema validation, `resolve_workspace_path()` sandbox.
+
+| Test | Proves | Result |
+|------|--------|--------|
+| `production_approved_write_creates_file_via_sandbox` | File exists, contents match, trace ordering | \u{2705} |
+| `production_rejected_write_creates_no_file` | No file, tool.denied in trace | \u{2705} |
+| `production_sandbox_blocks_traversal_even_when_approved` | Sandbox rejects `../../../etc/escape.txt` even after policy approval | \u{2705} |
 
 | Test | What it proves | Result |
 |------|---------------|--------|

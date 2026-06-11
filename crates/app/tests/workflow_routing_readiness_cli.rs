@@ -1,3 +1,4 @@
+//! Handler-level unit tests (not binary CLI tests). Uses direct function calls.
 //! CLI tests for routing readiness.
 //!
 //! Coverage gap closure (Wave 50A, FIX-05, KNOWN_GAPS gap 2).

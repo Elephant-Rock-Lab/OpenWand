@@ -1,7 +1,8 @@
 #!/bin/bash
 # Binary E2E test: proves memory loop works through the real CLI binary.
-# 
-# Usage: bash tests/e2e_binary.sh [path-to-openwand-binary]
+#
+# Requires: a running LLM provider (LM Studio / Ollama / etc.)
+# Usage: bash tests/e2e_binary.sh [path-to-openwand-binary] [base-url] [model]
 #
 # Exit code 0 = all assertions passed
 # Exit code 1 = failure
@@ -9,10 +10,10 @@
 set -euo pipefail
 
 BINARY="${1:-./target/release/openwand.exe}"
-DB="$(mktemp -u /tmp/openwand_e2e_XXXXXX.db)"
-BASE_URL="http://100.64.0.1:1234/v1"
-MODEL="qwen/qwen3-4b-2507"
+BASE_URL="${2:-http://100.64.0.1:1234/v1}"
+MODEL="${3:-qwen/qwen3-4b-2507}"
 API_KEY="lm-studio"
+DB="$(mktemp -u /tmp/openwand_e2e_XXXXXX.db)"
 
 # Check binary exists
 if [ ! -f "$BINARY" ]; then
@@ -25,17 +26,21 @@ fi
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/models" 2>/dev/null || echo "000")
 if [ "$HTTP_CODE" != "200" ]; then
     echo "FAIL: LLM not reachable at $BASE_URL (HTTP $HTTP_CODE)"
+    echo "Start your LLM provider or pass a different base URL as argument 2"
     exit 1
 fi
 
 echo "=== Binary E2E: Memory Loop ==="
-echo "Binary: $BINARY"
-echo "DB:     $DB"
+echo "Binary:  $BINARY"
+echo "Base URL: $BASE_URL"
+echo "Model:   $MODEL"
+echo "DB:      $DB"
 echo ""
 
 # ── Turn 1: Store memory ──
 echo "Turn 1: Storing memory..."
 OUTPUT1=$("$BINARY" \
+    run \
     --base-url "$BASE_URL" \
     --model "$MODEL" \
     --api-key "$API_KEY" \
@@ -52,11 +57,12 @@ if ! echo "$OUTPUT1" | grep -q "Records accepted:    [1-9]"; then
     echo "$OUTPUT1"
     exit 1
 fi
-echo "  ✓ Memory stored"
+echo "  OK Memory stored"
 
 # ── Turn 2: Retrieve memory via semantically related query ──
 echo "Turn 2: Retrieving memory..."
 OUTPUT2=$("$BINARY" \
+    run \
     --base-url "$BASE_URL" \
     --model "$MODEL" \
     --api-key "$API_KEY" \
@@ -74,12 +80,12 @@ if ! echo "$OUTPUT2" | grep -qi "rust"; then
     echo "$OUTPUT2"
     exit 1
 fi
-echo "  ✓ LLM response references Rust — memory was retrieved and injected"
+echo "  OK LLM response references Rust - memory was retrieved and injected"
 
 # ── Cleanup ──
 rm -f "$DB"
 
 echo ""
 echo "=== ALL ASSERTIONS PASSED ==="
-echo "Turn 1: Memory stored ✓"
-echo "Turn 2: Memory retrieved and used by LLM ✓"
+echo "Turn 1: Memory stored OK"
+echo "Turn 2: Memory retrieved and used by LLM OK"

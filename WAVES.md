@@ -258,3 +258,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | Wave | Title | Tag | Tests | Lock Doc |
 |------|-------|-----|------:|----------|
 | 71A | CLI Surface Truth and Outcome Reporting | `wave-71a-lock` | 1,156 | `crates/app/tests/cli_command_surface.rs` |
+| 71B | E2E Honesty and Production-Path Approval Validation | `wave-71b-lock` | 1,159 | `crates/session/tests/approval_production_path.rs` |

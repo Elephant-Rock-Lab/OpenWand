@@ -1,3 +1,4 @@
+//! Handler-level unit tests (not binary CLI tests). Uses direct function calls.
 //! CLI tests for workflow external attestation.
 
 use openwand_workflow::workflow_external_attestation::*;

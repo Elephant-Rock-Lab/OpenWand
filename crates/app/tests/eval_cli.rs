@@ -1,4 +1,5 @@
-//! Eval CLI integration tests — verify compare/summarize subcommands.
+//! Handler-level unit tests for eval subcommands (not binary CLI tests).
+//! Uses direct function calls to crate internals. — verify compare/summarize subcommands.
 
 use openwand_app::eval_compare::*;
 use openwand_app::eval_model::*;

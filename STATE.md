@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 71A complete. RC Blocker Remediation: CLI Surface Truth and Outcome Reporting.**
+**Wave 71B complete. E2E Honesty and Production-Path Approval Validation.**
 
-Previous lock: Wave 70D — `1ae97f8` — `wave-70d-lock`
+Previous lock: Wave 71A — `3ee13a9` — `wave-71a-lock`
 
 ## Workspace Structure
 ```

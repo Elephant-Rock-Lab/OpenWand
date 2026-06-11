@@ -1,3 +1,4 @@
+//! Handler-level unit tests (not binary CLI tests). Uses direct function calls.
 //! CLI tests for workflow verification readiness.
 
 use openwand_workflow::workflow_verification_readiness::*;

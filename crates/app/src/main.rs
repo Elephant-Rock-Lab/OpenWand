@@ -1171,41 +1171,28 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
 
 // ── Subcommand: explain ────────────────────────────────────────────────────
 
-async fn cmd_explain(_cli: &Cli, session_id: &str) -> Result<()> {
-    println!("╔══════════════════════════════════════════╗");
-    println!("║       OpenWand Trust Explanation         ║");
-    println!("╚══════════════════════════════════════════╝");
-    println!();
-    println!("Session: {}", session_id);
-    println!();
-    println!("(Explanation rendering will be wired in Wave 05 commit 5)");
-    Ok(())
+async fn cmd_explain(_cli: &Cli, _session_id: &str) -> Result<()> {
+    eprintln!("error: the 'explain' command is not yet implemented.");
+    eprintln!("       Session trust explanation is planned for a future release.");
+    std::process::exit(1);
 }
+
 
 // ── Subcommand: trace-verify ───────────────────────────────────────────────
 
-async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
-    println!("╔══════════════════════════════════════════╗");
-    println!("║       OpenWand Trace Verification        ║");
-    println!("╚══════════════════════════════════════════╝");
-    println!();
-    println!("Session: {}", session_id);
-    println!();
-    println!("(Trace verification will be wired in Wave 05 commit 7)");
-    Ok(())
+async fn cmd_trace_verify(_cli: &Cli, _session_id: &str) -> Result<()> {
+    eprintln!("error: the 'trace-verify' command is not yet implemented.");
+    eprintln!("       Trace integrity verification is planned for a future release.");
+    std::process::exit(1);
 }
+
 
 // ── Subcommand: session-rebuild ────────────────────────────────────────────
 
-async fn cmd_session_rebuild(_cli: &Cli, session_id: &str) -> Result<()> {
-    println!("╔══════════════════════════════════════════╗");
-    println!("║       OpenWand Session Rebuild           ║");
-    println!("╚══════════════════════════════════════════╝");
-    println!();
-    println!("Session: {}", session_id);
-    println!();
-    println!("(Session rebuild will be wired in Wave 05 commit 7)");
-    Ok(())
+async fn cmd_session_rebuild(_cli: &Cli, _session_id: &str) -> Result<()> {
+    eprintln!("error: the 'session-rebuild' command is not yet implemented.");
+    eprintln!("       Session projection rebuild is planned for a future release.");
+    std::process::exit(1);
 }
 
 #[cfg(feature = "real-model-eval")]

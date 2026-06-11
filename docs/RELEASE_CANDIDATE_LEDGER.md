@@ -106,9 +106,12 @@ wave-70c-lock
 
 **6/6 release blockers resolved.**
 
+| CLI command surface matches capability matrix | 71A | ✅ Verified (8 binary tests) |
+| Approval outcome reporting honest | 71A | ✅ Fixed |
+
 ---
 
-## Validation Closures (70A–70B)
+## Validation Closures (70A-70B)
 
 | Item | Wave | Status |
 |------|------|--------|

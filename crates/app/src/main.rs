@@ -8,7 +8,7 @@ use openwand_app::session_runtime::build_session_runtime;
 use openwand_memory::MemoryExtractor;
 use openwand_session::config::{RunConfig, RunStopReason, RunSummary};
 use openwand_session::message::MessageContent;
-use openwand_session::runner::ApprovalDecision;
+use openwand_session::runner::{ApprovalDecision, ApprovalResolution};
 use openwand_store::StoredEvent;
 use std::sync::Arc;
 
@@ -203,6 +203,51 @@ enum Commands {
         readiness_cmd: WorkflowManualResultReconciliationReadinessCommands,
         #[arg(long, default_value = "eval_reports")]
         output_dir: String,
+    },
+
+    /// Evidence chain inspector
+    #[command(name = "workflow-evidence-chain")]
+    WorkflowEvidenceChainCmd {
+        #[command(subcommand)]
+        evidence_chain_cmd: WorkflowEvidenceChainCommands,
+        #[arg(long, default_value = "workflow_data")]
+        store_dir: String,
+    },
+
+    /// External attestation
+    #[command(name = "workflow-external-attestation")]
+    WorkflowExternalAttestationCmd {
+        #[command(subcommand)]
+        attestation_cmd: WorkflowExternalAttestationCommands,
+        #[arg(long, default_value = "workflow_data")]
+        store_dir: String,
+    },
+
+    /// Verification readiness
+    #[command(name = "workflow-verification-readiness")]
+    WorkflowVerificationReadinessCmd {
+        #[command(subcommand)]
+        verification_readiness_cmd: WorkflowVerificationReadinessCommands,
+        #[arg(long, default_value = "workflow_data")]
+        store_dir: String,
+    },
+
+    /// Audit packet review
+    #[command(name = "audit-packet-review")]
+    AuditPacketReviewCmd {
+        #[command(subcommand)]
+        audit_review_cmd: AuditPacketReviewCommands,
+        #[arg(long, default_value = "workflow_data")]
+        store_dir: String,
+    },
+
+    /// Audit packet distribution
+    #[command(name = "audit-packet-distribution")]
+    AuditPacketDistributionCmd {
+        #[command(subcommand)]
+        audit_distribution_cmd: AuditPacketDistributionCommands,
+        #[arg(long, default_value = "workflow_data")]
+        store_dir: String,
     },
 
     #[cfg(feature = "real-model-eval")]
@@ -1002,6 +1047,11 @@ async fn main() -> Result<()> {
         Commands::WorkflowManualResultReconciliationReadiness { readiness_cmd, output_dir } => { cmd_workflow_reconciliation_readiness(readiness_cmd, output_dir)?; Ok(()) },
         Commands::WorkflowManualResultReconciliationGate { gate_cmd, output_dir } => { cmd_manual_reconciliation_gate(gate_cmd, output_dir)?; Ok(()) },
         Commands::WorkflowOperatorConsole { console_cmd, output_dir } => { cmd_operator_console(console_cmd, output_dir)?; Ok(()) },
+        Commands::WorkflowEvidenceChainCmd { evidence_chain_cmd, store_dir } => { cmd_evidence_chain(evidence_chain_cmd, store_dir)?; Ok(()) },
+        Commands::WorkflowExternalAttestationCmd { attestation_cmd, store_dir } => { cmd_external_attestation(attestation_cmd, store_dir)?; Ok(()) },
+        Commands::WorkflowVerificationReadinessCmd { verification_readiness_cmd, store_dir } => { cmd_verification_readiness(verification_readiness_cmd, store_dir)?; Ok(()) },
+        Commands::AuditPacketReviewCmd { audit_review_cmd, store_dir } => { cmd_audit_packet_review(audit_review_cmd, store_dir)?; Ok(()) },
+        Commands::AuditPacketDistributionCmd { audit_distribution_cmd, store_dir } => { cmd_audit_packet_distribution(audit_distribution_cmd, store_dir)?; Ok(()) },
 
         #[cfg(feature = "real-model-eval")]
         Commands::Eval { eval_cmd } => cmd_eval(eval_cmd).await,
@@ -1049,8 +1099,8 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
 
     // 4. Handle approval flow
     let result = if matches!(result.stop_reason, RunStopReason::AwaitingApproval) {
-        println!("────────────────────────────────────────────");
-        if let Some(pending) = rt.runner.pending_approval().await {
+        println!("─────────────────────────────────────────");
+        let approval_outcome = if let Some(pending) = rt.runner.pending_approval().await {
             println!("⚠ Tool '{}' requires your approval.", pending.tool_name);
             println!("  Reason: {}", pending.policy_summary);
             println!("  Approve? [y/N] ");
@@ -1066,24 +1116,69 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
             };
 
             let approval_result = rt.runner.resolve_approval(decision, run_config).await?;
-            println!("  → {}", if approved { "Approved" } else { "Rejected" });
-            if let Some(tool_result) = &approval_result.tool_result {
-                println!("  Tool result: {}", tool_result.output);
-            }
-        }
 
-        RunSummary {
-            stop_reason: RunStopReason::Natural,
-            steps_completed: result.steps_completed,
-            tools_executed: result.tools_executed + 1,
-            recoverable: true,
+            // Report distinct outcomes for approve vs reject
+            match &approval_result.resolution {
+                ApprovalResolution::Approve => {
+                    println!("  → Approved");
+                    if let Some(tool_result) = &approval_result.tool_result {
+                        if tool_result.is_error {
+                            println!("  Tool FAILED: {}", tool_result.output);
+                        } else {
+                            println!("  Tool result: {}", tool_result.output);
+                        }
+                    }
+                }
+                ApprovalResolution::Reject { .. } => {
+                    println!("  → Rejected — tool was NOT executed");
+                }
+            }
+            Some(approval_result)
+        } else {
+            println!("  No pending approval found (internal error)");
+            None
+        };
+
+        // Build summary reflecting actual outcome
+        match approval_outcome {
+            Some(ar) => {
+                let was_approved = matches!(ar.resolution, ApprovalResolution::Approve);
+                let tool_errored = ar.tool_result.as_ref().map_or(false, |r| r.is_error);
+
+                let reason = if !was_approved {
+                    RunStopReason::ToolDenied
+                } else if tool_errored {
+                    RunStopReason::ToolBlocked
+                } else {
+                    RunStopReason::Natural
+                };
+
+                RunSummary {
+                    stop_reason: reason,
+                    steps_completed: result.steps_completed,
+                    tools_executed: result.tools_executed + if was_approved { 1 } else { 0 },
+                    recoverable: !matches!(reason, RunStopReason::ToolDenied),
+                }
+            }
+            None => RunSummary {
+                stop_reason: RunStopReason::ToolBlocked,
+                steps_completed: result.steps_completed,
+                tools_executed: result.tools_executed,
+                recoverable: true,
+            },
         }
     } else {
         result
     };
 
+    // Print outcome — distinguish success from failure
+    let is_success = matches!(result.stop_reason, RunStopReason::Natural | RunStopReason::MaxStepsReached);
     println!("────────────────────────────────────────────");
-    println!("✓ Turn complete");
+    if is_success {
+        println!("✓ Turn complete");
+    } else {
+        println!("✗ Turn ended with: {:?}", result.stop_reason);
+    }
     println!("  Stop reason:   {:?}", result.stop_reason);
     println!("  Steps:         {}", result.steps_completed);
     println!("  Tools called:  {}", result.tools_executed);
@@ -5653,7 +5748,7 @@ fn cmd_operator_console(cmd: WorkflowOperatorConsoleCommands, _output_dir: Strin
     Ok(())
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand, Debug)]
 enum WorkflowEvidenceChainCommands {
     /// Display evidence chain summary for a workflow run
     Inspect {
@@ -5711,7 +5806,7 @@ fn cmd_evidence_chain(cmd: WorkflowEvidenceChainCommands, store_dir: String) -> 
     Ok(())
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand, Debug)]
 enum WorkflowExternalAttestationCommands {
     /// Attach an external attestation to an evidence record
     Attach {
@@ -5808,7 +5903,7 @@ fn cmd_external_attestation(cmd: WorkflowExternalAttestationCommands, store_dir:
     Ok(())
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand, Debug)]
 enum WorkflowVerificationReadinessCommands {
     /// Evaluate verification readiness for a target
     Evaluate {
@@ -5901,7 +5996,7 @@ fn cmd_verification_readiness(cmd: WorkflowVerificationReadinessCommands, store_
     Ok(())
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand, Debug)]
 enum AuditPacketReviewCommands {
     /// Record an audit packet review
     Record {
@@ -5986,7 +6081,7 @@ fn cmd_audit_packet_review(cmd: AuditPacketReviewCommands, store_dir: String) ->
     Ok(())
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand, Debug)]
 enum AuditPacketDistributionCommands {
     /// Record an audit packet distribution
     Record {

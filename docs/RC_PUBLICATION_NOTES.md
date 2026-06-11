@@ -102,10 +102,13 @@ cargo audit
 ## Scope Boundaries
 
 This RC:
-- ✅ Proves approval control flow with real filesystem effects
-- ✅ Proves build, lint, and test baseline
-- ✅ Records artifact identity and reproduction steps
-- ❌ Does **not** prove behavior under real LLM provider calls
-- ❌ Does **not** prove behavior with real network access
-- ❌ Does **not** include external security audit
-- ❌ Is **not** a final release declaration
+- \u{2705} Proves approval control flow with real I/O through a test executor (not production path)
+- \u{2705} Proves CLI command surface matches capability matrix (binary-level tests)
+- \u{2705} Proves approval outcomes are reported honestly
+- \u{2705} Proves build, lint, and test baseline
+- \u{2705} Records artifact identity and reproduction steps
+- \u{274c} Does **not** prove behavior through production tool executor with sandbox
+- \u{274c} Does **not** prove behavior under real LLM provider calls
+- \u{274c} Does **not** prove behavior with real network access
+- \u{274c} Does **not** include external security audit
+- \u{274c} Is **not** a final release declaration

@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 70D complete. RC Publication Readiness Final Check.**
+**Wave 71A complete. RC Blocker Remediation: CLI Surface Truth and Outcome Reporting.**
 
-Previous lock: Wave 70C — `e50356d` — `wave-70c-lock`
+Previous lock: Wave 70D — `1ae97f8` — `wave-70d-lock`
 
 ## Workspace Structure
 ```

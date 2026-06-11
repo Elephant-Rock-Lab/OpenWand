@@ -71,11 +71,17 @@ Test imports are active only in `--all-targets` builds.
 | `approval_post_effect_tool_executes_with_correct_trace_order` | Trace: gate.evaluated → tool.suspended → tool.resumed → tool.called → tool.completed | ✅ |
 | `rejection_does_not_execute_tool` | Rejection → tool.denied, not tool.called | ✅ |
 
-### Real filesystem effect (70B — NEW)
+### Real Filesystem Effect (70B)
 
 **Test file:** `crates/session/tests/approval_real_file_effect.rs` (+2 tests)
 
-Uses `RealFileWriteExecutor` that performs actual filesystem I/O via `std::fs::write`.
+Uses `RealFileWriteExecutor` — a test executor that calls `std::fs::write` for real I/O.
+
+**Scope limitation (honest disclosure):** The test executor bypasses the production
+`file_write_handler`, its schema validation, the sandbox (`resolve_workspace_path`),
+the composite `BuiltinToolProvider`, and runtime tool assembly. It proves real I/O
+occurs through *a* tool executor, not through *the production* tool executor.
+A production-path approval E2E remains deferred.
 
 | Test | What it proves | Result |
 |------|---------------|--------|

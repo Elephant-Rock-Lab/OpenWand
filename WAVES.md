@@ -250,3 +250,11 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 70B | RC Validation Gap Closure | `wave-70b-lock` | 1,148 | `docs/RC_VALIDATION_REPORT.md` |
 | 70C | Release Candidate Packaging and Publication Prep | `wave-70c-lock` | 1,148 | `docs/RC_PUBLICATION_NOTES.md` |
 | 70D | RC Publication Readiness Final Check | `wave-70d-lock` | 1,148 | `docs/REMOTE_PUBLICATION_CHECKLIST.md` |
+
+---
+
+## Phase: RC Surface Truth
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 71A | CLI Surface Truth and Outcome Reporting | `wave-71a-lock` | 1,156 | `crates/app/tests/cli_command_surface.rs` |

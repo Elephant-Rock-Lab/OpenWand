@@ -16,6 +16,7 @@ pub mod eval_readiness;
 pub mod eval_reports;
 pub mod eval_summary;
 pub mod eval_trace;
+pub mod eval_capability_context;
 pub mod explain;
 pub mod memory_coordinator;
 pub mod memory_evaluation_model;

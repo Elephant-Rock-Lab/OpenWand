@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Typed capability context block from skills/goals registries.
 /// Carried through RunConfig for deterministic prompt assembly.
 /// Text-only, no executable fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CapabilityContextBlock {
     /// Manifest state at assembly time.
     pub skills_manifest_state: String,

@@ -1,9 +1,9 @@
 # Release Candidate Readiness Ledger
 
 **Wave:** 69G
-**Date:** 2026-06-11
-**Commit:** _(pending 69G lock)_
-**Test baseline:** 1,144 tests, 0 failures
+**Date:** 2026-06-11 (validated Wave 70A)
+**Commit:** `7092c09` (wave-69g-lock)
+**Test baseline:** 1,146 tests, 0 failures
 
 ---
 
@@ -97,10 +97,10 @@ cargo audit
 | Crate | Tests |
 |-------|------:|
 | openwand-core | 45 |
-| openwand-session | 49 |
+| openwand-session | 51 |
 | openwand-tools | 93 |
 | openwand-app | 957 |
-| **Total** | **1,144** |
+| **Total** | **1,146** |
 
 ---
 
@@ -134,3 +134,11 @@ cargo audit
 ---
 
 *After 69G, every public claim matches what the system actually guarantees, tests, defers, or explicitly does not yet implement.*
+
+---
+
+## Wave 70A Validation
+
+**Determination:** PASS WITH DEFERRED ITEMS
+**Report:** `docs/RC_VALIDATION_REPORT.md`
+**+2 tests:** approval_post_effect.rs (session crate)

@@ -46,9 +46,9 @@ cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
 cargo audit
 ```
 
-**Baseline (Wave 69G lock):** 1,144 tests, 0 failures.
+**Baseline (Wave 70A lock):** 1,146 tests, 0 failures.
 - openwand-core: 45
-- openwand-session: 49
+- openwand-session: 51
 - openwand-tools: 93
 - openwand-app: 957
 

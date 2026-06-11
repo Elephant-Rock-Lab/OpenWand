@@ -410,6 +410,59 @@ impl ProviderRealitySnapshot {
 }
 
 #[cfg(test)]
+pub mod tests_support {
+    use super::*;
+
+    pub fn make_minimal_report(scenario_id: &str) -> EvalRunReport {
+        EvalRunReport {
+            report_schema_version: EVAL_REPORT_SCHEMA_VERSION,
+            scenario_id: scenario_id.to_string(),
+            provider: ProviderRealitySnapshot::unknown(),
+            prompt: PromptEvalResult::default(),
+            memory: MemoryEvalResult {
+                included_claims_seen: vec![],
+                excluded_claims_seen: vec![],
+                missing_required: vec![],
+                unexpected_included: vec![],
+                prompt_panel_equivalent: true,
+            },
+            tools: ToolEvalResult {
+                requested_tools: vec![],
+                executed_tools: vec![],
+                blocked_tools: vec![],
+                forbidden_requested: vec![],
+            },
+            policy: PolicyEvalResult {
+                gates_seen: vec![],
+                required_approvals_seen: vec![],
+                unexpected_allows: vec![],
+            },
+            patch: PatchEvalResult {
+                planned: false,
+                applied: false,
+                preimage_verified: false,
+                postimage_verified: false,
+                rollback_available: false,
+                changed_files_match_expected: true,
+            },
+            explain: ExplainEvalResult {
+                memory_matches: true,
+                policy_matches: true,
+                tool_matches: true,
+                completion_matches: true,
+            },
+            rebuild: RebuildEvalResult {
+                events_replayed: 0,
+                state_matches: true,
+                divergences: vec![],
+            },
+            capability_context: CapabilityContextEvalResult::default(),
+            score: EvalScore::from_dimensions(vec![]),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

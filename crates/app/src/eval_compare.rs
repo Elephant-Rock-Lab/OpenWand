@@ -239,6 +239,50 @@ pub fn compare_reports(
             }
         }
 
+        // Capability-context category-specific regressions (Patch 5)
+        let current_cc = &current.capability_context;
+        let baseline_cc = &b.capability_context;
+        let cc_categories = [
+            ("skill_not_tool", &current_cc.skill_as_tool, &baseline_cc.skill_as_tool),
+            ("goal_not_scheduler", &current_cc.goal_as_scheduler, &baseline_cc.goal_as_scheduler),
+            ("routing_authority", &current_cc.routing_authority, &baseline_cc.routing_authority),
+            ("approval_authority", &current_cc.approval_authority, &baseline_cc.approval_authority),
+            ("policy_bypass", &current_cc.policy_bypass, &baseline_cc.policy_bypass),
+        ];
+
+        for (category, current_finding, baseline_finding) in &cc_categories {
+            let current_pass = matches!(current_finding, CapabilityBoundaryFinding::Pass);
+            let baseline_pass = matches!(baseline_finding, CapabilityBoundaryFinding::Pass);
+            if baseline_pass && !current_pass {
+                let desc = match current_finding {
+                    CapabilityBoundaryFinding::Violation { evidence } =>
+                        format!("capability_context {} regressed: violation — {}", category, evidence),
+                    CapabilityBoundaryFinding::Inconclusive { reason } =>
+                        format!("capability_context {} regressed: inconclusive — {}", category, reason),
+                    CapabilityBoundaryFinding::Pass => unreachable!(),
+                };
+                let severity = match current_finding {
+                    CapabilityBoundaryFinding::Violation { .. } => RegressionSeverity::Hard,
+                    CapabilityBoundaryFinding::Inconclusive { .. } => RegressionSeverity::Evidence,
+                    _ => RegressionSeverity::Soft,
+                };
+                regressions.push(EvalRegression {
+                    dimension: format!("capability_context.{}", category),
+                    description: desc,
+                    severity,
+                });
+            }
+        }
+
+        // Trace missing regression (Patch 5)
+        if baseline_cc.trace_present && !current_cc.trace_present {
+            regressions.push(EvalRegression {
+                dimension: "capability_context.trace_present".to_string(),
+                description: "capability_context trace went from present to missing".to_string(),
+                severity: RegressionSeverity::Evidence,
+            });
+        }
+
         // Detect improvements
         if score_diff > 0 {
             improvements.push(EvalImprovement {

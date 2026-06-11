@@ -36,6 +36,11 @@ pub struct ScenarioTrendSummary {
     pub latest_model: String,
     pub first_run_at: Option<DateTime<Utc>>,
     pub latest_run_at: Option<DateTime<Utc>>,
+    pub latest_capability_context_pass_rate: f64,
+    pub average_capability_context_pass_rate: f64,
+    pub worst_capability_context_pass_rate: f64,
+    pub capability_context_violation_count: usize,
+    pub capability_context_inconclusive_count: usize,
 }
 
 /// Trend direction for scores.
@@ -56,6 +61,10 @@ pub struct ProviderTrendSummary {
     pub avg_score: f64,
     pub avg_pass_rate: f64,
     pub scenario_coverage: usize,
+    pub average_capability_context_pass_rate: f64,
+    pub worst_capability_context_pass_rate: f64,
+    pub capability_context_violation_count: usize,
+    pub capability_context_inconclusive_count: usize,
 }
 
 /// Generate a summary report from all stored reports.
@@ -114,6 +123,42 @@ pub fn generate_summary(store: &EvalReportStore) -> Result<EvalSummaryReport, St
             }
         };
 
+        // Compute capability-context statistics (Patch 6)
+        let cc_pass_rates: Vec<f64> = scenario_reports.iter()
+            .filter_map(|r| {
+                let dim = r.report.score.dimensions.iter()
+                    .find(|d| d.name == "capability_context");
+                dim.map(|d| if d.total > 0 { d.passed as f64 / d.total as f64 } else { -1.0 })
+            })
+            .filter(|r| *r >= 0.0)
+            .collect();
+
+        let cc_violations: usize = scenario_reports.iter()
+            .map(|r| {
+                let cc = &r.report.capability_context;
+                let mut count = 0;
+                for f in &[&cc.skill_as_tool, &cc.goal_as_scheduler, &cc.routing_authority, &cc.approval_authority, &cc.policy_bypass] {
+                    if matches!(f, CapabilityBoundaryFinding::Violation { .. }) { count += 1; }
+                }
+                count
+            })
+            .sum();
+
+        let cc_inconclusive: usize = scenario_reports.iter()
+            .map(|r| {
+                let cc = &r.report.capability_context;
+                let mut count = 0;
+                for f in &[&cc.skill_as_tool, &cc.goal_as_scheduler, &cc.routing_authority, &cc.approval_authority, &cc.policy_bypass] {
+                    if matches!(f, CapabilityBoundaryFinding::Inconclusive { .. }) { count += 1; }
+                }
+                count
+            })
+            .sum();
+
+        let latest_cc_rate = cc_pass_rates.first().copied().unwrap_or(1.0);
+        let avg_cc_rate = if cc_pass_rates.is_empty() { 1.0 } else { cc_pass_rates.iter().sum::<f64>() / cc_pass_rates.len() as f64 };
+        let worst_cc_rate = cc_pass_rates.iter().cloned().fold(1.0f64, f64::min);
+
         scenario_summaries.push(ScenarioTrendSummary {
             scenario_id: id.clone(),
             run_count: scenario_reports.len(),
@@ -126,6 +171,11 @@ pub fn generate_summary(store: &EvalReportStore) -> Result<EvalSummaryReport, St
             latest_model: latest.report.provider.model.clone(),
             first_run_at: Some(earliest.report.provider.observed_at),
             latest_run_at: Some(latest.report.provider.observed_at),
+            latest_capability_context_pass_rate: latest_cc_rate,
+            average_capability_context_pass_rate: avg_cc_rate,
+            worst_capability_context_pass_rate: worst_cc_rate,
+            capability_context_violation_count: cc_violations,
+            capability_context_inconclusive_count: cc_inconclusive,
         });
 
         // Compare latest two runs for regression detection
@@ -166,6 +216,46 @@ pub fn generate_summary(store: &EvalReportStore) -> Result<EvalSummaryReport, St
                 avg_score: scores.iter().sum::<u32>() as f64 / scores.len() as f64,
                 avg_pass_rate: pass_rates.iter().sum::<f64>() / pass_rates.len() as f64,
                 scenario_coverage: scenarios.len(),
+                average_capability_context_pass_rate: {
+                    let rates: Vec<f64> = provider_reports.iter()
+                        .filter_map(|r| {
+                            let dim = r.report.score.dimensions.iter()
+                                .find(|d| d.name == "capability_context");
+                            dim.map(|d| if d.total > 0 { d.passed as f64 / d.total as f64 } else { -1.0 })
+                        })
+                        .filter(|r| *r >= 0.0)
+                        .collect();
+                    if rates.is_empty() { 1.0 } else { rates.iter().sum::<f64>() / rates.len() as f64 }
+                },
+                worst_capability_context_pass_rate: {
+                    let rates: Vec<f64> = provider_reports.iter()
+                        .filter_map(|r| {
+                            let dim = r.report.score.dimensions.iter()
+                                .find(|d| d.name == "capability_context");
+                            dim.map(|d| if d.total > 0 { d.passed as f64 / d.total as f64 } else { -1.0 })
+                        })
+                        .filter(|r| *r >= 0.0)
+                        .collect();
+                    rates.iter().cloned().fold(1.0f64, f64::min)
+                },
+                capability_context_violation_count: provider_reports.iter()
+                    .map(|r| {
+                        let cc = &r.report.capability_context;
+                        let mut c = 0;
+                        for f in &[&cc.skill_as_tool, &cc.goal_as_scheduler, &cc.routing_authority, &cc.approval_authority, &cc.policy_bypass] {
+                            if matches!(f, CapabilityBoundaryFinding::Violation { .. }) { c += 1; }
+                        }
+                        c
+                    }).sum(),
+                capability_context_inconclusive_count: provider_reports.iter()
+                    .map(|r| {
+                        let cc = &r.report.capability_context;
+                        let mut c = 0;
+                        for f in &[&cc.skill_as_tool, &cc.goal_as_scheduler, &cc.routing_authority, &cc.approval_authority, &cc.policy_bypass] {
+                            if matches!(f, CapabilityBoundaryFinding::Inconclusive { .. }) { c += 1; }
+                        }
+                        c
+                    }).sum(),
             }
         })
         .collect();

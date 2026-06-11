@@ -24,6 +24,7 @@ pub fn tokenize(text: &str) -> Vec<String> {
         .filter(|s| s.len() > 1)
         .filter(|s| !stop_words.contains(s))
         .map(|s| {
+            #[allow(clippy::manual_strip)]
             if s.ends_with("ies") {
                 format!("{}y", &s[..s.len() - 3])
             } else if s.ends_with('s') && !s.ends_with("ss") {

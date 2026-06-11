@@ -3,7 +3,6 @@
 //! Validates that the command review was acknowledged, all hashes match,
 //! and reported-status requirements are met. Does NOT verify external state.
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow_command_composer::WorkflowCommandComposerRecord;
@@ -63,7 +62,7 @@ pub fn validate_manual_result(
         loop_controller_record.is_some(), if loop_controller_record.is_some() { "Found" } else { "Missing" }));
 
     // Patch 2: 4-7. Hashes must match expected hashes
-    let review_hash_ok = review_record.map_or(false, |r| {
+    let review_hash_ok = review_record.is_some_and(|r| {
         let actual = blake3::hash(serde_json::to_string(r).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_command_review_hash
     });
@@ -71,7 +70,7 @@ pub fn validate_manual_result(
         review_hash_ok || review_record.is_none(),
         if review_hash_ok { "Match" } else { "Mismatch" }));
 
-    let composer_hash_ok = composer_record.map_or(false, |c| {
+    let composer_hash_ok = composer_record.is_some_and(|c| {
         let actual = blake3::hash(serde_json::to_string(c).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_command_composer_hash
     });
@@ -79,7 +78,7 @@ pub fn validate_manual_result(
         composer_hash_ok || composer_record.is_none(),
         if composer_hash_ok { "Match" } else { "Mismatch" }));
 
-    let desc_hash_ok = composer_record.and_then(|c| c.descriptor.as_ref()).map_or(false, |d| {
+    let desc_hash_ok = composer_record.and_then(|c| c.descriptor.as_ref()).is_some_and(|d| {
         let actual = blake3::hash(serde_json::to_string(d).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_command_descriptor_hash
     });
@@ -87,7 +86,7 @@ pub fn validate_manual_result(
         desc_hash_ok || composer_record.is_none(),
         if desc_hash_ok { "Match" } else { "Mismatch" }));
 
-    let lc_hash_ok = loop_controller_record.map_or(false, |l| {
+    let lc_hash_ok = loop_controller_record.is_some_and(|l| {
         let actual = blake3::hash(serde_json::to_string(l).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_loop_controller_hash
     });
@@ -96,7 +95,7 @@ pub fn validate_manual_result(
         if lc_hash_ok { "Match" } else { "Mismatch" }));
 
     // 8. Command review decision must be Acknowledged
-    let review_acknowledged = review_record.map_or(false, |r| {
+    let review_acknowledged = review_record.is_some_and(|r| {
         matches!(r.decision, WorkflowCommandReviewDecision::Acknowledged)
     });
     results.push(v(WorkflowManualResultValidationRule::CommandReviewIsAcknowledged,
@@ -104,7 +103,7 @@ pub fn validate_manual_result(
         if review_acknowledged { "Acknowledged" } else { "Not acknowledged" }));
 
     // 9. Command review snapshot must indicate command_performed_now == false
-    let not_performed = review_record.map_or(true, |r| {
+    let not_performed = review_record.is_none_or(|r| {
         !r.acknowledgment_snapshot.command_performed_now
     });
     results.push(v(WorkflowManualResultValidationRule::CommandReviewNotPerformedByOpenwand,
@@ -124,7 +123,7 @@ pub fn validate_manual_result(
     // 12. ReportedFailed requires details or artifact reference
     let failed_ok = match request.status {
         WorkflowManualResultStatus::ReportedFailed => {
-            request.details.as_ref().map_or(false, |d| !d.is_empty())
+            request.details.as_ref().is_some_and(|d| !d.is_empty())
                 || !request.artifact_references.is_empty()
         }
         _ => true,
@@ -135,7 +134,7 @@ pub fn validate_manual_result(
     // 13. ReportedPartial requires details
     let partial_ok = match request.status {
         WorkflowManualResultStatus::ReportedPartial => {
-            request.details.as_ref().map_or(false, |d| !d.is_empty())
+            request.details.as_ref().is_some_and(|d| !d.is_empty())
         }
         _ => true,
     };
@@ -320,7 +319,8 @@ mod tests {
     }
 
     // Macro to set up shared records per test
-    macro_rules! setup {
+    #[allow(unused_macros)]
+macro_rules! setup {
         () => {
             let review = test_review();
             let composer = test_composer();

@@ -188,7 +188,6 @@ mod tests {
 
 use crate::workflow_loop_controller::WorkflowLoopControllerRecord;
 use crate::workflow_loop_recommendation::WorkflowManualOperationKind;
-use crate::workflow_loop_state::WorkflowDetectedLoopState;
 use crate::workflow_run::WorkflowRunRecord;
 use crate::workflow_reconciliation::WorkflowRunRevision;
 
@@ -227,11 +226,11 @@ pub fn compose_command_descriptor(
     predicates.push(pred(WorkflowCommandComposerPredicate::LoopControllerHashMatchesRequest,
         hash_ok, if hash_ok { "Provided" } else { "Missing" }));
 
-    let same_run = lc.map_or(true, |l| l.workflow_execution_id == request.workflow_execution_id);
+    let same_run = lc.is_none_or(|l| l.workflow_execution_id == request.workflow_execution_id);
     predicates.push(pred(WorkflowCommandComposerPredicate::LoopControllerBelongsToWorkflowRun,
         same_run, if same_run { "Match" } else { "Mismatch" }));
 
-    let has_rec = lc.map_or(false, |l| l.recommendation.is_some());
+    let has_rec = lc.is_some_and(|l| l.recommendation.is_some());
     predicates.push(pred(WorkflowCommandComposerPredicate::LoopRecommendationExists,
         has_rec, if has_rec { "Found" } else { "Missing" }));
 
@@ -281,6 +280,7 @@ pub fn compose_command_descriptor(
     }
 }
 
+#[allow(clippy::extra_unused_lifetimes)]
 fn build_descriptor_from_recommendation<'a>(
     lc: &WorkflowLoopControllerRecord,
     _context: &WorkflowCommandComposerContext,
@@ -299,8 +299,8 @@ fn build_descriptor_from_recommendation<'a>(
     let wfx = lc.workflow_execution_id.0.clone();
     let mut missing = Vec::new();
     let mut args = Vec::new();
-    let mut warnings = vec!["This is a display-only command descriptor. OpenWand does not execute commands.".into()];
-    let mut links = vec![WorkflowCommandEvidenceLink {
+    let warnings = vec!["This is a display-only command descriptor. OpenWand does not execute commands.".into()];
+    let links = vec![WorkflowCommandEvidenceLink {
         kind: WorkflowCommandEvidenceKind::LoopController,
         id: lc.controller_id.0.clone(),
         summary: format!("{:?}", lc.status),
@@ -325,30 +325,30 @@ fn build_descriptor_from_recommendation<'a>(
                 suggested_source: "OperatorInput".into(),
             });
             // Patch 4: never default to approve
-            if let Some(ref prop_id) = lc.loop_state.as_ref().and_then(|s| s.latest_next_action_proposal_id.as_ref()) {
+            if let Some(prop_id) = lc.loop_state.as_ref().and_then(|s| s.latest_next_action_proposal_id.as_ref()) {
                 args.push(WorkflowManualCommandArgument {
                     name: "proposal_id".into(), value_preview: Some(prop_id.0.clone()),
                     source: WorkflowCommandArgumentSource::ContinuationProposal, required: true, missing: false,
                 });
             }
             (WorkflowManualCommandKind::WorkflowNextActionReviewApprove,
-             format!("openwand workflow-next-action-review <review-decision> --proposal-id <id>"),
-             format!("openwand workflow-next-action-review <approve|reject|request-changes> --proposal-id <id> --reviewer <name> --rationale <text>"))
+             "openwand workflow-next-action-review <review-decision> --proposal-id <id>".to_string(),
+             "openwand workflow-next-action-review <approve|reject|request-changes> --proposal-id <id> --reviewer <name> --rationale <text>".to_string())
         }
         WorkflowManualOperationKind::EvaluateRoutingReadiness => {
             (WorkflowManualCommandKind::WorkflowRoutingReadinessEvaluate,
-             format!("openwand workflow-routing-readiness evaluate --proposal-id <id>"),
-             format!("openwand workflow-routing-readiness evaluate --proposal-id <id> --review-id <id> --expected-hashes <hashes>"))
+             "openwand workflow-routing-readiness evaluate --proposal-id <id>".to_string(),
+             "openwand workflow-routing-readiness evaluate --proposal-id <id> --review-id <id> --expected-hashes <hashes>".to_string())
         }
         WorkflowManualOperationKind::RouteReviewedNextAction => {
             (WorkflowManualCommandKind::WorkflowNextActionRoutingRoute,
-             format!("openwand workflow-next-action-routing route --routing-readiness-id <id>"),
-             format!("openwand workflow-next-action-routing route --routing-readiness-id <id> --expected-hashes <hashes>"))
+             "openwand workflow-next-action-routing route --routing-readiness-id <id>".to_string(),
+             "openwand workflow-next-action-routing route --routing-readiness-id <id> --expected-hashes <hashes>".to_string())
         }
         WorkflowManualOperationKind::ObserveRouteOutcome => {
             (WorkflowManualCommandKind::WorkflowActionOutcomeResolve,
-             format!("openwand workflow-action-outcome record --route-id <id>"),
-             format!("openwand workflow-action-outcome record --route-id <id>"))
+             "openwand workflow-action-outcome record --route-id <id>".to_string(),
+             "openwand workflow-action-outcome record --route-id <id>".to_string())
         }
         WorkflowManualOperationKind::ResolveWorkflowApprovalOutcome => {
             missing.push(WorkflowCommandMissingInput {
@@ -358,13 +358,13 @@ fn build_descriptor_from_recommendation<'a>(
             });
             // Patch 4: never default to approve or reject
             (WorkflowManualCommandKind::WorkflowActionOutcomeResolve,
-             format!("openwand workflow-action-outcome resolve --route-id <id>"),
-             format!("openwand workflow-action-outcome resolve --route-id <id> --approval-resolution <approve|reject>"))
+             "openwand workflow-action-outcome resolve --route-id <id>".to_string(),
+             "openwand workflow-action-outcome resolve --route-id <id> --approval-resolution <approve|reject>".to_string())
         }
         WorkflowManualOperationKind::ReconcileWorkflowOutcome => {
             (WorkflowManualCommandKind::WorkflowReconciliationReconcile,
-             format!("openwand workflow-reconciliation evaluate --route-id <id>"),
-             format!("openwand workflow-reconciliation evaluate --route-id <id> --outcome-id <id>"))
+             "openwand workflow-reconciliation evaluate --route-id <id>".to_string(),
+             "openwand workflow-reconciliation evaluate --route-id <id> --outcome-id <id>".to_string())
         }
         WorkflowManualOperationKind::InspectBlockedWorkflow => {
             (WorkflowManualCommandKind::InspectBlockedWorkflow,
@@ -463,9 +463,7 @@ mod composition_tests {
     use super::*;
     use crate::workflow_loop_controller::*;
     use crate::workflow_loop_recommendation::*;
-    use crate::workflow_loop_state::*;
     use crate::workflow_run::*;
-    use crate::workflow_reconciliation::WorkflowRunRevisionId;
 
     fn empty_ctx() -> WorkflowCommandComposerContext<'static> {
         WorkflowCommandComposerContext {

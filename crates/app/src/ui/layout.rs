@@ -177,9 +177,9 @@ pub fn textarea_style(disabled: bool) -> String {
 
 #[cfg(feature = "desktop")]
 mod desktop_render {
-    use super::*;
+    
 
-    use dioxus::prelude::*;
+    
 
     // Desktop render functions will be wired in future waves that
     // migrate ui_main.rs to use layout primitives.

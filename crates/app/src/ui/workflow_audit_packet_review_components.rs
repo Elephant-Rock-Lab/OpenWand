@@ -51,7 +51,7 @@ pub fn review_safety_text() -> String {
 mod desktop_render {
     use super::*;
     use crate::ui::components::*;
-    use crate::ui::layout::*;
+    
     use dioxus::prelude::*;
 
     /// Empty state when no review records exist.

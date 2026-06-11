@@ -196,6 +196,7 @@ impl ConfidencePolicy {
 
 /// Policy for verification-based ranking and eligibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct VerificationPolicy {
     /// Ranking boost for Verifies relation (basis points added to verification_bps).
     pub verifies_boost_bps: u16,
@@ -205,16 +206,6 @@ pub struct VerificationPolicy {
     pub refines_boost_bps: u16,
 }
 
-impl Default for VerificationPolicy {
-    fn default() -> Self {
-        // Pre-02r: no verification boost
-        Self {
-            verifies_boost_bps: 0,
-            derived_from_boost_bps: 0,
-            refines_boost_bps: 0,
-        }
-    }
-}
 
 // ── Stale policy ───────────────────────────────────────────────────────────
 

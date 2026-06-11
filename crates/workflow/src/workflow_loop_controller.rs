@@ -174,7 +174,7 @@ pub fn evaluate_loop_controller(
         true, "Revision resolved by loader"));
 
     // 4. LatestRunRevisionHashMatchesRequest
-    let rev_hash_ok = request.expected_latest_revision_hash.as_ref().map_or(true, |h| !h.is_empty());
+    let rev_hash_ok = request.expected_latest_revision_hash.as_ref().is_none_or(|h| !h.is_empty());
     predicates.push(pred(WorkflowLoopPredicate::LatestRunRevisionHashMatchesRequest,
         rev_hash_ok, if rev_hash_ok { "Consistent" } else { "Mismatch" }));
 
@@ -183,9 +183,9 @@ pub fn evaluate_loop_controller(
         true, "All evidence loaded"));
 
     // 6. EvidenceChainReferencesSameWorkflowRun
-    let same_run = run.map_or(true, |r| {
+    let same_run = run.is_none_or(|r| {
         let eid = &r.execution_id;
-        revision.map_or(true, |rev| &rev.workflow_execution_id == eid)
+        revision.is_none_or(|rev| &rev.workflow_execution_id == eid)
     });
     predicates.push(pred(WorkflowLoopPredicate::EvidenceChainReferencesSameWorkflowRun,
         same_run, if same_run { "Consistent" } else { "Mismatch" }));
@@ -258,9 +258,9 @@ pub fn evaluate_loop_controller(
     };
 
     let mut evidence_links = Vec::new();
-    if let Some(ref r) = context.latest_route { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "route".into(), record_id: r.route_id.0.clone(), summary: format!("{:?}", r.status) }); }
-    if let Some(ref o) = context.latest_outcome { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "outcome".into(), record_id: o.outcome_id.0.clone(), summary: format!("{:?}", o.status) }); }
-    if let Some(ref c) = context.latest_reconciliation { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "reconciliation".into(), record_id: c.reconciliation_id.0.clone(), summary: format!("{:?}", c.status) }); }
+    if let Some(r) = context.latest_route { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "route".into(), record_id: r.route_id.0.clone(), summary: format!("{:?}", r.status) }); }
+    if let Some(o) = context.latest_outcome { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "outcome".into(), record_id: o.outcome_id.0.clone(), summary: format!("{:?}", o.status) }); }
+    if let Some(c) = context.latest_reconciliation { evidence_links.push(WorkflowLoopEvidenceLink { link_kind: "reconciliation".into(), record_id: c.reconciliation_id.0.clone(), summary: format!("{:?}", c.status) }); }
 
     WorkflowLoopControllerRecord {
         controller_id: cid,
@@ -287,7 +287,7 @@ fn detect_loop_state(context: &WorkflowLoopContext) -> WorkflowDetectedLoopState
     if run.is_none() {
         return WorkflowDetectedLoopState::Inconclusive;
     }
-    let run = run.unwrap();
+    let _run = run.unwrap();
 
     // Check if all stages are terminal
     if let Some(rev) = revision {
@@ -301,12 +301,12 @@ fn detect_loop_state(context: &WorkflowLoopContext) -> WorkflowDetectedLoopState
     // Walk the evidence chain top-down, return first unresolved
 
     // Step: Reconciliation → if exists and reconciled, check if we need continuation
-    if let Some(recon) = context.latest_reconciliation {
-        if matches!(recon.status, crate::workflow_reconciliation::WorkflowReconciliationStatus::Reconciled) {
+    if let Some(recon) = context.latest_reconciliation
+        && matches!(recon.status, crate::workflow_reconciliation::WorkflowReconciliationStatus::Reconciled) {
             // Reconciliation done → need new continuation proposal
             if context.latest_proposal.is_none()
-                || context.latest_proposal.as_ref().map_or(false, |p| {
-                    context.latest_next_action_routing.as_ref().map_or(false, |nar| {
+                || context.latest_proposal.as_ref().is_some_and(|_p| {
+                    context.latest_next_action_routing.as_ref().is_some_and(|nar| {
                         nar.source_run_revision_id == revision.unwrap().revision_id
                     })
                 })
@@ -314,51 +314,44 @@ fn detect_loop_state(context: &WorkflowLoopContext) -> WorkflowDetectedLoopState
                 return WorkflowDetectedLoopState::NeedsContinuationAfterReconciliation;
             }
         }
-    }
 
     // Step: Outcome → if terminal outcome exists but no reconciliation
     if let Some(outcome) = context.latest_outcome {
         use crate::workflow_action_outcome::WorkflowActionOutcomeStatus;
-        if matches!(outcome.status, WorkflowActionOutcomeStatus::ToolCompleted | WorkflowActionOutcomeStatus::ToolDenied | WorkflowActionOutcomeStatus::ApprovalResolved) {
-            if context.latest_reconciliation.is_none() {
+        if matches!(outcome.status, WorkflowActionOutcomeStatus::ToolCompleted | WorkflowActionOutcomeStatus::ToolDenied | WorkflowActionOutcomeStatus::ApprovalResolved)
+            && context.latest_reconciliation.is_none() {
                 return WorkflowDetectedLoopState::NeedsOutcomeReconciliation;
             }
-        }
     }
 
     // Step: Route outcome observation
     if let Some(route) = context.latest_route {
         use crate::workflow_action_route::WorkflowActionRouteStatus;
-        if matches!(route.status, WorkflowActionRouteStatus::SuspendedForApproval) {
-            if context.latest_outcome.is_none() {
+        if matches!(route.status, WorkflowActionRouteStatus::SuspendedForApproval)
+            && context.latest_outcome.is_none() {
                 return WorkflowDetectedLoopState::NeedsApprovalOutcomeResolution;
             }
-        }
-        if matches!(route.status, WorkflowActionRouteStatus::Routed) {
-            if context.latest_outcome.is_none() {
+        if matches!(route.status, WorkflowActionRouteStatus::Routed)
+            && context.latest_outcome.is_none() {
                 return WorkflowDetectedLoopState::NeedsSessionRoutingObservation;
             }
-        }
     }
 
     // Step: Next-action routing
     if let Some(readiness) = context.latest_routing_readiness {
         use crate::workflow_routing_readiness::WorkflowRoutingReadinessStatus;
-        if matches!(readiness.status, WorkflowRoutingReadinessStatus::Ready) {
-            if context.latest_next_action_routing.is_none() {
+        if matches!(readiness.status, WorkflowRoutingReadinessStatus::Ready)
+            && context.latest_next_action_routing.is_none() {
                 return WorkflowDetectedLoopState::NeedsNextActionRouting;
             }
-        }
     }
 
     // Step: Routing readiness
-    if let Some(review) = context.latest_review {
-        if matches!(review.decision, crate::workflow_next_action_review::WorkflowNextActionReviewDecision::Approved) {
-            if context.latest_routing_readiness.is_none() {
+    if let Some(review) = context.latest_review
+        && matches!(review.decision, crate::workflow_next_action_review::WorkflowNextActionReviewDecision::Approved)
+            && context.latest_routing_readiness.is_none() {
                 return WorkflowDetectedLoopState::NeedsRoutingReadiness;
             }
-        }
-    }
 
     // Step: Review
     if context.latest_proposal.is_some() && context.latest_review.is_none() {

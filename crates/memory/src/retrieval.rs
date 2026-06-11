@@ -105,8 +105,8 @@ impl RankedRetrievalContext {
     /// Convert to the legacy RetrievalContext format.
     pub fn to_legacy(&self) -> RetrievalContext {
         let mut facts = Vec::new();
-        let mut decisions = Vec::new();
-        let mut episodes = Vec::new();
+        let decisions = Vec::new();
+        let episodes = Vec::new();
 
         for hit in &self.hits {
             // Best-effort: use text as-is, no kind info in flat format

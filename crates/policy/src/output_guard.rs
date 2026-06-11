@@ -36,6 +36,7 @@ pub struct ScreenedOutput {
 
 /// Configuration for post-inference output guarding.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct OutputGuardConfig {
     /// Whether output guarding is enabled.
     pub enabled: bool,
@@ -47,14 +48,6 @@ pub struct OutputGuardConfig {
     pub forbidden_actions: Vec<String>,
 }
 
-impl Default for OutputGuardConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            forbidden_actions: vec![],
-        }
-    }
-}
 
 impl OutputGuardConfig {
     /// Conservative default for UI sessions.

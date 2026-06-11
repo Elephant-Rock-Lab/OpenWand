@@ -591,7 +591,7 @@ impl MemoryStore for SqliteMemoryStore {
                 let derived_kind = r.derived_evidence_kind();
                 let evidence_bps_raw = evidence_bps_from_kind(&derived_kind);
                 let penalty = supersession_penalty(r.superseded_by.is_some(), mode);
-                let evidence_bps = if evidence_bps_raw > penalty { evidence_bps_raw - penalty } else { 0 };
+                let evidence_bps = evidence_bps_raw.saturating_sub(penalty);
 
                 let score = MemoryRankScore {
                     relevance_bps,
@@ -622,7 +622,7 @@ impl MemoryStore for SqliteMemoryStore {
             })
             .collect();
 
-        hits.sort_by(|a, b| b.score.final_bps.cmp(&a.score.final_bps));
+        hits.sort_by_key(|b| std::cmp::Reverse(b.score.final_bps));
 
         let total_hits = hits.len();
         Ok(RankedRetrievalContext {
@@ -717,8 +717,8 @@ impl SqliteMemoryStore {
     fn row_to_record(row: &rusqlite::Row<'_>) -> MemoryRecord {
         let kind_str: String = row.get(1).unwrap_or_default();
         let confidence_bps: i64 = row.get(3).unwrap_or(0);
-        let status: String = row.get(4).unwrap_or_default();
-        let valid_from_ts: Option<i64> = row.get(5).ok();
+        let _status: String = row.get(4).unwrap_or_default();
+        let _valid_from_ts: Option<i64> = row.get(5).ok();
         let valid_until_ts: Option<i64> = row.get(6).ok();
         let created_at_ts: i64 = row.get(8).unwrap_or(0);
         let evidence_kind_str: Option<String> = row.get(11).ok().flatten();

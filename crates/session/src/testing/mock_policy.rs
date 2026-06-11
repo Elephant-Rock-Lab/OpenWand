@@ -133,7 +133,7 @@ impl PolicyEngine for MockPolicyEngine {
             }
             MockPolicyBehavior::RequireConfirmationFor(_) => Ok(allow_evaluation()),
             MockPolicyBehavior::RequireConfirmationForMany(names)
-                if names.iter().any(|n| request.tool_call.name == *n) =>
+                if names.contains(&request.tool_call.name) =>
             {
                 Ok(require_confirmation_evaluation(&request.tool_call.name))
             }

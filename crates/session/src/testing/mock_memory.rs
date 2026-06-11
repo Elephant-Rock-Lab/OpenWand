@@ -8,6 +8,12 @@ pub struct MockMemoryReadStore {
     result: RetrievalContext,
 }
 
+impl Default for MockMemoryReadStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockMemoryReadStore {
     pub fn new() -> Self {
         Self {

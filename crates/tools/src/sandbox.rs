@@ -132,15 +132,13 @@ pub fn resolve_workspace_path(
                 }
             }
             // Check if target itself is a symlink that escapes
-            if joined.is_symlink() {
-                if let Ok(canonical_target) = joined.canonicalize() {
-                    if !canonical_target.starts_with(&canonical_workspace) {
+            if joined.is_symlink()
+                && let Ok(canonical_target) = joined.canonicalize()
+                    && !canonical_target.starts_with(&canonical_workspace) {
                         return Err(containment_err(
                             "Symlink target escapes the authorized workspace",
                         ));
                     }
-                }
-            }
             Ok(joined)
         }
         PathAccessMode::ReadExisting

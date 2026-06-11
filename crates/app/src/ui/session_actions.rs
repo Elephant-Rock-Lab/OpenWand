@@ -17,7 +17,6 @@ use openwand_core::ApprovalRequestId;
 use openwand_session::runner::{ApprovalDecision, ApprovalResolution, SessionRunner};
 use openwand_session::config::RunConfig;
 use openwand_core::mode::InteractionMode;
-use openwand_llm::LlmTarget;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -76,10 +75,10 @@ pub async fn execute_session_action(
 ) -> UiSessionActionResult {
     match action {
         UiSessionAction::StartSession {
-            provider,
-            model,
-            mode,
-            working_directory,
+            provider: _,
+            model: _,
+            mode: _,
+            working_directory: _,
         } => {
             // Start requires a runner. The UI layer assembles it externally
             // via session_runtime::build_session_runtime().

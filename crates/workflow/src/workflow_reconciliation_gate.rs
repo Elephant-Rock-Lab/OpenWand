@@ -3,13 +3,12 @@
 use chrono::Utc;
 
 use crate::workflow_action_outcome::{
-    WorkflowActionOutcomeId, WorkflowActionOutcomeRecord, WorkflowActionOutcomeStatus,
-    WorkflowSessionActionOutcomeSnapshot,
+    WorkflowActionOutcomeRecord, WorkflowActionOutcomeStatus,
 };
 use crate::workflow_action_route::WorkflowActionRouteRecord;
 use crate::workflow_reconciliation::*;
 use crate::workflow_reconciliation_validation::reconciliation_id_for;
-use crate::workflow_run::{WorkflowRunRecord, WorkflowStageRun, WorkflowStageRunStatus};
+use crate::workflow_run::{WorkflowRunRecord, WorkflowStageRunStatus};
 
 /// Context for reconciliation predicate evaluation.
 pub struct WorkflowReconciliationContext<'a> {
@@ -86,7 +85,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 7. RouteLinksSameWorkflowRun
-    let route_run_match = route.map_or(false, |r| r.workflow_execution_id == request.workflow_execution_id);
+    let route_run_match = route.is_some_and(|r| r.workflow_execution_id == request.workflow_execution_id);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::RouteLinksSameWorkflowRun,
         passed: route_run_match,
@@ -94,7 +93,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 8. OutcomeLinksSameWorkflowRun
-    let outcome_run_match = outcome.map_or(false, |o| o.workflow_execution_id == request.workflow_execution_id);
+    let outcome_run_match = outcome.is_some_and(|o| o.workflow_execution_id == request.workflow_execution_id);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::OutcomeLinksSameWorkflowRun,
         passed: outcome_run_match,
@@ -102,7 +101,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 9. OutcomeLinksSameRoute
-    let outcome_route_match = outcome.map_or(false, |o| o.route_id == request.route_id);
+    let outcome_route_match = outcome.is_some_and(|o| o.route_id == request.route_id);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::OutcomeLinksSameRoute,
         passed: outcome_route_match,
@@ -118,7 +117,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 11. StageWasSuspended
-    let stage_suspended = stage.map_or(false, |s| s.status == WorkflowStageRunStatus::Suspended);
+    let stage_suspended = stage.is_some_and(|s| s.status == WorkflowStageRunStatus::Suspended);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::StageWasSuspended,
         passed: stage_suspended,
@@ -126,7 +125,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 12. ActionRequestExists
-    let action_exists = run.map_or(false, |r| {
+    let action_exists = run.is_some_and(|r| {
         r.action_requests.iter().any(|a| a.action_request_id == request.action_request_id)
     });
     predicates.push(WorkflowReconciliationPredicateResult {
@@ -136,7 +135,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 13. OutcomeLinksSameStage
-    let outcome_stage_match = outcome.map_or(false, |o| o.stage_id == request.stage_id);
+    let outcome_stage_match = outcome.is_some_and(|o| o.stage_id == request.stage_id);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::OutcomeLinksSameStage,
         passed: outcome_stage_match,
@@ -144,7 +143,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 14. OutcomeLinksSameActionRequest
-    let outcome_action_match = outcome.map_or(false, |o| o.action_request_id == request.action_request_id);
+    let outcome_action_match = outcome.is_some_and(|o| o.action_request_id == request.action_request_id);
     predicates.push(WorkflowReconciliationPredicateResult {
         predicate: WorkflowReconciliationPredicate::OutcomeLinksSameActionRequest,
         passed: outcome_action_match,
@@ -152,7 +151,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 15. OutcomeIsTerminal — ToolCompleted, ToolDenied, or Failed only
-    let outcome_terminal = outcome.map_or(false, |o| {
+    let outcome_terminal = outcome.is_some_and(|o| {
         matches!(o.status,
             WorkflowActionOutcomeStatus::ToolCompleted
             | WorkflowActionOutcomeStatus::ToolDenied
@@ -166,7 +165,7 @@ pub fn evaluate_reconciliation(
     });
 
     // 16. OutcomeEvidenceFromSession (Patch 3: requires at least one signal)
-    let session_evidence_ok = outcome.and_then(|o| o.session_outcome.as_ref()).map_or(false, |s| {
+    let session_evidence_ok = outcome.and_then(|o| o.session_outcome.as_ref()).is_some_and(|s| {
         !s.trace_ids.is_empty()
             || s.tool_call_id_observed_from_session.is_some()
             || s.tool_status_observed_from_session.is_some()
@@ -255,7 +254,6 @@ mod tests {
     use crate::workflow_proposal::{WorkflowProposalId, WorkflowStageKind};
     use crate::workflow_readiness::WorkflowReadinessId;
     use crate::plan::TaskPlanId;
-    use crate::plan_review::TaskPlanReviewId;
     use crate::workflow_proposal_review::WorkflowProposalReviewId;
 
     struct Fixtures {
@@ -422,7 +420,7 @@ mod tests {
         assert!(is_blocked(&evaluate_reconciliation(&Fixtures::request(), &f.ctx())));
     }
     #[test] fn blocks_missing_stage() {
-        let mut f = Fixtures::base(); let mut req = Fixtures::request(); req.stage_id = "stage_missing".into();
+        let f = Fixtures::base(); let mut req = Fixtures::request(); req.stage_id = "stage_missing".into();
         assert!(is_blocked(&evaluate_reconciliation(&req, &f.ctx())));
     }
     #[test] fn blocks_stage_not_suspended() {
@@ -431,7 +429,7 @@ mod tests {
         assert!(is_blocked(&evaluate_reconciliation(&Fixtures::request(), &f.ctx())));
     }
     #[test] fn blocks_missing_action_request() {
-        let mut f = Fixtures::base(); let mut req = Fixtures::request(); req.action_request_id = "ar_missing".into();
+        let f = Fixtures::base(); let mut req = Fixtures::request(); req.action_request_id = "ar_missing".into();
         assert!(is_blocked(&evaluate_reconciliation(&req, &f.ctx())));
     }
     #[test] fn blocks_outcome_stage_mismatch() {

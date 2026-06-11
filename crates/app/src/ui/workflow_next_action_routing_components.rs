@@ -57,7 +57,7 @@ pub fn routing_safety_text() -> String {
 mod desktop_render {
     use super::*;
     use crate::ui::components::*;
-    use crate::ui::layout::*;
+    
     use dioxus::prelude::*;
 
     /// Empty state.
@@ -122,7 +122,7 @@ mod desktop_render {
             spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
         let label_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
-        let value_s = format!("color: {};", colors::TEXT_MUTED);
+        let _value_s = format!("color: {};", colors::TEXT_MUTED);
         let note1 = routing_suggested_note();
         let note2 = routing_no_execution_note();
         let note3 = routing_no_proposal_created_note();

@@ -19,18 +19,15 @@ impl std::fmt::Display for GoalId {
 /// Goal status. Uses snake_case in TOML.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum GoalStatus {
+    #[default]
     Active,
     Paused,
     Completed,
     Archived,
 }
 
-impl Default for GoalStatus {
-    fn default() -> Self {
-        GoalStatus::Active
-    }
-}
 
 /// Top-level TOML structure for goal manifest file.
 #[derive(Debug, Clone, Serialize, Deserialize)]

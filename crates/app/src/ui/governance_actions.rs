@@ -13,7 +13,7 @@ use crate::eval_proposal_review::{
 };
 use crate::eval_remote_push_proposal::{
     RemotePushProposalFeedback, RemotePushProposalId, RemotePushProposalReview,
-    RemotePushProposalReviewDecision, RemotePushProposalReviewId,
+    RemotePushProposalReviewDecision,
     build_push_proposal_review, load_push_proposal, save_push_proposal_review,
 };
 
@@ -172,14 +172,14 @@ pub fn execute_governance_action(
 
 fn build_local_review(
     proposal_id: &str,
-    reviewer: &str,
+    _reviewer: &str,
     rationale: &str,
     feedback: Option<&str>,
     store_root: &std::path::Path,
 ) -> Result<AutoCommitProposalReview, String> {
     let pid = AutoCommitProposalId(proposal_id.to_string());
     let proposal = crate::eval_proposal::load_proposal(store_root, &pid)
-        .map_err(|e| format!("{}", e))?
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Proposal not found: {}", proposal_id))?;
 
     let decision = if feedback.is_some() && rationale.contains("reject") {
@@ -213,7 +213,7 @@ fn build_local_review(
             }
         }),
     )
-    .map_err(|e| format!("{}", e))
+    .map_err(|e| e.to_string())
 }
 
 fn build_push_review(
@@ -225,7 +225,7 @@ fn build_push_review(
 ) -> Result<RemotePushProposalReview, String> {
     let pid = RemotePushProposalId(proposal_id.to_string());
     let proposal = load_push_proposal(store_root, &pid)
-        .map_err(|e| format!("{}", e))?
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Push proposal not found: {}", proposal_id))?;
 
     let decision = if feedback.is_some() && rationale.contains("reject") {
@@ -262,5 +262,5 @@ fn build_push_review(
         idempotency_key: format!("ui_{}", chrono::Utc::now().timestamp_millis()),
     };
 
-    build_push_proposal_review(&proposal, &req, &[]).map_err(|e| format!("{}", e))
+    build_push_proposal_review(&proposal, &req, &[]).map_err(|e| e.to_string())
 }

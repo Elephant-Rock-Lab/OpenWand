@@ -111,13 +111,11 @@ pub fn list_verification_readiness(
     let mut results = Vec::new();
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        if entry.path().extension().map_or(false, |ext| ext == "json") {
-            if let Ok(json) = std::fs::read_to_string(entry.path()) {
-                if let Ok(rec) = serde_json::from_str::<VerificationReadinessRecord>(&json) {
+        if entry.path().extension().is_some_and(|ext| ext == "json")
+            && let Ok(json) = std::fs::read_to_string(entry.path())
+                && let Ok(rec) = serde_json::from_str::<VerificationReadinessRecord>(&json) {
                     results.push(rec);
                 }
-            }
-        }
     }
     Ok(results)
 }

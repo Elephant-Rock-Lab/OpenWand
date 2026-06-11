@@ -23,8 +23,6 @@ use openwand_llm::LlmTarget;
 use openwand_memory::prompt_assembly::MemoryPromptAssemblyInputs;
 use openwand_memory::{MemoryReadStore, MemoryStore, SqliteMemoryStore};
 use openwand_session::runner::SessionRunner;
-use openwand_skills;
-use openwand_goals;
 use openwand_store::backends::sqlite::{SqliteStore, SqliteStoreConfig};
 use openwand_store::SessionRegistryStore;
 use std::sync::Arc;
@@ -400,7 +398,7 @@ fn render_console_pane() -> Element {
 
 fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_evidence_chain_inspector_components::*;
-    use openwand_app::ui::workflow_audit_packet_review_components::*;
+    
     use openwand_app::ui::workflow_audit_packet_distribution_components::*;
     use openwand_app::ui::workflow_manual_result_components::render_manual_result_ladder_panel;
     use openwand_app::ui::workflow_action_routing_components::*;
@@ -728,7 +726,7 @@ async fn handle_send(
         .read()
         .as_ref()
         .filter(|cached| cached.session_id == session_id)
-        .filter(|cached| cached.working_directory == std::path::PathBuf::from(&working_dir))
+        .filter(|cached| cached.working_directory == working_dir)
         .map(|cached| cached.inputs.clone());
 
     // Build capability context from current registries (Patch 3: recomputes, not UI signal)

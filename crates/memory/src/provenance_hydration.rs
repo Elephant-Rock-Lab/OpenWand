@@ -228,7 +228,7 @@ impl MemoryProvenanceHydrator {
             supersession,
             hydration_status,
             repo_evidence_key: finding.repo_evidence_key.clone(),
-            severity: finding.severity.clone(),
+            severity: finding.severity,
             inclusion_reason: None, // Filled by caller from inputs
             trace_lineage: None,
         }
@@ -271,8 +271,8 @@ impl MemoryProvenanceHydrator {
             // 3. lowercase claim text match
             let record: Option<&MemoryRecord> = finding
                 .evidence_kind
-                .and_then(|_| None) // No record_id on finding yet
-                .or_else(|| {
+                .and(None) // No record_id on finding yet
+                .or({
                     // Try hash match if we had a hash on the finding — we don't
                     None::<&MemoryRecord>
                 })
@@ -288,13 +288,13 @@ impl MemoryProvenanceHydrator {
 
     fn hydrate_from_both(hit: &RankedMemoryHit, record: &MemoryRecord) -> MemoryEvidenceProvenance {
         MemoryEvidenceProvenance {
-            provenance_kind: hit.provenance.kind.clone(),
+            provenance_kind: hit.provenance.kind,
             record_id: Some(record.record_id.clone()),
             source_trace_ids: record.source_trace_ids.clone(),
             source_episode_ids: record.source_episode_ids.clone(),
             confidence: Some(record.confidence),
             created_at: Some(record.created_at),
-            evidence_kind: Some(record.evidence_kind.clone()),
+            evidence_kind: Some(record.evidence_kind),
             retrieval_reason: if hit.reason.is_empty() { None } else { Some(hit.reason.clone()) },
             rank_score_summary: Some(format_rank_score(&hit.score)),
         }
@@ -302,13 +302,13 @@ impl MemoryProvenanceHydrator {
 
     fn hydrate_from_hit(hit: &RankedMemoryHit) -> MemoryEvidenceProvenance {
         MemoryEvidenceProvenance {
-            provenance_kind: hit.provenance.kind.clone(),
+            provenance_kind: hit.provenance.kind,
             record_id: Some(hit.id.clone()),
             source_trace_ids: hit.source_trace_ids.clone(),
             source_episode_ids: hit.source_episode_ids.clone(),
             confidence: Some(hit.confidence_bps as f64 / 10000.0),
             created_at: None,
-            evidence_kind: Some(hit.evidence_kind.clone()),
+            evidence_kind: Some(hit.evidence_kind),
             retrieval_reason: if hit.reason.is_empty() { None } else { Some(hit.reason.clone()) },
             rank_score_summary: Some(format_rank_score(&hit.score)),
         }
@@ -322,7 +322,7 @@ impl MemoryProvenanceHydrator {
             source_episode_ids: record.source_episode_ids.clone(),
             confidence: Some(record.confidence),
             created_at: Some(record.created_at),
-            evidence_kind: Some(record.evidence_kind.clone()),
+            evidence_kind: Some(record.evidence_kind),
             retrieval_reason: None,
             rank_score_summary: None,
         }

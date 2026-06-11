@@ -6,7 +6,6 @@
 //! payload as serde_json::Value so collectors can extract typed fields.
 
 use chrono::{DateTime, Utc};
-use openwand_core::events::OpenWandTraceEvent;
 use openwand_store::StoredEvent;
 use openwand_trace::{TraceQuery, TraceStore, TraceStreamId, TraceStreamScope};
 use serde::{Deserialize, Serialize};

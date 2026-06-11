@@ -12,7 +12,7 @@ use openwand_session::config::CapabilityContextBlock;
 use openwand_skills::registry::SkillRegistry;
 
 use crate::ui::skills_goals_state::{
-    SkillGoalManifestState, SkillGoalReadinessStatus,
+    SkillGoalReadinessStatus,
     build_readiness_report,
 };
 

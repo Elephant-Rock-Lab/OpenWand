@@ -111,7 +111,6 @@ mod tests {
     use super::*;
     use crate::evaluation::*;
     use crate::provenance_hydration::MemoryTrustBucket;
-    use crate::repo_consistency::ConsistencySeverity;
 
     fn make_scenario(category: MemoryEvaluationCategory) -> MemoryEvaluationScenario {
         MemoryEvaluationScenario {

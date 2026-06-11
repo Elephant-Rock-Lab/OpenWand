@@ -90,14 +90,14 @@ impl<'a> InspectorSignals<'a> {
         let reviews = crate::workflow_audit_packet_review::review_by_workflow_run(path, &wfx_id.0)
             .unwrap_or_default()
             .iter()
-            .map(|r| crate::ui::workflow_audit_packet_review_state::review_summary(r))
+            .map(crate::ui::workflow_audit_packet_review_state::review_summary)
             .collect();
         *self.review_rows.write() = reviews;
 
         let distributions = crate::workflow_audit_packet_distribution::distribution_by_workflow_run(path, &wfx_id.0)
             .unwrap_or_default()
             .iter()
-            .map(|d| crate::ui::workflow_audit_packet_distribution_state::distribution_summary(d))
+            .map(crate::ui::workflow_audit_packet_distribution_state::distribution_summary)
             .collect();
         *self.distribution_rows.write() = distributions;
     }

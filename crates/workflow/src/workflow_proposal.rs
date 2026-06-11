@@ -11,7 +11,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::plan::{TaskPlanEvidenceKind, TaskPlanId};
+use crate::plan::TaskPlanId;
 use crate::plan_review::TaskPlanReviewId;
 
 /// Content-addressed proposal ID. Format: `wfp_<blake3_hex>`.

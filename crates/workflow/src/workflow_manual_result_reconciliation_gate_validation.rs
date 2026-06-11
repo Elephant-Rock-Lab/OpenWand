@@ -27,6 +27,7 @@ pub fn gate_id_for(
 }
 
 /// Validate all 8 required hashes (Patch 3).
+#[allow(clippy::too_many_arguments)]
 pub fn validate_gate_hashes(
     expected_workflow_run_hash: &str,
     expected_reconciliation_readiness_hash: &str,

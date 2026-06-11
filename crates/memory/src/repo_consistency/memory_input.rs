@@ -65,10 +65,10 @@ pub async fn load_memory_inputs(
 
 /// Derive conflict groups from hits that share a conflict_group_id.
 fn derive_conflict_groups(hits: &[RankedMemoryHit]) -> Vec<ConflictGroup> {
-    let mut groups: std::collections::HashMap<String, Vec<String>> =
+    let groups: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
 
-    for hit in hits {
+    for _hit in hits {
         // Check if the underlying record has a conflict_group_id
         // For now, we use the hit's source_trace_ids as a proxy
         // This will be properly wired when conflict_group_id is on RankedMemoryHit

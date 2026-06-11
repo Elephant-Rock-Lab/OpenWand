@@ -5,6 +5,7 @@ use crate::snapshots::ApprovalContextSnapshot;
 use crate::tool_vocab::{ToolInvoker, ToolResultStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum ToolEvent {
     Called {
         tool_call_id: ToolCallId,

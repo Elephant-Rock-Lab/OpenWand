@@ -49,7 +49,7 @@ pub fn readiness_safety_text() -> String {
 mod desktop_render {
     use super::*;
     use crate::ui::components::*;
-    use crate::ui::layout::*;
+    
     use dioxus::prelude::*;
 
     /// Empty state.
@@ -114,7 +114,7 @@ mod desktop_render {
             spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
         let label_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
-        let value_s = format!("color: {};", colors::TEXT_MUTED);
+        let _value_s = format!("color: {};", colors::TEXT_MUTED);
         let note = readiness_not_routing_action_note();
         let note_s = format!(
             "font-size: {}; color: {}; font-style: italic; margin-top: {};",

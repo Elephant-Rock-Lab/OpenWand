@@ -88,12 +88,12 @@ pub fn validate_review(
     }
     match decision {
         WorkflowNextActionReviewDecision::Rejected => {
-            if feedback.map_or(true, |f| f.blocking_reasons.is_empty()) {
+            if feedback.is_none_or(|f| f.blocking_reasons.is_empty()) {
                 return Err("rejection requires feedback.blocking_reasons".into());
             }
         }
         WorkflowNextActionReviewDecision::ChangesRequested => {
-            if feedback.map_or(true, |f| f.requested_changes.is_empty()) {
+            if feedback.is_none_or(|f| f.requested_changes.is_empty()) {
                 return Err("changes requested requires feedback.requested_changes".into());
             }
         }

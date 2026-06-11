@@ -32,7 +32,7 @@ pub fn canonical_json_bytes(value: &serde_json::Value) -> Result<Vec<u8>, String
     // For true canonical form, we sort keys explicitly
     // For now, serde_json compact is sufficient
     bytes.sort(); // no-op on Vec<u8>, but intent is clear
-    Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?)
+    serde_json::to_vec(value).map_err(|e| e.to_string())
 }
 
 /// Compute a hex hash of canonical JSON arguments for audit and UI verification.
@@ -332,6 +332,7 @@ pub enum SessionCommand {
 
 /// Classification of approval trace state for the resolver.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum ApprovalTraceState {
     /// Pending and recoverable.
     Pending(PendingApprovalRecovery),
@@ -525,7 +526,7 @@ pub fn validate_tool_lifecycle(
     entries: &[TraceEntry<StoredEvent>],
     mode: LifecycleValidationMode,
 ) -> Vec<ToolLifecycleViolation> {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     #[derive(Default)]
     struct ToolState {
@@ -570,7 +571,7 @@ pub fn validate_tool_lifecycle(
                     state.has_denied = true;
                     state.kinds.push("tool.denied".into());
                 }
-                ToolEvent::Deferred { tool_call_id, .. } => {
+                ToolEvent::Deferred { tool_call_id: _, .. } => {
                     // Deferred events don't participate in the execution lifecycle
                 }
                 ToolEvent::Called { tool_call_id, .. } => {
@@ -588,7 +589,6 @@ pub fn validate_tool_lifecycle(
                     state.has_failed = true;
                     state.kinds.push("tool.failed".into());
                 }
-                _ => {}
             }
         }
     }

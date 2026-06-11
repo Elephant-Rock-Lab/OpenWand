@@ -3,8 +3,8 @@
 //! Task plans are reviewable evidence only. They do not execute tools,
 //! workflows, shell commands, git operations, or memory writes.
 
-use openwand_workflow::plan::{TaskPlan, TaskPlanStep, TaskPlanRisk, TaskPlanEvidenceLink, TaskPlanEvidenceKind, TaskPlanStatus};
-use openwand_workflow::plan_review::{TaskPlanReview, TaskPlanReviewDecision};
+use openwand_workflow::plan::{TaskPlan, TaskPlanEvidenceKind};
+use openwand_workflow::plan_review::TaskPlanReview;
 
 /// UI row for a plan summary.
 #[derive(Debug, Clone)]
@@ -151,7 +151,7 @@ mod tests {
     use super::*;
     use openwand_workflow::builder::build_task_plan;
     use openwand_workflow::context::TaskPlanInput;
-    use openwand_workflow::plan_review::{TaskPlanFeedback, task_review_id_for};
+    use openwand_workflow::plan_review::{TaskPlanFeedback, TaskPlanReviewDecision, task_review_id_for};
     use chrono::Utc;
 
     fn test_plan() -> TaskPlan {

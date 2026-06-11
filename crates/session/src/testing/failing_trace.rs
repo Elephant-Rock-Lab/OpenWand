@@ -6,10 +6,10 @@
 use openwand_store::StoredEvent;
 use openwand_trace::entry::{TraceEntry, TraceEntryWithRelations};
 use openwand_trace::ids::TraceId;
-use openwand_trace::relation::{TraceRelation, TraceRelationDraft};
+use openwand_trace::relation::TraceRelation;
 use openwand_trace::stream::TraceStreamId;
 use openwand_trace::{
-    AppendTraceEntry, IdempotencyKey, RelationQuery, TraceError, TracePage, TraceQuery, TraceStore,
+    AppendTraceEntry, RelationQuery, TraceError, TracePage, TraceQuery, TraceStore,
 };
 use std::sync::Arc;
 use async_trait::async_trait;

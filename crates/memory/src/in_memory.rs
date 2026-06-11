@@ -117,11 +117,10 @@ impl MemoryStore for InMemoryMemoryStore {
                 for ep_id in &candidate.source_episode_ids {
                     if !record.source_episode_ids.contains(ep_id) {
                         record.source_episode_ids.push(ep_id.clone());
-                        if let Some(ep) = episodes.get(ep_id) {
-                            if !record.source_trace_ids.contains(&ep.source_trace_id) {
+                        if let Some(ep) = episodes.get(ep_id)
+                            && !record.source_trace_ids.contains(&ep.source_trace_id) {
                                 record.source_trace_ids.push(ep.source_trace_id.clone());
                             }
-                        }
                     }
                 }
                 return Ok(Some(record.clone()));
@@ -291,7 +290,7 @@ impl MemoryStore for InMemoryMemoryStore {
                 let derived_kind = r.derived_evidence_kind();
                 let evidence_bps_raw = evidence_bps_from_kind(&derived_kind);
                 let penalty = supersession_penalty(r.superseded_by.is_some(), mode);
-                let evidence_bps = if evidence_bps_raw > penalty { evidence_bps_raw - penalty } else { 0 };
+                let evidence_bps = evidence_bps_raw.saturating_sub(penalty);
 
                 let score = MemoryRankScore {
                     relevance_bps,
@@ -322,7 +321,7 @@ impl MemoryStore for InMemoryMemoryStore {
             })
             .collect();
 
-        hits.sort_by(|a, b| b.score.final_bps.cmp(&a.score.final_bps));
+        hits.sort_by_key(|b| std::cmp::Reverse(b.score.final_bps));
 
         let total_hits = hits.len();
         Ok(RankedRetrievalContext {

@@ -2,14 +2,11 @@
 
 use chrono::Utc;
 
-use crate::workflow_continuation::{
-    WorkflowContinuationReadinessRecord, WorkflowNextActionCandidate,
-    WorkflowNextActionKind, WorkflowNextActionProposal,
-};
+use crate::workflow_continuation::WorkflowNextActionProposal;
 use crate::workflow_next_action_review::{WorkflowNextActionReview, WorkflowNextActionReviewDecision, review_hash_for};
 use crate::workflow_reconciliation::{is_terminal_stage_status, WorkflowRunRevision};
 use crate::workflow_routing_readiness::*;
-use crate::workflow_run::{WorkflowActionRequest, WorkflowActionRoutingStatus, WorkflowStageRun, WorkflowStageRunStatus};
+use crate::workflow_run::{WorkflowActionRequest, WorkflowActionRoutingStatus, WorkflowStageRunStatus};
 
 /// Context for routing readiness evaluation.
 pub struct WorkflowRoutingReadinessContext<'a> {
@@ -52,28 +49,28 @@ pub fn evaluate_routing_readiness(
         review.is_some(), if review.is_some() { "Review found" } else { "No review" }));
 
     // 3. NextActionProposalReviewIsLatest
-    let is_latest = review.map_or(false, |r| {
-        context.latest_review.map_or(false, |lr| lr.review_id == r.review_id)
+    let is_latest = review.is_some_and(|r| {
+        context.latest_review.is_some_and(|lr| lr.review_id == r.review_id)
     });
     predicates.push(pred(WorkflowRoutingReadinessPredicate::NextActionProposalReviewIsLatest,
         is_latest, if is_latest { "Is latest" } else { "Not latest" }));
 
     // 4. NextActionProposalReviewApproved
-    let is_approved = review.map_or(false, |r| {
+    let is_approved = review.is_some_and(|r| {
         matches!(r.decision, WorkflowNextActionReviewDecision::Approved)
     });
     predicates.push(pred(WorkflowRoutingReadinessPredicate::NextActionProposalReviewApproved,
         is_approved, if is_approved { "Approved" } else { "Not approved" }));
 
     // 5. ProposalHashMatchesReview
-    let hash_match_review = review.map_or(false, |r| {
-        proposal.map_or(false, |p| p.proposal_hash == r.proposal_hash)
+    let hash_match_review = review.is_some_and(|r| {
+        proposal.is_some_and(|p| p.proposal_hash == r.proposal_hash)
     });
     predicates.push(pred(WorkflowRoutingReadinessPredicate::ProposalHashMatchesReview,
         hash_match_review, if hash_match_review { "Hash match" } else { "Hash mismatch" }));
 
     // 6. ProposalHashMatchesRequest
-    let hash_match_req = proposal.map_or(false, |p| p.proposal_hash == request.expected_proposal_hash);
+    let hash_match_req = proposal.is_some_and(|p| p.proposal_hash == request.expected_proposal_hash);
     predicates.push(pred(WorkflowRoutingReadinessPredicate::ProposalHashMatchesRequest,
         hash_match_req, if hash_match_req { "Matches request" } else { "Mismatch" }));
 
@@ -95,20 +92,20 @@ pub fn evaluate_routing_readiness(
         revision.is_some(), if revision.is_some() { "Is latest" } else { "Not latest" }));
 
     // 10. RunRevisionHashMatchesProposal
-    let rev_hash_proposal = revision.map_or(false, |rev| {
-        proposal.map_or(false, |p| p.source_run_revision_hash == rev.run_hash_after)
+    let rev_hash_proposal = revision.is_some_and(|rev| {
+        proposal.is_some_and(|p| p.source_run_revision_hash == rev.run_hash_after)
     });
     predicates.push(pred(WorkflowRoutingReadinessPredicate::RunRevisionHashMatchesProposal,
         rev_hash_proposal, if rev_hash_proposal { "Match" } else { "Mismatch" }));
 
     // 11. RunRevisionHashMatchesRequest
-    let rev_hash_req = revision.map_or(false, |rev| rev.run_hash_after == request.expected_run_revision_hash);
+    let rev_hash_req = revision.is_some_and(|rev| rev.run_hash_after == request.expected_run_revision_hash);
     predicates.push(pred(WorkflowRoutingReadinessPredicate::RunRevisionHashMatchesRequest,
         rev_hash_req, if rev_hash_req { "Match" } else { "Mismatch" }));
 
     // 12. ProposalBelongsToRunRevision
-    let prop_rev = proposal.map_or(false, |p| {
-        revision.map_or(false, |rev| p.source_run_revision_id == rev.revision_id)
+    let prop_rev = proposal.is_some_and(|p| {
+        revision.is_some_and(|rev| p.source_run_revision_id == rev.revision_id)
     });
     predicates.push(pred(WorkflowRoutingReadinessPredicate::ProposalBelongsToRunRevision,
         prop_rev, if prop_rev { "Belongs" } else { "Mismatch" }));
@@ -122,13 +119,13 @@ pub fn evaluate_routing_readiness(
         stage.is_some(), if stage.is_some() { "Stage found" } else { "No stage" }));
 
     // 14. CandidateStageStillPending
-    let stage_pending = stage.map_or(false, |s| s.status == WorkflowStageRunStatus::Pending);
+    let stage_pending = stage.is_some_and(|s| s.status == WorkflowStageRunStatus::Pending);
     predicates.push(pred(WorkflowRoutingReadinessPredicate::CandidateStageStillPending,
         stage_pending, if stage_pending { "Still pending" } else { "Not pending" }));
 
     // 15. CandidateStageDependenciesStillTerminal
-    let deps_terminal = stage.map_or(true, |s| {
-        revision.map_or(true, |rev| {
+    let deps_terminal = stage.is_none_or(|s| {
+        revision.is_none_or(|rev| {
             s.depends_on.iter().all(|dep| {
                 rev.stages.iter().any(|ss| ss.stage_id == *dep && is_terminal_stage_status(&ss.status))
             })
@@ -138,12 +135,12 @@ pub fn evaluate_routing_readiness(
         deps_terminal, if deps_terminal { "Deps terminal" } else { "Deps not terminal" }));
 
     // 16. SelectorNoSkipStillHolds
-    let no_skip = revision.map_or(true, |rev| {
+    let no_skip = revision.is_none_or(|rev| {
         let stages = &rev.stages;
         let mut found_non_terminal = false;
         for s in stages {
             if !is_terminal_stage_status(&s.status) {
-                if candidate.map_or(true, |c| c.stage_id != s.stage_id) {
+                if candidate.is_none_or(|c| c.stage_id != s.stage_id) {
                     // Non-terminal stage before candidate — violation
                     if !found_non_terminal { return false; }
                 }
@@ -161,7 +158,7 @@ pub fn evaluate_routing_readiness(
         action.is_some(), if action.is_some() { "Action found" } else { "No action" }));
 
     // 18. ActionRequestPreparedForRouting
-    let action_prepared = action.map_or(false, |a| {
+    let action_prepared = action.is_some_and(|a| {
         matches!(a.routing_status,
             WorkflowActionRoutingStatus::PreparedForFutureSessionRouting
             | WorkflowActionRoutingStatus::SuspendedAwaitingApproval)
@@ -175,12 +172,12 @@ pub fn evaluate_routing_readiness(
         true, "Action request has no executable fields"));
 
     // 20. ProposalStillDoesNotCreateRoute
-    let prop_no_route = proposal.map_or(true, |p| !p.creates_route && !p.routes_action_now);
+    let prop_no_route = proposal.is_none_or(|p| !p.creates_route && !p.routes_action_now);
     predicates.push(pred(WorkflowRoutingReadinessPredicate::ProposalStillDoesNotCreateRoute,
         prop_no_route, if prop_no_route { "No route claim" } else { "VIOLATION" }));
 
     // 21. ReviewStillDoesNotCreateRoute
-    let rev_no_route = review.map_or(true, |r| !r.creates_route && !r.routes_action_now);
+    let rev_no_route = review.is_none_or(|r| !r.creates_route && !r.routes_action_now);
     predicates.push(pred(WorkflowRoutingReadinessPredicate::ReviewStillDoesNotCreateRoute,
         rev_no_route, if rev_no_route { "No route claim" } else { "VIOLATION" }));
 
@@ -212,8 +209,7 @@ pub fn evaluate_routing_readiness(
     let all_passed = predicates.iter().all(|p| p.passed);
     let (status, decision, candidate_out, preview) = if all_passed {
         let c = proposal.map(|p| p.candidate.clone());
-        let prev = proposal.and_then(|p| {
-            Some(WorkflowRouteRequestPreview {
+        let prev = proposal.map(|p| WorkflowRouteRequestPreview {
                 workflow_execution_id: request.workflow_execution_id.clone(),
                 stage_id: p.candidate.stage_id.clone(),
                 action_request_id: p.candidate.action_request_id.clone().unwrap_or_default(),
@@ -221,8 +217,7 @@ pub fn evaluate_routing_readiness(
                 source_review_id: request.review_id.clone(),
                 descriptive_only: true,
                 creates_route_now: false,
-            })
-        });
+            });
         (
             WorkflowRoutingReadinessStatus::Ready,
             WorkflowRoutingReadinessDecision::Ready { summary: "All predicates passed".into() },
@@ -265,7 +260,7 @@ mod tests {
     use crate::workflow_next_action_review::*;
     use crate::workflow_proposal::WorkflowStageKind;
     use crate::workflow_reconciliation::{WorkflowReconciliationId, WorkflowRunRevisionId};
-    use crate::workflow_run::{WorkflowExecutionId, WorkflowRunRecord, WorkflowStageRun};
+    use crate::workflow_run::{WorkflowExecutionId, WorkflowStageRun};
 
     struct Fixtures {
         proposal: WorkflowNextActionProposal,

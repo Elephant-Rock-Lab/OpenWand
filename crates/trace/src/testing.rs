@@ -89,11 +89,10 @@ where
         let mut state = self.inner.write().await;
 
         // 1. Idempotency check
-        if let Some(ref key) = command.idempotency_key {
-            if let Some(existing_id) = state.idempotency.get(key) {
+        if let Some(ref key) = command.idempotency_key
+            && let Some(existing_id) = state.idempotency.get(key) {
                 return Ok(existing_id.clone());
             }
-        }
 
         // 2. Assign new TraceId
         let id = TraceId::new();
@@ -217,16 +216,14 @@ where
             }
 
             // Apply filters
-            if let Some(ref stream_id) = query.stream_id {
-                if Self::stream_key(&entry.stream_id) != Self::stream_key(stream_id) {
+            if let Some(ref stream_id) = query.stream_id
+                && Self::stream_key(&entry.stream_id) != Self::stream_key(stream_id) {
                     continue;
                 }
-            }
-            if let Some(ref kind) = query.event_kind {
-                if &entry.event_kind != kind {
+            if let Some(ref kind) = query.event_kind
+                && &entry.event_kind != kind {
                     continue;
                 }
-            }
             if let Some(ref actor_filter) = query.actor {
                 let matches = match actor_filter {
                     ActorFilter::UserOnly => matches!(entry.actor, crate::actor::Actor::User),
@@ -244,26 +241,22 @@ where
                     continue;
                 }
             }
-            if let Some(from) = query.from_sequence {
-                if entry.global_sequence < from {
+            if let Some(from) = query.from_sequence
+                && entry.global_sequence < from {
                     continue;
                 }
-            }
-            if let Some(to) = query.to_sequence {
-                if entry.global_sequence > to {
+            if let Some(to) = query.to_sequence
+                && entry.global_sequence > to {
                     continue;
                 }
-            }
-            if let Some(from) = query.from_timestamp {
-                if entry.occurred_at < from {
+            if let Some(from) = query.from_timestamp
+                && entry.occurred_at < from {
                     continue;
                 }
-            }
-            if let Some(to) = query.to_timestamp {
-                if entry.occurred_at > to {
+            if let Some(to) = query.to_timestamp
+                && entry.occurred_at > to {
                     continue;
                 }
-            }
 
             results.push(entry);
         }
@@ -296,21 +289,18 @@ where
             .relations
             .iter()
             .filter(|r| {
-                if let Some(ref from) = query.from {
-                    if &r.from != from {
+                if let Some(ref from) = query.from
+                    && &r.from != from {
                         return false;
                     }
-                }
-                if let Some(ref to) = query.to {
-                    if &r.to != to {
+                if let Some(ref to) = query.to
+                    && &r.to != to {
                         return false;
                     }
-                }
-                if let Some(ref kind) = query.kind {
-                    if &r.kind != kind {
+                if let Some(ref kind) = query.kind
+                    && &r.kind != kind {
                         return false;
                     }
-                }
                 true
             })
             .take(query.limit.unwrap_or(usize::MAX))
@@ -354,6 +344,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::actor::Actor;
@@ -745,6 +736,7 @@ mod tests {
 /// a configured predicate. Used for hostile ordering tests.
 ///
 /// All other operations delegate to the inner store.
+#[allow(clippy::type_complexity)]
 pub struct FailOnAppend<E> {
     inner: Arc<dyn TraceStore<E>>,
     fail_on: Arc<std::sync::Mutex<Option<Box<dyn Fn(&str) -> bool + Send + Sync>>>>,

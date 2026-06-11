@@ -18,6 +18,7 @@ pub trait LocalTool: Send + Sync {
 }
 
 /// A LocalTool backed by a closure.
+#[allow(clippy::type_complexity)]
 struct LocalToolEntry {
     descriptor: ToolDef,
     handler: Arc<
@@ -52,6 +53,7 @@ impl BuiltinToolProvider {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn register_fn<F, Fut>(&mut self, descriptor: ToolDef, handler: F)
     where
         F: Fn(serde_json::Value, ToolCallContext) -> Fut + Send + Sync + 'static,
@@ -600,8 +602,8 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
     }
 
     // Create parent directories if needed
-    if let Some(parent) = full_path.parent() {
-        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+    if let Some(parent) = full_path.parent()
+        && let Err(e) = tokio::fs::create_dir_all(parent).await {
             return ToolResult::error(
                 call_id,
                 tool_name,
@@ -609,7 +611,6 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
                 start.elapsed().as_millis() as u64,
             );
         }
-    }
 
     // Record preimage if file exists (for rollback)
     let preimage_info = if full_path.exists() {
@@ -675,9 +676,7 @@ fn test_context(dir: &tempfile::TempDir) -> ToolCallContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openwand_core::SessionId;
     use tempfile::TempDir;
-    use tokio_util::sync::CancellationToken;
 
     #[tokio::test]
     async fn local_file_read_success() {
@@ -1286,7 +1285,7 @@ async fn shell_exec_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
         .stderr(std::process::Stdio::piped())
         .stdin(std::process::Stdio::null());
 
-    let mut child = match cmd.spawn() {
+    let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
             return ToolResult::error(

@@ -12,7 +12,6 @@
 //! Events not relevant to the UI (Gate, Mode, File, etc.) are skipped.
 
 use crate::ui::dto::{UiMessage, UiMessageRole};
-use openwand_core::events::OpenWandTraceEvent;
 use openwand_store::StoredEvent;
 use openwand_trace::{TraceQuery, TraceStore};
 
@@ -98,16 +97,7 @@ fn map_entry(entry: &openwand_trace::entry::TraceEntry<StoredEvent>) -> Option<U
     let trace_id = entry.id.0.clone();
     let timestamp = entry.occurred_at.timestamp();
 
-    match &entry.event {
-        // Unwrap StoredEvent → OpenWandTraceEvent
-        // StoredEvent derefs to OpenWandTraceEvent, but we need the inner event.
-        // Actually, StoredEvent wraps the event. Let me check...
-        _ => {
-            // We need to access the inner OpenWandTraceEvent.
-            // StoredEvent derefs, so we can match on it directly.
-            map_event(&entry.event, &trace_id, timestamp)
-        }
-    }
+    map_event(&entry.event, &trace_id, timestamp)
 }
 
 fn map_event(

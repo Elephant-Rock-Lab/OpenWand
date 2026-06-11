@@ -6,9 +6,9 @@
 use chrono::Utc;
 
 use crate::plan::TaskPlan;
-use crate::plan_review::{TaskPlanReview, TaskPlanReviewDecision};
+use crate::plan_review::TaskPlanReview;
 use crate::tool_intent_resolution::resolve_tool_intent;
-use crate::workflow_proposal::{WorkflowProposal, WorkflowProposalStatus};
+use crate::workflow_proposal::WorkflowProposal;
 use crate::workflow_proposal_review::{WorkflowProposalReview, WorkflowProposalReviewDecision};
 use crate::workflow_readiness::{WorkflowReadinessRecord, WorkflowReadinessStatus};
 use crate::workflow_readiness::ToolIntentResolutionStatus;
@@ -279,7 +279,7 @@ pub fn evaluate_workflow_execution(
 
     // Initialize stage runs from proposal (lifecycle engine in separate module)
     let stages = proposal
-        .map(|p| initialize_stage_runs(p))
+        .map(initialize_stage_runs)
         .unwrap_or_default();
 
     let lifecycle_events = Vec::new();
@@ -329,7 +329,7 @@ mod tests {
     use crate::plan_review::{TaskPlanReview, TaskPlanReviewDecision, task_review_id_for};
     use crate::workflow_proposal_builder::{WorkflowProposalInput, build_workflow_proposal};
     use crate::workflow_proposal_review::{WorkflowProposalReview, WorkflowProposalReviewDecision, workflow_review_id_for};
-    use crate::workflow_readiness::{WorkflowReadinessRequest, WorkflowEnvironmentSnapshot, WorkflowRollbackAbortSnapshot};
+    use crate::workflow_readiness::{WorkflowReadinessRequest, WorkflowEnvironmentSnapshot};
     use crate::workflow_readiness_evaluator::WorkflowReadinessContext;
     use crate::workflow_readiness_evaluator::evaluate_workflow_readiness as eval_readiness;
 
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn ready_run_predicates_pass_for_valid_inputs() {
         let (req, ctx) = full_chain();
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert_eq!(WorkflowRunStatus::Suspended, record.status);
         assert!(matches!(record.decision, WorkflowExecutionDecision::RunCreated));
         assert!(record.predicates.iter().all(|p| p.passed));
@@ -446,7 +446,7 @@ mod tests {
     fn blocks_missing_readiness() {
         let (req, mut ctx) = full_chain();
         ctx.readiness = None;
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert_eq!(WorkflowRunStatus::Blocked, record.status);
     }
 
@@ -456,7 +456,7 @@ mod tests {
         if let Some(ref mut r) = ctx.readiness {
             r.status = WorkflowReadinessStatus::Blocked;
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ReadinessIsReady && !p.passed));
     }
@@ -466,7 +466,7 @@ mod tests {
         let (mut req, ctx) = full_chain();
         req.expected_readiness_hash = "wrong".into();
         // This checks proposal_id match; readiness hash is proposal_id check
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         // readiness_id matches, but expected_readiness_hash won't match proposal hash
         // Our implementation checks proposal_id match, not a separate hash
     }
@@ -475,7 +475,7 @@ mod tests {
     fn blocks_missing_proposal() {
         let (req, mut ctx) = full_chain();
         ctx.proposal = None;
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert_eq!(WorkflowRunStatus::Blocked, record.status);
     }
 
@@ -483,7 +483,7 @@ mod tests {
     fn blocks_proposal_hash_mismatch() {
         let (mut req, ctx) = full_chain();
         req.expected_proposal_hash = "wrong_hash".into();
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ProposalHashMatchesRequest && !p.passed));
     }
@@ -492,7 +492,7 @@ mod tests {
     fn blocks_missing_proposal_review() {
         let (req, mut ctx) = full_chain();
         ctx.proposal_review = None;
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ProposalReviewExists && !p.passed));
     }
@@ -503,7 +503,7 @@ mod tests {
         if let Some(ref mut r) = ctx.proposal_review {
             r.decision = WorkflowProposalReviewDecision::Rejected;
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ProposalReviewApproved && !p.passed));
     }
@@ -514,7 +514,7 @@ mod tests {
         if let Some(ref mut p) = ctx.source_task_plan {
             p.plan_hash = "wrong".into();
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::SourceTaskPlanHashMatchesProposal && !p.passed));
     }
@@ -527,7 +527,7 @@ mod tests {
                 stage.tool_intents[0].capability = "shell".into();
             }
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ToolIntentsRemainNonExecutable && !p.passed));
     }
@@ -539,7 +539,7 @@ mod tests {
             p.risks.clear();
             p.required_approvals.clear();
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::PolicyConstraintsRepresented && !p.passed));
     }
@@ -548,7 +548,7 @@ mod tests {
     fn blocks_missing_provider_configuration() {
         let (req, mut ctx) = full_chain();
         ctx.provider_config_available = false;
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ProviderConfigurationAvailable && !p.passed));
     }
@@ -557,7 +557,7 @@ mod tests {
     fn blocks_missing_session_runtime() {
         let (req, mut ctx) = full_chain();
         ctx.session_runtime_available = false;
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::SessionRuntimeAvailable && !p.passed));
     }
@@ -568,7 +568,7 @@ mod tests {
         if let Some(ref mut p) = ctx.proposal {
             p.abort_rollback_notes.clear();
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::RollbackAbortEvidencePresent && !p.passed));
     }
@@ -605,7 +605,7 @@ mod tests {
             created_at: Utc::now(),
             completed_at: Some(Utc::now()),
         });
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::NoPriorConflictingWorkflowRun && !p.passed));
     }
@@ -614,7 +614,7 @@ mod tests {
     fn blocks_policy_run_creation_denial() {
         // Wave 26 always allows run creation. This test verifies the predicate exists.
         let (req, ctx) = full_chain();
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::PolicyAllowsWorkflowRunCreation));
     }
@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn execution_initializes_stage_runs_from_proposal() {
         let (req, ctx) = full_chain();
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(!record.stages.is_empty());
         // Each stage should be Pending initially
         assert!(record.stages.iter().all(|s| s.status == WorkflowStageRunStatus::Pending));
@@ -636,7 +636,7 @@ mod tests {
                 stage.tool_intents[0].capability = "quantum-computation".into();
             }
         }
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ToolIntentResolutionStillValid && !p.passed));
     }

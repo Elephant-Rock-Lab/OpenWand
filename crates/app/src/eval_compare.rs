@@ -170,8 +170,8 @@ pub fn compare_reports(
 
     // Provider delta
     let provider_delta = ProviderDelta {
-        provider_changed: baseline_ref.map_or(false, |b| b.provider.provider != current.provider.provider),
-        model_changed: baseline_ref.map_or(false, |b| b.provider.model != current.provider.model),
+        provider_changed: baseline_ref.is_some_and(|b| b.provider.provider != current.provider.provider),
+        model_changed: baseline_ref.is_some_and(|b| b.provider.model != current.provider.model),
         current_provider: current.provider.provider.clone(),
         baseline_provider: baseline_ref.map(|b| b.provider.provider.clone()),
         current_model: current.provider.model.clone(),
@@ -225,8 +225,8 @@ pub fn compare_reports(
             let current_dim = current.score.dimensions.iter().find(|d| d.name == *req_dim);
             let baseline_dim = b.score.dimensions.iter().find(|d| d.name == *req_dim);
 
-            if let (Some(cd), Some(bd)) = (current_dim, baseline_dim) {
-                if cd.passed < bd.passed && bd.passed > 0 {
+            if let (Some(cd), Some(bd)) = (current_dim, baseline_dim)
+                && cd.passed < bd.passed && bd.passed > 0 {
                     regressions.push(EvalRegression {
                         dimension: req_dim.clone(),
                         description: format!(
@@ -236,7 +236,6 @@ pub fn compare_reports(
                         severity: RegressionSeverity::Hard,
                     });
                 }
-            }
         }
 
         // Capability-context category-specific regressions (Patch 5)
@@ -292,14 +291,13 @@ pub fn compare_reports(
         }
 
         for dd in &dimension_deltas {
-            if let Some(delta) = dd.delta {
-                if delta > 0 {
+            if let Some(delta) = dd.delta
+                && delta > 0 {
                     improvements.push(EvalImprovement {
                         dimension: dd.dimension.clone(),
                         description: format!("{} improved by {} points", dd.dimension, delta),
                     });
                 }
-            }
         }
     }
 

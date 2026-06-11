@@ -52,6 +52,7 @@ pub fn advance_stages(
     let now = Utc::now();
 
     // Collect stage info to avoid borrow conflicts
+    #[allow(clippy::type_complexity)]
     let stage_info: Vec<(WorkflowStageKind, Vec<String>, Vec<(String, String, String, String, bool)>)> = proposal.stages.iter().map(|s| {
         let tool_intents: Vec<(String, String, String, String, bool)> = s.tool_intents.iter()
             .map(|ti| (ti.capability.clone(), ti.purpose.clone(), ti.expected_input_summary.clone(), ti.expected_output_summary.clone(), ti.requires_policy_gate))

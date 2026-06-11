@@ -114,7 +114,7 @@ pub fn list_workflow_proposals(store_root: &Path) -> Result<Vec<WorkflowProposal
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read proposals dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" {
                 continue;

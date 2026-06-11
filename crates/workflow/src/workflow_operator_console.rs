@@ -145,6 +145,7 @@ pub struct ConsoleReadinessEligibilitySummary {
 
 /// Build a console state from loop-state observations.
 /// No persistence. This is a recomputed view.
+#[allow(clippy::too_many_arguments)]
 pub fn build_console_state(
     workflow_execution_id: WorkflowExecutionId,
     run_status: String,

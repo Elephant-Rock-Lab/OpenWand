@@ -14,14 +14,12 @@
 //! Patch 3: apply_trace_entry_to_inspector() works for both batch and live paths.
 //! Patch 4: Inspector never appends trace, trace relations, or mutates projections.
 
-use chrono::{DateTime, Utc};
 use openwand_core::events::{
-    FileEvent, GateEvent, InferenceEvent, MemoryEvent, ModeEvent, OpenWandTraceEvent,
-    SessionEvent, ToolEvent, WorkflowEvent, ArtifactEvent,
+    GateEvent, InferenceEvent, MemoryEvent, OpenWandTraceEvent,
+    SessionEvent, ToolEvent,
 };
 use openwand_store::StoredEvent;
 use openwand_trace::entry::TraceEntry;
-use openwand_trace::relation::{TraceRelation, TraceRelationKind};
 use openwand_trace::store::TraceStore;
 use openwand_trace::query::{RelationQuery, TraceQuery};
 use openwand_trace::ids::TraceId;
@@ -163,6 +161,7 @@ pub struct TraceEventDetail {
 // ── Root State ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub struct LiveInspectorState {
     pub session_id: Option<String>,
     pub trace_timeline: Vec<TraceTimelineItem>,
@@ -173,19 +172,6 @@ pub struct LiveInspectorState {
     pub warnings: Vec<String>,
 }
 
-impl Default for LiveInspectorState {
-    fn default() -> Self {
-        Self {
-            session_id: None,
-            trace_timeline: Vec::new(),
-            gate_tool_events: Vec::new(),
-            memory_context: None,
-            memory_evidence: Vec::new(),
-            selected_event: None,
-            warnings: Vec::new(),
-        }
-    }
-}
 
 impl LiveInspectorState {
     pub fn is_empty(&self) -> bool {
@@ -512,10 +498,10 @@ fn summarize_event_kind(event: &OpenWandTraceEvent) -> String {
             MemoryEvent::EpisodeRecorded { .. } => "Memory episode recorded".into(),
             _ => format!("Memory: {}", event.event_kind()),
         },
-        OpenWandTraceEvent::File(e) => format!("File: {}", event.event_kind()),
-        OpenWandTraceEvent::Mode(e) => format!("Mode: {}", event.event_kind()),
-        OpenWandTraceEvent::Workflow(e) => format!("Workflow: {}", event.event_kind()),
-        OpenWandTraceEvent::Artifact(e) => format!("Artifact: {}", event.event_kind()),
+        OpenWandTraceEvent::File(_e) => format!("File: {}", event.event_kind()),
+        OpenWandTraceEvent::Mode(_e) => format!("Mode: {}", event.event_kind()),
+        OpenWandTraceEvent::Workflow(_e) => format!("Workflow: {}", event.event_kind()),
+        OpenWandTraceEvent::Artifact(_e) => format!("Artifact: {}", event.event_kind()),
     }
 }
 

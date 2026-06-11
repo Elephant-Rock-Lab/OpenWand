@@ -44,6 +44,7 @@ impl GateEvent {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn test_risk() -> RiskLevelSnapshot {
         RiskLevelSnapshot::Low
     }

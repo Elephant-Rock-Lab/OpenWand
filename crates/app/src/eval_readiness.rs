@@ -341,7 +341,7 @@ pub fn extract_patch_trends(reports: &[EvalRunReport]) -> Vec<PatchTrendSummary>
 
     for (scenario_id, scenario_reports) in &groups {
         let spec = reg_map.get(*scenario_id);
-        let runs = scenario_reports.len();
+        let _runs = scenario_reports.len();
 
         // Compute per-dimension pass rates
         let mut patch_pass = 0u32;
@@ -402,10 +402,10 @@ pub fn extract_patch_trends(reports: &[EvalRunReport]) -> Vec<PatchTrendSummary>
             }
 
             // Inspect PatchEvalResult for blockers (Clarification #1)
-            if report.patch.rollback_available == false && report.patch.applied {
+            if !report.patch.rollback_available && report.patch.applied {
                 has_missing_rollback = true;
             }
-            if report.patch.changed_files_match_expected == false {
+            if !report.patch.changed_files_match_expected {
                 has_unexpected_file_change = true;
             }
             // Scenario-aware plan/apply check (Clarification #3)
@@ -427,7 +427,7 @@ pub fn extract_patch_trends(reports: &[EvalRunReport]) -> Vec<PatchTrendSummary>
             scenario_id: scenario_id.to_string(),
             runs: valid_runs,
             weighted_score: weight * if valid_runs > 0 {
-                (patch_pass as f64 / patch_total.max(1) as f64)
+                patch_pass as f64 / patch_total.max(1) as f64
             } else {
                 0.0
             },

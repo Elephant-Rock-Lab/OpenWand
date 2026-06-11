@@ -287,34 +287,31 @@ pub fn check_ladder_linkage(
     }
 
     // Check review→result linkage
-    if let (Some(result), Some(review)) = (results.first(), reviews.first()) {
-        if !review.manual_result_id.is_empty() && review.manual_result_id != result.result_id {
+    if let (Some(result), Some(review)) = (results.first(), reviews.first())
+        && !review.manual_result_id.is_empty() && review.manual_result_id != result.result_id {
             warnings.push(format!(
                 "Review {} references result {} but latest result is {}",
                 review.review_id, review.manual_result_id, result.result_id
             ));
         }
-    }
 
     // Check readiness→result linkage
-    if let (Some(result), Some(ready)) = (results.first(), readiness.first()) {
-        if !ready.manual_result_id.is_empty() && ready.manual_result_id != result.result_id {
+    if let (Some(result), Some(ready)) = (results.first(), readiness.first())
+        && !ready.manual_result_id.is_empty() && ready.manual_result_id != result.result_id {
             warnings.push(format!(
                 "Readiness {} references result {} but latest result is {}",
                 ready.readiness_id, ready.manual_result_id, result.result_id
             ));
         }
-    }
 
     // Check gate→readiness linkage
-    if let (Some(ready), Some(gate)) = (readiness.first(), gates.first()) {
-        if !gate.readiness_id.is_empty() && gate.readiness_id != ready.readiness_id {
+    if let (Some(ready), Some(gate)) = (readiness.first(), gates.first())
+        && !gate.readiness_id.is_empty() && gate.readiness_id != ready.readiness_id {
             warnings.push(format!(
                 "Gate {} references readiness {} but latest readiness is {}",
                 gate.gate_id, gate.readiness_id, ready.readiness_id
             ));
         }
-    }
 
     warnings
 }

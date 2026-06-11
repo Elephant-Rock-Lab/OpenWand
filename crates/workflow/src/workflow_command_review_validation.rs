@@ -4,11 +4,9 @@
 //! that the descriptor is display-only and non-executable, and that reviewer/rationale
 //! requirements are met. Does NOT check persistence idempotency (Patch 1).
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::workflow_command_composer::{WorkflowCommandComposerRecord, WorkflowCommandComposerId};
-use crate::workflow_command_descriptor::WorkflowManualCommandDescriptor;
+use crate::workflow_command_composer::WorkflowCommandComposerRecord;
 use crate::workflow_command_review::*;
 use crate::workflow_loop_controller::WorkflowLoopControllerRecord;
 
@@ -76,13 +74,13 @@ pub fn validate_command_review(
         if lc_hash_ok { "Provided" } else { "Missing" }));
 
     // 6. Descriptor is display_only
-    let desc_display_only = composer_record.and_then(|c| c.descriptor.as_ref()).map_or(true, |d| d.display_only);
+    let desc_display_only = composer_record.and_then(|c| c.descriptor.as_ref()).is_none_or(|d| d.display_only);
     results.push(v(WorkflowCommandReviewValidationRule::DescriptorIsDisplayOnly,
         desc_display_only,
         if desc_display_only { "Display only" } else { "Not display only" }));
 
     // 7. Descriptor is not executable
-    let desc_not_exec = composer_record.and_then(|c| c.descriptor.as_ref()).map_or(true, |d| !d.executable);
+    let desc_not_exec = composer_record.and_then(|c| c.descriptor.as_ref()).is_none_or(|d| !d.executable);
     results.push(v(WorkflowCommandReviewValidationRule::DescriptorIsNotExecutable,
         desc_not_exec,
         if desc_not_exec { "Not executable" } else { "Marked executable" }));
@@ -100,7 +98,7 @@ pub fn validate_command_review(
     // 10. Rejection requires blocking reasons
     let rejection_ok = match &request.decision {
         WorkflowCommandReviewDecision::Rejected => {
-            request.feedback.as_ref().map_or(false, |f| !f.blocking_reasons.is_empty())
+            request.feedback.as_ref().is_some_and(|f| !f.blocking_reasons.is_empty())
         }
         _ => true,
     };
@@ -111,7 +109,7 @@ pub fn validate_command_review(
     // 11. ChangesRequested requires requested changes
     let changes_ok = match &request.decision {
         WorkflowCommandReviewDecision::ChangesRequested => {
-            request.feedback.as_ref().map_or(false, |f| !f.requested_changes.is_empty())
+            request.feedback.as_ref().is_some_and(|f| !f.requested_changes.is_empty())
         }
         _ => true,
     };
@@ -145,8 +143,8 @@ pub fn validate_command_review(
         descriptor_copyable_text_hash: desc.map_or(String::new(), |d| {
             blake3::hash(d.copyable_text.as_bytes()).to_hex().to_string()
         }),
-        descriptor_display_only: desc.map_or(true, |d| d.display_only),
-        descriptor_executable: desc.map_or(false, |d| d.executable),
+        descriptor_display_only: desc.is_none_or(|d| d.display_only),
+        descriptor_executable: desc.is_some_and(|d| d.executable),
         descriptor_missing_inputs: desc.map_or(vec![], |d| d.missing_inputs.iter().map(|m| m.name.clone()).collect()),
         loop_detected_state: String::new(),
         loop_recommended_operation: String::new(),
@@ -191,7 +189,6 @@ mod tests {
     use super::*;
     use crate::workflow_command_composer::*;
     use crate::workflow_loop_controller::*;
-    use crate::workflow_loop_state::*;
     use crate::workflow_loop_recommendation::WorkflowManualOperationKind;
     use crate::workflow_run::WorkflowExecutionId;
 

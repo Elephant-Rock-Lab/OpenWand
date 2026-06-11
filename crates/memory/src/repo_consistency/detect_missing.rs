@@ -6,7 +6,7 @@
 
 use crate::retrieval::RankedMemoryHit;
 
-use super::observe::{ObservedDependency, RepoObservationSnapshot};
+use super::observe::RepoObservationSnapshot;
 use super::report::{
     ConsistencySeverity, RepoConsistencyFinding, RepoConsistencyFindingKind,
 };

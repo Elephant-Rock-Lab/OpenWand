@@ -94,7 +94,7 @@ mod desktop_render {
     use crate::ui::layout::*;
     use dioxus::prelude::*;
     use openwand_workflow::workflow_operator_console::{
-        ConsoleAttestationGroup, ConsoleChainWarning, ConsoleEvidenceLink,
+        ConsoleAttestationGroup, ConsoleEvidenceLink,
         ConsoleReadinessEligibilitySummary, ConsoleSectionSummary,
         WorkflowOperatorConsoleState,
     };
@@ -422,7 +422,7 @@ mod desktop_render {
     pub fn render_operator_console(state: &WorkflowOperatorConsoleState) -> Element {
         let summary = console_summary_lines(state);
         let scroll_s = scroll_area_style();
-        let section_rows = state.sections.iter().map(|s| SectionDisplayRow {
+        let _section_rows = state.sections.iter().map(|s| SectionDisplayRow {
             section: format!("{:?}", s.section),
             present: s.present_count,
             missing: s.missing_count,

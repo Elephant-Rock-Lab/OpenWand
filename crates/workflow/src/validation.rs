@@ -29,7 +29,7 @@ pub fn validate_task_plan(plan: &TaskPlan) -> Result<(), Vec<String>> {
     }
 
     // Validate step kinds are known
-    let valid_kinds: &[&str] = &["observe", "analyze", "propose_change", "request_approval", "verify", "report"];
+    let _valid_kinds: &[&str] = &["observe", "analyze", "propose_change", "request_approval", "verify", "report"];
 
     if errors.is_empty() {
         Ok(())

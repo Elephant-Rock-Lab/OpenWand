@@ -5,7 +5,6 @@
 use std::path::Path;
 
 use openwand_workflow::workflow_audit_packet_review::*;
-use openwand_workflow::workflow_run::WorkflowExecutionId;
 
 fn review_root(store_root: &Path) -> std::path::PathBuf {
     store_root.join("audit_packet_reviews")
@@ -84,13 +83,11 @@ pub fn list_audit_packet_reviews(
     let mut results = Vec::new();
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        if entry.path().extension().map_or(false, |ext| ext == "json") {
-            if let Ok(json) = std::fs::read_to_string(entry.path()) {
-                if let Ok(rec) = serde_json::from_str::<AuditPacketReview>(&json) {
+        if entry.path().extension().is_some_and(|ext| ext == "json")
+            && let Ok(json) = std::fs::read_to_string(entry.path())
+                && let Ok(rec) = serde_json::from_str::<AuditPacketReview>(&json) {
                     results.push(rec);
                 }
-            }
-        }
     }
     Ok(results)
 }
@@ -140,6 +137,7 @@ fn load_index_list(
 mod tests {
     use super::*;
     use openwand_workflow::workflow_audit_packet_review::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
 
     fn test_dir() -> std::path::PathBuf {
         tempfile::tempdir().unwrap().into_path()

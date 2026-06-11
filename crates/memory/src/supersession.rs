@@ -4,8 +4,10 @@
 
 /// Retrieval mode for supersession behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum RetrievalMode {
     /// Active/current records first; superseded records penalized.
+    #[default]
     Default,
     /// Exclude superseded records if a successor exists.
     CurrentState,
@@ -15,11 +17,6 @@ pub enum RetrievalMode {
     ConflictSearch,
 }
 
-impl Default for RetrievalMode {
-    fn default() -> Self {
-        Self::Default
-    }
-}
 
 /// Compute supersession penalty in basis points for the given mode.
 pub fn supersession_penalty(is_superseded: bool, mode: RetrievalMode) -> u16 {

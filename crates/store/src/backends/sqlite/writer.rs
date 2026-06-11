@@ -20,6 +20,7 @@ use crate::backends::sqlite::migrations;
 use crate::error::StoreError;
 
 /// Commands sent to the blocking writer thread.
+#[allow(clippy::large_enum_variant)]
 enum WriterCommand {
     Append {
         entry: AppendTraceEntry<StoredEvent>,

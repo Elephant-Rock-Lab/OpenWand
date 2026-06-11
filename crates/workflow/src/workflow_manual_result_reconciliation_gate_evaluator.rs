@@ -98,20 +98,20 @@ pub fn evaluate_manual_result_reconciliation_gate(
         readiness_hash_ok, if readiness_hash_ok { "Hash provided" } else { "Missing hash" }));
 
     // 9. ReconciliationReadinessStatusIsReady
-    let readiness_ready = readiness.map_or(false, |r|
+    let readiness_ready = readiness.is_some_and(|r|
         matches!(r.status, WorkflowManualResultReconciliationReadinessStatus::Ready));
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::ReconciliationReadinessStatusIsReady,
         readiness_ready, if readiness_ready { "Ready" } else { "Not ready" }));
 
     // 10. ReviewDecisionIsAccepted
-    let accepted = review.map_or(false, |r| {
+    let accepted = review.is_some_and(|r| {
         matches!(r.decision, crate::workflow_manual_result_review::WorkflowManualResultReviewDecision::Accepted)
     });
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::ReviewDecisionIsAccepted,
         accepted, if accepted { "Accepted" } else { "Not accepted" }));
 
     // 11. ManualResultWasReportedByOperator
-    let reported = mr.map_or(false, |m| m.reported_by_operator);
+    let reported = mr.is_some_and(|m| m.reported_by_operator);
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::ManualResultWasReportedByOperator,
         reported, if reported { "Reported" } else { "Not reported" }));
 
@@ -121,22 +121,22 @@ pub fn evaluate_manual_result_reconciliation_gate(
         stage.is_some(), if stage.is_some() { "Found" } else { "Missing" }));
 
     // Patch 3: hash linkage through readiness chain (13-16)
-    let cr_hash_ok = readiness.map_or(false, |r| r.command_review_hash == request.expected_command_review_hash)
+    let cr_hash_ok = readiness.is_some_and(|r| r.command_review_hash == request.expected_command_review_hash)
         || readiness.is_none();
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::CommandReviewHashMatchesReadiness,
         cr_hash_ok, if cr_hash_ok { "Match" } else { "Mismatch" }));
 
-    let cc_hash_ok = readiness.map_or(false, |r| r.command_composer_hash == request.expected_command_composer_hash)
+    let cc_hash_ok = readiness.is_some_and(|r| r.command_composer_hash == request.expected_command_composer_hash)
         || readiness.is_none();
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::CommandComposerHashMatchesReadiness,
         cc_hash_ok, if cc_hash_ok { "Match" } else { "Mismatch" }));
 
-    let cd_hash_ok = readiness.map_or(false, |r| r.command_descriptor_hash == request.expected_command_descriptor_hash)
+    let cd_hash_ok = readiness.is_some_and(|r| r.command_descriptor_hash == request.expected_command_descriptor_hash)
         || readiness.is_none();
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::CommandDescriptorHashMatchesReadiness,
         cd_hash_ok, if cd_hash_ok { "Match" } else { "Mismatch" }));
 
-    let lc_hash_ok = readiness.map_or(false, |r| r.loop_controller_hash == request.expected_loop_controller_hash)
+    let lc_hash_ok = readiness.is_some_and(|r| r.loop_controller_hash == request.expected_loop_controller_hash)
         || readiness.is_none();
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::LoopControllerHashMatchesReadiness,
         lc_hash_ok, if lc_hash_ok { "Match" } else { "Mismatch" }));
@@ -148,11 +148,12 @@ pub fn evaluate_manual_result_reconciliation_gate(
         preview.is_some(), if preview.is_some() { "Preview found" } else { "No preview" }));
 
     // 18. ReconciliationPreviewTargetIsActionable
-    let preview_actionable = preview.as_ref().map_or(false, |p| is_actionable_preview(p));
+    let preview_actionable = preview.as_ref().is_some_and(is_actionable_preview);
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::ReconciliationPreviewTargetIsActionable,
         preview_actionable, if preview_actionable { "Actionable" } else { "Not actionable" }));
 
     // 19. ManualResultStatusMatchesReadinessPreview
+    #[allow(clippy::match_like_matches_macro)]
     let status_matches_preview = match (mr, preview.as_ref()) {
         (Some(m), Some(p)) => match (&m.status, p) {
             (WorkflowManualResultStatus::ReportedSucceeded, WorkflowManualResultReconciliationPreview::CompleteStageFromReportedSuccess) => true,
@@ -170,7 +171,7 @@ pub fn evaluate_manual_result_reconciliation_gate(
 
     // Patch 2: 20. ManualResultEligibleForWorkflowStageReconciliation
     // The readiness preview must target stage progression
-    let eligible = preview.as_ref().map_or(false, |p| is_actionable_preview(p));
+    let eligible = preview.as_ref().is_some_and(is_actionable_preview);
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::ManualResultEligibleForWorkflowStageReconciliation,
         eligible, if eligible { "Eligible for stage reconciliation" } else { "Not eligible: preview does not target stage progression" }));
 
@@ -192,7 +193,7 @@ pub fn evaluate_manual_result_reconciliation_gate(
         readiness_is_latest, if readiness_is_latest { "Latest" } else { "Superseded" }));
 
     // Patch 5: 23. StageStatusEligibleForManualReconciliation (only Suspended)
-    let stage_eligible = stage.map_or(false, |s| s.status == WorkflowStageRunStatus::Suspended);
+    let stage_eligible = stage.is_some_and(|s| s.status == WorkflowStageRunStatus::Suspended);
     predicates.push(pr(WorkflowManualResultReconciliationGatePredicate::StageStatusEligibleForManualReconciliation,
         stage_eligible, if stage_eligible { "Suspended — eligible" } else { "Not eligible: only Suspended stages" }));
 
@@ -231,7 +232,7 @@ pub fn evaluate_manual_result_reconciliation_gate(
             None
         };
 
-        let revision_id = prog.as_ref().map(|p| {
+        let revision_id = prog.as_ref().map(|_p| {
             let run_hash_after = format!("manual_revision_{}", Utc::now().timestamp_millis());
             run_revision_id_for(
                 &request.workflow_execution_id.0,

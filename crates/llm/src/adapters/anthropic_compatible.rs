@@ -16,7 +16,6 @@
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
-use serde::Deserialize;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -35,6 +34,12 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 pub struct AnthropicCompatibleClient {
     http: Client,
     buffer: Arc<Mutex<ToolCallBuffer>>,
+}
+
+impl Default for AnthropicCompatibleClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AnthropicCompatibleClient {
@@ -256,16 +261,14 @@ impl LlmClient for AnthropicCompatibleClient {
 
         while let Some(delta) = stream.next().await {
             match delta? {
-                LlmDelta::Text { delta } => {
-                    if !delta.is_empty() {
+                LlmDelta::Text { delta }
+                    if !delta.is_empty() => {
                         content.push(LlmContent::Text(delta));
                     }
-                }
-                LlmDelta::Reasoning { delta, .. } => {
-                    if !delta.is_empty() {
+                LlmDelta::Reasoning { delta, .. }
+                    if !delta.is_empty() => {
                         content.push(LlmContent::Reasoning(delta));
                     }
-                }
                 LlmDelta::ToolCallComplete { id, name, arguments } => {
                     content.push(LlmContent::ToolCall {
                         id,
@@ -395,7 +398,7 @@ fn parse_anthropic_sse(
     buffer: Arc<Mutex<ToolCallBuffer>>,
 ) -> impl Stream<Item = Result<LlmDelta, LlmError>> {
     let stream = resp.bytes_stream();
-    let mut pending_tool_id: Option<String> = None;
+    let pending_tool_id: Option<String> = None;
 
     stream
         .scan(
@@ -477,43 +480,36 @@ fn parse_anthropic_sse(
 
                                         match delta_type {
                                             "text_delta" => {
-                                                if let Some(text) = delta["text"].as_str() {
-                                                    if !text.is_empty() {
+                                                if let Some(text) = delta["text"].as_str()
+                                                    && !text.is_empty() {
                                                         deltas.push(Ok(LlmDelta::Text {
                                                             delta: text.to_string(),
                                                         }));
                                                     }
-                                                }
                                             }
                                             "input_json_delta" => {
                                                 // Tool call argument fragment
                                                 if let Some(partial) =
                                                     delta["partial_json"].as_str()
-                                                {
-                                                    if !partial.is_empty() {
-                                                        if let Some(ref id) = *pending_tool_id {
-                                                            if let Ok(mut locked_buf) = buf.lock() {
+                                                    && !partial.is_empty()
+                                                        && let Some(ref id) = *pending_tool_id
+                                                            && let Ok(mut locked_buf) = buf.lock() {
                                                                 let _ = locked_buf
                                                                     .handle_args_delta(
                                                                         id.clone(),
                                                                         partial.to_string(),
                                                                     );
                                                             }
-                                                        }
-                                                    }
-                                                }
                                             }
                                             "thinking_delta" => {
                                                 if let Some(thinking) =
                                                     delta["thinking"].as_str()
-                                                {
-                                                    if !thinking.is_empty() {
+                                                    && !thinking.is_empty() {
                                                         deltas.push(Ok(LlmDelta::Reasoning {
                                                             delta: thinking.to_string(),
                                                             redacted: false,
                                                         }));
                                                     }
-                                                }
                                             }
                                             _ => {}
                                         }
@@ -521,7 +517,7 @@ fn parse_anthropic_sse(
 
                                     "content_block_stop" => {
                                         // End of a content block — for tool_use, finalize the call
-                                        let index = event["index"].as_u64();
+                                        let _index = event["index"].as_u64();
                                         // If we had a pending tool call, flush it now
                                         if let Some(ref id) = *pending_tool_id {
                                             if let Ok(mut locked_buf) = buf.lock() {

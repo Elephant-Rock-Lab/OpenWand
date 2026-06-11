@@ -55,18 +55,15 @@ impl MemoryEvaluationCategory {
 /// How a scenario is executed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ScenarioExecutionMode {
     /// Seed memory + trace, run coordinator, judge results.
+    #[default]
     FullHarness,
     /// Construct hydrated claims directly, judge only (no coordinator).
     JudgeOnly,
 }
 
-impl Default for ScenarioExecutionMode {
-    fn default() -> Self {
-        ScenarioExecutionMode::FullHarness
-    }
-}
 
 // ── Scenario definition ────────────────────────────────────────────────────
 
@@ -225,20 +222,34 @@ pub struct RepoConsistencySummarySnapshot {
 impl RepoConsistencySummarySnapshot {
     pub fn from_report(report: &RepoConsistencyReport) -> Self {
         use crate::repo_consistency::RepoConsistencyFindingKind;
-        let mut snap = Self::default();
-        snap.total_findings = report.findings.len();
+        let mut supported = 0usize;
+        let mut stale = 0usize;
+        let mut missing_in_repo = 0usize;
+        let mut missing_in_memory = 0usize;
+        let mut unverifiable = 0usize;
+        let mut superseded = 0usize;
+        let mut conflict = 0usize;
         for f in &report.findings {
             match f.kind {
-                RepoConsistencyFindingKind::Supported => snap.supported += 1,
-                RepoConsistencyFindingKind::StaleMemory => snap.stale += 1,
-                RepoConsistencyFindingKind::MissingInRepo => snap.missing_in_repo += 1,
-                RepoConsistencyFindingKind::MissingInMemory => snap.missing_in_memory += 1,
-                RepoConsistencyFindingKind::Unverifiable => snap.unverifiable += 1,
-                RepoConsistencyFindingKind::SupersededMemoryIgnored => snap.superseded += 1,
-                RepoConsistencyFindingKind::ConflictRequiresReview => snap.conflict += 1,
+                RepoConsistencyFindingKind::Supported => supported += 1,
+                RepoConsistencyFindingKind::StaleMemory => stale += 1,
+                RepoConsistencyFindingKind::MissingInRepo => missing_in_repo += 1,
+                RepoConsistencyFindingKind::MissingInMemory => missing_in_memory += 1,
+                RepoConsistencyFindingKind::Unverifiable => unverifiable += 1,
+                RepoConsistencyFindingKind::SupersededMemoryIgnored => superseded += 1,
+                RepoConsistencyFindingKind::ConflictRequiresReview => conflict += 1,
             }
         }
-        snap
+        Self {
+            total_findings: report.findings.len(),
+            supported,
+            stale,
+            missing_in_repo,
+            missing_in_memory,
+            unverifiable,
+            superseded,
+            conflict,
+        }
     }
 }
 

@@ -26,13 +26,9 @@ use crate::eval_proposal_review::AutoCommitProposalReviewId;
 use crate::eval_remote_push_proposal::{
     RemotePushProposalId, RemotePushProposal, RemotePushProposalStatus,
     RemotePushProposalReviewId, RemotePushProposalReview, RemotePushProposalReviewDecision,
-    RemoteRefUpdateSnapshot,
-    load_push_proposal, load_push_proposal_review, load_latest_push_review_for_proposal,
 };
 use crate::eval_remote_push_readiness::{
-    RemotePushReadinessId, RemotePushReadinessRecord, RemotePushReadinessStatus,
-    RemotePushReadinessDecision, BranchProtectionPolicySnapshot,
-    load_readiness_record,
+    RemotePushReadinessId, RemotePushReadinessRecord, RemotePushReadinessStatus, BranchProtectionPolicySnapshot,
 };
 
 // ── Execution ID ────────────────────────────────────────────────────────────
@@ -775,7 +771,7 @@ pub fn evaluate_push_predicates(
 pub fn execute_push(
     backend: &dyn RemotePushExecutionBackend,
     repo: &Path,
-    store_root: &Path,
+    _store_root: &Path,
     request: &RemotePushExecutionRequest,
     proposal: Option<&RemotePushProposal>,
     review: Option<&RemotePushProposalReview>,
@@ -834,10 +830,7 @@ pub fn execute_push(
     }
 
     // Observe local state
-    let local_state = match backend.observe_current_local_state(repo) {
-        Ok(s) => Some(s),
-        Err(_) => None,
-    };
+    let local_state = backend.observe_current_local_state(repo).ok();
 
     // Observe remote ref
     let remote_ref = match (proposal, backend.observe_remote_ref(
@@ -845,7 +838,7 @@ pub fn execute_push(
         proposal.map(|p| p.target_remote.as_str()).unwrap_or("origin"),
         proposal.map(|p| p.target_branch.as_str()).unwrap_or("main"),
     )) {
-        (Some(p), Ok(rr)) => Some(rr),
+        (Some(_p), Ok(rr)) => Some(rr),
         _ => None,
     };
 

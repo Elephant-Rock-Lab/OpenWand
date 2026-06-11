@@ -68,9 +68,9 @@ mod tests {
     use super::*;
 
     /// Prove TraceStore<dyn> compiles behind Arc<dyn TraceStore<E>>.
+    #[allow(clippy::extra_unused_lifetimes, dead_code)]
     fn _assert_trace_store_arc_send_sync<E: Send + Sync + 'static>() {
-        fn _uses_arc_dyn<E: Send + Sync + 'static>(store: std::sync::Arc<dyn TraceStore<E>>) {
-            let _ = store;
+        fn _uses_arc_dyn<E: Send + Sync + 'static>(_store: std::sync::Arc<dyn TraceStore<E>>) {
         }
     }
 

@@ -118,7 +118,8 @@ impl ToolExecutor for CompositeToolExecutor {
                         is_error,
                         ..
                     }) => {
-                        let result = if is_error {
+                        
+                        if is_error {
                             ToolResult::error(
                                 call.id.clone(),
                                 call.name.clone(),
@@ -132,8 +133,7 @@ impl ToolExecutor for CompositeToolExecutor {
                                 output,
                                 start.elapsed().as_millis() as u64,
                             )
-                        };
-                        result
+                        }
                     }
                     Err(e) => ToolResult::error(
                         call.id.clone(),

@@ -47,19 +47,18 @@ pub fn save_workflow_readiness(
 
     // Idempotency check: same proposal + review + key → return existing
     let existing = find_existing_readiness(store_root, &record.proposal_id, &record.review_id);
-    if let Some(existing) = &existing {
-        if let Ok(existing_records) = list_workflow_readiness(store_root) {
+    if let Some(_existing) = &existing
+        && let Ok(existing_records) = list_workflow_readiness(store_root) {
             for er in &existing_records {
                 if er.proposal_id == record.proposal_id
                     && er.review_id == record.review_id
                 {
                     // Same key → return existing path
-                    if let Ok(req) = find_idempotency_key_for_record(store_root, &er.readiness_id) {
-                        if req == find_idempotency_key_for_record(store_root, &record.readiness_id).unwrap_or_default() {
+                    if let Ok(req) = find_idempotency_key_for_record(store_root, &er.readiness_id)
+                        && req == find_idempotency_key_for_record(store_root, &record.readiness_id).unwrap_or_default() {
                             let path = dir.join(format!("{}.json", er.readiness_id.0));
                             return Ok(path);
                         }
-                    }
                     // Ready cannot duplicate even with different key
                     if er.status == WorkflowReadinessStatus::Ready
                         && record.status == WorkflowReadinessStatus::Ready
@@ -70,7 +69,6 @@ pub fn save_workflow_readiness(
                 }
             }
         }
-    }
 
     // Save the record
     let path = dir.join(format!("{}.json", record.readiness_id.0));
@@ -127,7 +125,7 @@ fn find_existing_readiness(
     None
 }
 
-fn find_idempotency_key_for_record(store_root: &Path, readiness_id: &WorkflowReadinessId) -> Result<String, String> {
+fn find_idempotency_key_for_record(_store_root: &Path, readiness_id: &WorkflowReadinessId) -> Result<String, String> {
     // Idempotency key is embedded in the readiness ID computation
     // For simplicity, we store it alongside. But since readiness records
     // don't store the key directly, we use the readiness_id as unique.
@@ -156,7 +154,7 @@ pub fn list_workflow_readiness(store_root: &Path) -> Result<Vec<WorkflowReadines
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read readiness dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" {
                 continue;

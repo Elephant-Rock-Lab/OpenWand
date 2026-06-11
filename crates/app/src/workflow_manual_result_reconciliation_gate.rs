@@ -11,7 +11,7 @@
 use std::path::Path;
 
 use openwand_workflow::workflow_manual_result_reconciliation_gate::*;
-use openwand_workflow::workflow_reconciliation::{WorkflowRunRevision, WorkflowRunRevisionId};
+use openwand_workflow::workflow_reconciliation::WorkflowRunRevision;
 
 fn gate_root(store_root: &Path) -> std::path::PathBuf {
     store_root.join("workflow_manual_result_reconciliation_gates")
@@ -104,14 +104,13 @@ pub fn list_manual_reconciliation_gates(store_root: &Path) -> Result<Vec<Workflo
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" { continue; }
-            if let Ok(json) = std::fs::read_to_string(&path) {
-                if let Ok(record) = serde_json::from_str::<WorkflowManualResultReconciliationGateRecord>(&json) {
+            if let Ok(json) = std::fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<WorkflowManualResultReconciliationGateRecord>(&json) {
                     records.push(record);
                 }
-            }
         }
     }
     records.sort_by(|a, b| b.reconciled_at.cmp(&a.reconciled_at));

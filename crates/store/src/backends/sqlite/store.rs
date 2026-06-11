@@ -50,11 +50,9 @@ impl SqliteStore {
     /// Open a SQLite store with the given config.
     pub async fn open(config: SqliteStoreConfig) -> Result<Self, StoreError> {
         // Ensure parent directory exists
-        if config.path != PathBuf::from(":memory:") {
-            if let Some(parent) = config.path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| StoreError::Database(format!("create dir: {e}")))?;
-            }
+        if config.path != Path::new(":memory:") && let Some(parent) = config.path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| StoreError::Database(format!("create dir: {e}")))?;
         }
 
         let writer = SqliteWriter::open(config.path, config.run_migrations)?;

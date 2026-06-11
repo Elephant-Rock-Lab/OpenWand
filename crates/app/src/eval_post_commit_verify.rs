@@ -18,10 +18,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::eval_proposal::{AutoCommitProposal, AutoCommitProposalId, ProposalFileChange};
+use crate::eval_proposal::{AutoCommitProposal, AutoCommitProposalId};
 use crate::eval_proposal_execution::{
-    AutoCommitExecutionId, AutoCommitExecutionRecord, AutoCommitExecutionStatus,
-    GitCommitSnapshot, GovernedGitCommitBackend, LocalGitBackend, RollbackPlanSnapshot,
+    AutoCommitExecutionId, AutoCommitExecutionRecord, AutoCommitExecutionStatus, GovernedGitCommitBackend, LocalGitBackend,
 };
 use crate::eval_proposal_review::{AutoCommitProposalReview, AutoCommitProposalReviewId};
 

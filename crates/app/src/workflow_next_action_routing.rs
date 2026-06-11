@@ -8,16 +8,13 @@
 use std::path::Path;
 
 use openwand_workflow::workflow_action_route::{
-    WorkflowActionRouteId, WorkflowActionRouteRecord,
+    WorkflowActionRouteRecord,
     WorkflowActionRouteRequest,
 };
 use openwand_workflow::workflow_action_route_gate::{WorkflowActionRouteContext, evaluate_action_route};
 use openwand_workflow::workflow_next_action_routing_gate::*;
 use openwand_workflow::workflow_routing_readiness::WorkflowRoutingReadinessRecord;
 use openwand_workflow::workflow_continuation::WorkflowNextActionProposal;
-use openwand_workflow::workflow_next_action_review::WorkflowNextActionReview;
-use openwand_workflow::workflow_reconciliation::WorkflowRunRevision;
-use openwand_workflow::workflow_run::WorkflowActionRequest;
 use openwand_workflow::workflow_readiness::WorkflowReadinessId;
 use openwand_workflow::workflow_proposal::WorkflowProposalId;
 
@@ -52,8 +49,7 @@ pub fn route_next_action_via_existing_workflow_action_route(
             {
                 // Load the linked route record from existing path
                 let route_rec = prior.created_route_id.as_ref()
-                    .map(|rid| crate::workflow_action_routing::load_workflow_action_route(store_root, rid).ok())
-                    .flatten();
+                    .and_then(|rid| crate::workflow_action_routing::load_workflow_action_route(store_root, rid).ok());
                 return Ok((prior.clone(), route_rec));
             }
         }
@@ -64,7 +60,7 @@ pub fn route_next_action_via_existing_workflow_action_route(
 
     // Step 2: If blocked, persist and return
     if matches!(routing_record.status, WorkflowNextActionRoutingStatus::Blocked) {
-        let path = save_next_action_routing(store_root, &routing_record)?;
+        let _path = save_next_action_routing(store_root, &routing_record)?;
         return Ok((routing_record, None));
     }
 
@@ -187,14 +183,13 @@ pub fn list_next_action_routings(store_root: &Path) -> Result<Vec<WorkflowNextAc
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" { continue; }
-            if let Ok(json) = std::fs::read_to_string(&path) {
-                if let Ok(record) = serde_json::from_str::<WorkflowNextActionRoutingRecord>(&json) {
+            if let Ok(json) = std::fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<WorkflowNextActionRoutingRecord>(&json) {
                     records.push(record);
                 }
-            }
         }
     }
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));

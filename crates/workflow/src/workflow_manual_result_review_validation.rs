@@ -4,7 +4,6 @@
 //! the result was operator-reported and not verified by OpenWand, and reviewer/
 //! rationale requirements are met. Does NOT check prior review records (Patch 1).
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow_command_composer::WorkflowCommandComposerRecord;
@@ -55,7 +54,7 @@ pub fn validate_manual_result_review(
 
     // 2. Manual result hash must match
     // Patch 2: compare against the manual result's stored hashes
-    let mr_hash_ok = manual_result.map_or(false, |mr| {
+    let mr_hash_ok = manual_result.is_some_and(|mr| {
         let actual = blake3::hash(serde_json::to_string(mr).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_manual_result_hash
     });
@@ -64,17 +63,17 @@ pub fn validate_manual_result_review(
         if mr_hash_ok { "Match" } else { "Mismatch" }));
 
     // 3. Manual result was reported by operator
-    let reported_ok = manual_result.map_or(true, |mr| mr.reported_by_operator);
+    let reported_ok = manual_result.is_none_or(|mr| mr.reported_by_operator);
     results.push(v(WorkflowManualResultReviewValidationRule::ManualResultWasReportedByOperator,
         reported_ok, if reported_ok { "Reported" } else { "Not reported" }));
 
     // 4. Manual result was not verified by OpenWand
-    let not_verified = manual_result.map_or(true, |mr| !mr.verified_by_openwand);
+    let not_verified = manual_result.is_none_or(|mr| !mr.verified_by_openwand);
     results.push(v(WorkflowManualResultReviewValidationRule::ManualResultNotVerifiedByOpenwand,
         not_verified, if not_verified { "Not verified" } else { "Claims verified" }));
 
     // 5. Manual result was not executed by OpenWand
-    let not_executed = manual_result.map_or(true, |mr| !mr.command_executed_by_openwand);
+    let not_executed = manual_result.is_none_or(|mr| !mr.command_executed_by_openwand);
     results.push(v(WorkflowManualResultReviewValidationRule::ManualResultNotExecutedByOpenwand,
         not_executed, if not_executed { "Not executed" } else { "Claims executed" }));
 
@@ -91,7 +90,7 @@ pub fn validate_manual_result_review(
     // 8. Rejection requires blocking reasons
     let reject_ok = match request.decision {
         WorkflowManualResultReviewDecision::Rejected => {
-            request.feedback.as_ref().map_or(false, |f| !f.blocking_reasons.is_empty())
+            request.feedback.as_ref().is_some_and(|f| !f.blocking_reasons.is_empty())
         }
         _ => true,
     };
@@ -101,7 +100,7 @@ pub fn validate_manual_result_review(
     // 9. ChangesRequested requires requested changes
     let changes_ok = match request.decision {
         WorkflowManualResultReviewDecision::ChangesRequested => {
-            request.feedback.as_ref().map_or(false, |f| !f.requested_changes.is_empty())
+            request.feedback.as_ref().is_some_and(|f| !f.requested_changes.is_empty())
         }
         _ => true,
     };
@@ -143,7 +142,7 @@ pub fn validate_manual_result_review(
 
     // Patch 3: acceptance semantics
     let accepts_evidence = matches!(request.decision, WorkflowManualResultReviewDecision::Accepted);
-    let result_verified = manual_result.map_or(false, |mr| mr.verified_by_openwand);
+    let result_verified = manual_result.is_some_and(|mr| mr.verified_by_openwand);
 
     Ok(WorkflowManualResultReview {
         review_id,
@@ -187,11 +186,8 @@ pub fn validate_manual_result_review(
 mod tests {
     use super::*;
     use crate::workflow_command_composer::*;
-    use crate::workflow_command_descriptor::*;
     use crate::workflow_command_review::*;
     use crate::workflow_loop_controller::*;
-    use crate::workflow_loop_recommendation::WorkflowManualOperationKind;
-    use crate::workflow_manual_operation::*;
     use crate::workflow_manual_result::*;
     use crate::workflow_run::WorkflowExecutionId;
 

@@ -29,16 +29,13 @@ pub enum ProviderKind {
 /// Where the API key comes from. Never serialized with the raw resolved key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ApiKeySource {
+    #[default]
     None,
     EnvVar { name: String },
 }
 
-impl Default for ApiKeySource {
-    fn default() -> Self {
-        ApiKeySource::None
-    }
-}
 
 /// A single provider target configuration entry.
 ///
@@ -246,7 +243,7 @@ pub fn validate_provider_config(config: &ProviderTargetConfig) -> Result<(), Vec
     if matches!(
         config.provider_kind,
         ProviderKind::LocalOpenAiCompatible
-    ) && config.endpoint.as_ref().map_or(true, |e| e.trim().is_empty())
+    ) && config.endpoint.as_ref().is_none_or(|e| e.trim().is_empty())
     {
         errors.push(
             "field 'endpoint' is required for LocalOpenAiCompatible providers".to_string(),
@@ -262,14 +259,13 @@ pub fn validate_provider_config(config: &ProviderTargetConfig) -> Result<(), Vec
     }
 
     // Env var validation: check it exists when source is EnvVar
-    if let ApiKeySource::EnvVar { name } = &config.api_key_source {
-        if name.trim().is_empty() {
+    if let ApiKeySource::EnvVar { name } = &config.api_key_source
+        && name.trim().is_empty() {
             errors.push("field 'api_key_source.name' must not be empty when type is env_var".to_string());
         }
         // We do NOT fail validation if the env var is unset.
         // The key might be set in production but not during config validation.
         // Resolution happens at build time; missing key surfaces as a build error.
-    }
 
     if errors.is_empty() {
         Ok(())

@@ -120,7 +120,7 @@ pub fn list_workflow_action_routes(store_root: &Path) -> Result<Vec<WorkflowActi
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" { continue; }
             let json = std::fs::read_to_string(&path)

@@ -8,32 +8,32 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::eval_post_commit_verify::{
-    PostCommitVerificationRecord, PostCommitVerificationStatus,
+    PostCommitVerificationRecord,
     load_latest_verification,
 };
 use crate::eval_proposal::{
-    AutoCommitProposal, AutoCommitProposalStatus,
+    AutoCommitProposal,
     load_latest_proposal,
 };
 use crate::eval_proposal_execution::{
-    AutoCommitExecutionRecord, AutoCommitExecutionStatus,
+    AutoCommitExecutionRecord,
     load_latest_execution,
 };
 use crate::eval_proposal_review::{
-    AutoCommitProposalReview, AutoCommitProposalReviewDecision,
+    AutoCommitProposalReview,
     load_latest_proposal_review,
 };
 use crate::eval_remote_push_execution::{
-    RemotePushExecutionRecord, RemotePushExecutionStatus,
+    RemotePushExecutionRecord,
     load_latest_push_execution,
 };
 use crate::eval_remote_push_proposal::{
-    RemotePushProposal, RemotePushProposalStatus,
-    RemotePushProposalReview, RemotePushProposalReviewDecision,
+    RemotePushProposal,
+    RemotePushProposalReview,
     load_latest_push_proposal, load_latest_push_review,
 };
 use crate::eval_remote_push_readiness::{
-    RemotePushReadinessRecord, RemotePushReadinessStatus,
+    RemotePushReadinessRecord,
     load_latest_readiness,
 };
 
@@ -278,14 +278,13 @@ fn check_chain_warnings(state: &mut GovernanceConsoleState) {
     // Local review → local proposal
     if let (Some(review), Some(proposal)) = (&state.local_review, &state.local_proposal) {
         let linked = review.linked_ids.iter().find(|(k, _)| k == "proposal_id");
-        if let Some((_, rid)) = linked {
-            if rid != &proposal.id {
+        if let Some((_, rid)) = linked
+            && rid != &proposal.id {
                 state.chain_warnings.push(format!(
                     "Local review {} references proposal {} but latest proposal is {}",
                     review.id, rid, proposal.id
                 ));
             }
-        }
     }
 
     // Local execution → proposal + review
@@ -293,74 +292,68 @@ fn check_chain_warnings(state: &mut GovernanceConsoleState) {
         let exec_proposal = exec.linked_ids.iter().find(|(k, _)| k == "proposal_id").map(|(_, v)| v.clone());
         let exec_review = exec.linked_ids.iter().find(|(k, _)| k == "review_id").map(|(_, v)| v.clone());
 
-        if let (Some(ep), Some(proposal)) = (&exec_proposal, &state.local_proposal) {
-            if ep != &proposal.id {
+        if let (Some(ep), Some(proposal)) = (&exec_proposal, &state.local_proposal)
+            && ep != &proposal.id {
                 state.chain_warnings.push(format!(
                     "Local execution {} references proposal {} but latest proposal is {}",
                     exec.id, ep, proposal.id
                 ));
             }
-        }
-        if let (Some(er), Some(review)) = (&exec_review, &state.local_review) {
-            if er != &review.id {
+        if let (Some(er), Some(review)) = (&exec_review, &state.local_review)
+            && er != &review.id {
                 state.chain_warnings.push(format!(
                     "Local execution {} references review {} but latest review is {}",
                     exec.id, er, review.id
                 ));
             }
-        }
     }
 
     // Verification → execution
     if let Some(verify) = &state.post_commit_verification {
         let verify_exec = verify.linked_ids.iter().find(|(k, _)| k == "execution_id").map(|(_, v)| v.clone());
-        if let (Some(ve), Some(exec)) = (&verify_exec, &state.local_execution) {
-            if ve != &exec.id {
+        if let (Some(ve), Some(exec)) = (&verify_exec, &state.local_execution)
+            && ve != &exec.id {
                 state.chain_warnings.push(format!(
                     "Verification {} references execution {} but latest execution is {}",
                     verify.id, ve, exec.id
                 ));
             }
-        }
     }
 
     // Push readiness → verification
     if let Some(readiness) = &state.push_readiness {
         let readiness_verify = readiness.linked_ids.iter().find(|(k, _)| k == "verification_id").map(|(_, v)| v.clone());
-        if let (Some(rv), Some(verify)) = (&readiness_verify, &state.post_commit_verification) {
-            if rv != &verify.id {
+        if let (Some(rv), Some(verify)) = (&readiness_verify, &state.post_commit_verification)
+            && rv != &verify.id {
                 state.chain_warnings.push(format!(
                     "Push readiness {} references verification {} but latest verification is {}",
                     readiness.id, rv, verify.id
                 ));
             }
-        }
     }
 
     // Push proposal → readiness
     if let Some(proposal) = &state.push_proposal {
         let proposal_readiness = proposal.linked_ids.iter().find(|(k, _)| k == "readiness_id").map(|(_, v)| v.clone());
-        if let (Some(pr), Some(readiness)) = (&proposal_readiness, &state.push_readiness) {
-            if pr != &readiness.id {
+        if let (Some(pr), Some(readiness)) = (&proposal_readiness, &state.push_readiness)
+            && pr != &readiness.id {
                 state.chain_warnings.push(format!(
                     "Push proposal {} references readiness {} but latest readiness is {}",
                     proposal.id, pr, readiness.id
                 ));
             }
-        }
     }
 
     // Push review → push proposal
     if let (Some(review), Some(proposal)) = (&state.push_review, &state.push_proposal) {
         let linked = review.linked_ids.iter().find(|(k, _)| k == "proposal_id");
-        if let Some((_, rid)) = linked {
-            if rid != &proposal.id {
+        if let Some((_, rid)) = linked
+            && rid != &proposal.id {
                 state.chain_warnings.push(format!(
                     "Push review {} references proposal {} but latest push proposal is {}",
                     review.id, rid, proposal.id
                 ));
             }
-        }
     }
 
     // Push execution → push proposal + push review
@@ -368,22 +361,20 @@ fn check_chain_warnings(state: &mut GovernanceConsoleState) {
         let exec_proposal = exec.linked_ids.iter().find(|(k, _)| k == "proposal_id").map(|(_, v)| v.clone());
         let exec_review = exec.linked_ids.iter().find(|(k, _)| k == "review_id").map(|(_, v)| v.clone());
 
-        if let (Some(ep), Some(proposal)) = (&exec_proposal, &state.push_proposal) {
-            if ep != &proposal.id {
+        if let (Some(ep), Some(proposal)) = (&exec_proposal, &state.push_proposal)
+            && ep != &proposal.id {
                 state.chain_warnings.push(format!(
                     "Push execution {} references proposal {} but latest push proposal is {}",
                     exec.id, ep, proposal.id
                 ));
             }
-        }
-        if let (Some(er), Some(review)) = (&exec_review, &state.push_review) {
-            if er != &review.id {
+        if let (Some(er), Some(review)) = (&exec_review, &state.push_review)
+            && er != &review.id {
                 state.chain_warnings.push(format!(
                     "Push execution {} references review {} but latest push review is {}",
                     exec.id, er, review.id
                 ));
             }
-        }
     }
 }
 

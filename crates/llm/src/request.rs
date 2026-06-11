@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(req.target.model, restored.target.model);
         assert_eq!(1, restored.messages.len());
         // api_key should be skipped in serialization
-        assert!(json.contains("\"api_key\"") == false || !json.contains("sk-test"));
+        assert!(!json.contains("\"api_key\"") || !json.contains("sk-test"));
     }
 
     #[test]

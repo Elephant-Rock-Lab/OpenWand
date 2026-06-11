@@ -7,10 +7,9 @@
 use crate::workflow_external_attestation::*;
 use crate::workflow_manual_result_review::*;
 use crate::workflow_verification_readiness::{
-    VerificationReadinessPredicate, VerificationReadinessPredicateResult,
+    VerificationReadinessPredicate,
     VerificationReadinessRequest, VerificationReadinessRecord,
-    VerificationReadinessStatus, VerificationReadinessTargetKind,
-    build_readiness_record, compute_readiness_id, p,
+    build_readiness_record, p,
 };
 
 /// Evaluate full verification readiness for a manual result with review context.
@@ -43,7 +42,7 @@ pub fn evaluate_manual_result_readiness(
     predicates.push(p(VerificationReadinessPredicate::ManualResultLatestReviewExists,
         review_exists, if review_exists { "Review found" } else { "No review" }));
 
-    let review_accepted = latest_review.map_or(false, |r| {
+    let review_accepted = latest_review.is_some_and(|r| {
         matches!(r.decision, WorkflowManualResultReviewDecision::Accepted)
     });
     predicates.push(p(VerificationReadinessPredicate::ManualResultLatestReviewAccepted,
@@ -64,7 +63,7 @@ pub fn evaluate_attestation_readiness(
     predicates.push(p(VerificationReadinessPredicate::TargetWorkflowExecutionIdMatchesRequest,
         wfx_match, if wfx_match { "Match" } else { "Mismatch" }));
     let att_hash = blake3::hash(serde_json::to_string(attestation).unwrap_or_default().as_bytes());
-    let hash_match = &att_hash.to_hex()[..16] == &request.expected_target_hash[..16.min(request.expected_target_hash.len())];
+    let hash_match = att_hash.to_hex()[..16] == request.expected_target_hash[..16.min(request.expected_target_hash.len())];
     predicates.push(p(VerificationReadinessPredicate::TargetHashMatchesRequest,
         hash_match, if hash_match { "Match" } else { "Hash mismatch" }));
     predicates.push(p(VerificationReadinessPredicate::TargetStatusEligibleForVerificationReadiness,

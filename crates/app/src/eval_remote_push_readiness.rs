@@ -453,14 +453,14 @@ impl RemotePushReadinessBackend for LocalPushReadinessBackend {
         let current_head = Self::run_git_readonly(repo, &["rev-parse", "HEAD"])?;
 
         // Patch 2: Check remote URL exists
-        let remote_exists = Self::check_remote_url_exists(repo, target_remote)?;
+        let _remote_exists = Self::check_remote_url_exists(repo, target_remote)?;
 
         let upstream_ref = Self::run_git_readonly(
             repo,
             &["config", "--get", &format!("branch.{}.remote", target_branch)],
         ).ok();
 
-        let merge_ref = Self::run_git_readonly(
+        let _merge_ref = Self::run_git_readonly(
             repo,
             &["config", "--get", &format!("branch.{}.merge", target_branch)],
         ).ok();
@@ -486,18 +486,14 @@ impl RemotePushReadinessBackend for LocalPushReadinessBackend {
         };
 
         // Divergence check
-        let diverged = if remote_tracking_ref.is_some() && ahead_count > 0 && behind_count > 0 {
-            true
-        } else {
-            false
-        };
+        let diverged = remote_tracking_ref.is_some() && ahead_count > 0 && behind_count > 0;
 
         // Worktree/index clean
         let porcelain = Self::run_git_readonly(repo, &["status", "--porcelain"]).unwrap_or_default();
         let worktree_clean = porcelain.is_empty();
         let index_clean = !porcelain.lines().any(|line| {
             let bytes = line.as_bytes();
-            (bytes.len() > 0 && (bytes[0] == b'M' || bytes[0] == b'A' || bytes[0] == b'D' || bytes[0] == b'R'))
+            (!bytes.is_empty() && (bytes[0] == b'M' || bytes[0] == b'A' || bytes[0] == b'D' || bytes[0] == b'R'))
                 || (bytes.len() > 1 && bytes[1] != b' ')
         });
 
@@ -635,7 +631,7 @@ fn wildcard_matches(pattern: &str, value: &str) -> bool {
 
 pub fn evaluate_push_readiness_predicates(
     verification: Option<&PostCommitVerificationRecord>,
-    commit_hash_from_verification: Option<&str>,
+    _commit_hash_from_verification: Option<&str>,
     current_head: &str,
     worktree_clean: bool,
     index_clean: bool,

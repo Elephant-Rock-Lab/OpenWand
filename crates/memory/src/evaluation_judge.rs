@@ -4,14 +4,11 @@
 //! Pure string/claim matching against expectations.
 
 use crate::evaluation::{
-    ExpectedBucketAssignment, ExpectedProvenanceAssertion,
-    ExpectedScenarioOutcome, ExpectedTraceLineageAssertion,
-    MemoryEvaluationCategory, MemoryEvaluationFailure, MemoryEvaluationExpectations,
+    ExpectedScenarioOutcome, MemoryEvaluationFailure,
     MemoryEvaluationReport, MemoryEvaluationScenario,
-    PromptInputEvaluationSnapshot, RepoConsistencySummarySnapshot,
-    ScenarioExecutionMode,
+    PromptInputEvaluationSnapshot,
 };
-use crate::provenance_hydration::{HydratedMemoryClaim, MemoryTrustBucket};
+use crate::provenance_hydration::HydratedMemoryClaim;
 
 pub struct MemoryEvaluationJudge;
 
@@ -58,7 +55,7 @@ impl MemoryEvaluationJudge {
         }
 
         // ── Prompt exclusion checks ───────────────────────────────────────
-        let excluded_texts: Vec<&str> = snapshot
+        let _excluded_texts: Vec<&str> = snapshot
             .excluded_claims
             .iter()
             .map(|c| c.claim_text.as_str())
@@ -98,7 +95,7 @@ impl MemoryEvaluationJudge {
         // This is a simple heuristic: look for phrases from the model output that
         // don't match any retrieved claim text.
         // For deterministic evaluation, we check against all hydrated claims.
-        let all_known_claims: Vec<&str> = snapshot
+        let _all_known_claims: Vec<&str> = snapshot
             .retrieved_claims
             .iter()
             .map(|c| c.claim_text.as_str())
@@ -176,7 +173,7 @@ impl MemoryEvaluationJudge {
         }
 
         let expected_passed = matches!(scenario.expected_outcome, ExpectedScenarioOutcome::Pass);
-        let passed = expected_passed == failures.is_empty()
+        let _passed = expected_passed == failures.is_empty()
             || (!expected_passed && !failures.is_empty())
             || (expected_passed && failures.is_empty());
 
@@ -199,7 +196,7 @@ impl MemoryEvaluationJudge {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-fn claim_matches_any<'a>(claim: &str, texts: &[&'a str]) -> bool {
+fn claim_matches_any(claim: &str, texts: &[&str]) -> bool {
     texts.iter().any(|t| texts_match(claim, t))
 }
 
@@ -243,7 +240,6 @@ mod tests {
         ProvenanceHydrationStatus,
     };
     use crate::repo_consistency::ConsistencySeverity;
-    use crate::trace_relation_hydration::ClaimTraceLineage;
 
     fn make_claim(text: &str, bucket: MemoryTrustBucket) -> HydratedMemoryClaim {
         HydratedMemoryClaim {

@@ -3,7 +3,7 @@
 //! Resolves WorkflowToolIntent.capability to descriptive capability categories.
 //! Resolution never produces a tool call.
 
-use crate::workflow_proposal::{is_valid_capability_category, FORBIDDEN_TOOL_NAMES};
+use crate::workflow_proposal::is_valid_capability_category;
 use crate::workflow_readiness::{ToolIntentResolutionSnapshot, ToolIntentResolutionStatus};
 
 /// Known descriptive capability categories.

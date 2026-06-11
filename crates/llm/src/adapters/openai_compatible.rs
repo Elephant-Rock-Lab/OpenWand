@@ -188,6 +188,12 @@ impl OpenAiCompatibleClient {
     }
 }
 
+impl Default for OpenAiCompatibleClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl LlmClient for OpenAiCompatibleClient {
     async fn chat_stream(&self, request: LlmRequest) -> Result<LlmStream, LlmError> {
@@ -240,11 +246,10 @@ impl LlmClient for OpenAiCompatibleClient {
 
         while let Some(delta) = stream.next().await {
             match delta? {
-                LlmDelta::Text { delta } => {
-                    if !delta.is_empty() {
+                LlmDelta::Text { delta }
+                    if !delta.is_empty() => {
                         content.push(LlmContent::Text(delta));
                     }
-                }
                 LlmDelta::ToolCallComplete { id, name, arguments } => {
                     content.push(LlmContent::ToolCall {
                         id,
@@ -370,13 +375,12 @@ fn parse_sse_stream(
                                 if let Some(choice) = chunk.choices.first() {
                                     if let Some(ref delta) = choice.delta {
                                         // Text content
-                                        if let Some(ref content) = delta.content {
-                                            if !content.is_empty() {
+                                        if let Some(ref content) = delta.content
+                                            && !content.is_empty() {
                                                 deltas.push(Ok(LlmDelta::Text {
                                                     delta: content.clone(),
                                                 }));
                                             }
-                                        }
 
                                         // Tool calls — buffer start/args, emit on flush
                                         if let Some(ref tool_calls) = delta.tool_calls {
@@ -391,14 +395,13 @@ fn parse_sse_stream(
                                                                 Some(name.clone()),
                                                             );
                                                         }
-                                                        if let Some(ref args) = func.arguments {
-                                                            if !args.is_empty() {
+                                                        if let Some(ref args) = func.arguments
+                                                            && !args.is_empty() {
                                                                 let _ = locked_buf.handle_args_delta(
                                                                     id.clone(),
                                                                     args.clone(),
                                                                 );
                                                             }
-                                                        }
                                                     }
                                                 }
                                             }
@@ -456,8 +459,8 @@ fn parse_sse_stream(
                                     deltas.push(Ok(LlmDelta::Done {
                                         stop_reason: LlmStopReason::Stop,
                                         usage: Some(TokenUsageSnapshot {
-                                            input: u.prompt_tokens as u64,
-                                            output: u.completion_tokens as u64,
+                                            input: u.prompt_tokens,
+                                            output: u.completion_tokens,
                                             reasoning: None,
                                             cache_read: None,
                                             cache_write: None,

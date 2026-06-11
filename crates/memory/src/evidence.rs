@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 
 /// What kind of evidence a memory record represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EvidenceKind {
     /// Existing normal memory claim — passed deterministic acceptance rules.
+    #[default]
     AcceptedClaim,
     /// Explicit user instruction or constraint — highest authority.
     UserStatedClaim,
@@ -25,11 +27,6 @@ pub enum EvidenceKind {
     ConflictingClaim,
 }
 
-impl Default for EvidenceKind {
-    fn default() -> Self {
-        Self::AcceptedClaim
-    }
-}
 
 impl EvidenceKind {
     /// Whether this evidence kind can be treated as accepted project state.

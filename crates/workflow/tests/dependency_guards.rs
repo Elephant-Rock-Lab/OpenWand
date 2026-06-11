@@ -17,7 +17,7 @@ fn read_workflow_sources() -> String {
         for entry in entries {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "rs") {
+            if path.extension().is_some_and(|e| e == "rs") {
                 all_source.push_str(&std::fs::read_to_string(&path).unwrap());
                 all_source.push('\n');
             }
@@ -150,7 +150,7 @@ fn task_plan_step_dto_has_no_executable_fields() {
 
 #[test]
 fn task_plan_serialized_json_contains_no_executable_fields() {
-    use openwand_workflow::plan::*;
+    
     use openwand_workflow::builder::build_task_plan;
     use openwand_workflow::context::TaskPlanInput;
 

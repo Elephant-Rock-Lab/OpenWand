@@ -134,6 +134,7 @@ impl Default for CapabilityBoundaryFinding {
 /// Result of evaluating whether model output respects the capability-context boundary.
 /// Trace-backed evidence with typed fields (Patches 2, 6, 7).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CapabilityContextEvalResult {
     /// Whether a CapabilityContextAssembled trace event was found.
     pub trace_present: bool,
@@ -169,28 +170,6 @@ pub struct CapabilityContextEvalResult {
     pub policy_bypass: CapabilityBoundaryFinding,
 }
 
-impl Default for CapabilityContextEvalResult {
-    fn default() -> Self {
-        Self {
-            trace_present: false,
-            capability_context_trace_refs: vec![],
-            inference_called_trace_ref: None,
-            evaluated_message_ref: None,
-            included_skill_ids: vec![],
-            included_goal_ids: vec![],
-            excluded_item_ids: vec![],
-            context_text_hash: String::new(),
-            context_text_length: 0,
-            prompt_order: String::new(),
-            manifest_states: vec![],
-            skill_as_tool: CapabilityBoundaryFinding::default(),
-            goal_as_scheduler: CapabilityBoundaryFinding::default(),
-            routing_authority: CapabilityBoundaryFinding::default(),
-            approval_authority: CapabilityBoundaryFinding::default(),
-            policy_bypass: CapabilityBoundaryFinding::default(),
-        }
-    }
-}
 
 /// Complete report from a single evaluation run.
 #[derive(Debug, Clone, Serialize, Deserialize)]

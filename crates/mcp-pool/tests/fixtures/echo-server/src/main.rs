@@ -10,7 +10,6 @@ use rmcp::{
     ServiceExt,
 };
 use serde::{Deserialize, Serialize};
-use rmcp::schemars::JsonSchema;
 
 struct EchoServer;
 

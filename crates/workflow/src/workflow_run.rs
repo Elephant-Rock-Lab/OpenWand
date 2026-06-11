@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::plan::TaskPlanId;
-use crate::plan_review::TaskPlanReviewId;
 use crate::workflow_proposal::{WorkflowProposalId, WorkflowStageKind};
 use crate::workflow_proposal_review::WorkflowProposalReviewId;
 use crate::workflow_readiness::WorkflowReadinessId;

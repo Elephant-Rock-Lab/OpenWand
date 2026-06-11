@@ -1,7 +1,6 @@
 //! Outcome predicate gate — deterministic evaluation of approval resolution readiness.
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 
 use crate::workflow_action_outcome::*;
 use crate::workflow_action_outcome_validation::{action_outcome_id_for, validate_resolution_rationale};
@@ -41,7 +40,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 2. WorkflowRunHashMatchesRequest
-    let run_hash_ok = run.map_or(false, |_| !request.expected_workflow_run_hash.is_empty());
+    let run_hash_ok = run.is_some_and(|_| !request.expected_workflow_run_hash.is_empty());
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::WorkflowRunHashMatchesRequest,
         passed: run_hash_ok,
@@ -57,7 +56,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 4. RouteHashMatchesRequest
-    let route_hash_ok = route.map_or(false, |_| !request.expected_route_hash.is_empty());
+    let route_hash_ok = route.is_some_and(|_| !request.expected_route_hash.is_empty());
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteHashMatchesRequest,
         passed: route_hash_ok,
@@ -65,7 +64,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 5. RouteIsSuspendedForApproval
-    let route_suspended = route.map_or(false, |r| r.status == WorkflowActionRouteStatus::SuspendedForApproval);
+    let route_suspended = route.is_some_and(|r| r.status == WorkflowActionRouteStatus::SuspendedForApproval);
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteIsSuspendedForApproval,
         passed: route_suspended,
@@ -73,7 +72,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 6. RouteLinksSameWorkflowRun
-    let run_match = route.map_or(false, |r| r.workflow_execution_id == request.workflow_execution_id);
+    let run_match = route.is_some_and(|r| r.workflow_execution_id == request.workflow_execution_id);
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteLinksSameWorkflowRun,
         passed: run_match,
@@ -81,7 +80,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 7. RouteLinksSameStage
-    let stage_match = route.map_or(false, |r| r.stage_id == request.stage_id);
+    let stage_match = route.is_some_and(|r| r.stage_id == request.stage_id);
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteLinksSameStage,
         passed: stage_match,
@@ -89,7 +88,7 @@ pub fn evaluate_action_outcome(
     });
 
     // 8. RouteLinksSameActionRequest
-    let ar_match = route.map_or(false, |r| r.action_request_id == request.action_request_id);
+    let ar_match = route.is_some_and(|r| r.action_request_id == request.action_request_id);
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteLinksSameActionRequest,
         passed: ar_match,
@@ -97,8 +96,8 @@ pub fn evaluate_action_outcome(
     });
 
     // 9. RouteLinksSameSession
-    let sess_match = route.map_or(false, |r| {
-        r.session_route.as_ref().map_or(false, |sr| sr.session_id == request.session_id)
+    let sess_match = route.is_some_and(|r| {
+        r.session_route.as_ref().is_some_and(|sr| sr.session_id == request.session_id)
     });
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteLinksSameSession,
@@ -107,8 +106,8 @@ pub fn evaluate_action_outcome(
     });
 
     // 10. RouteHasExactlyOnePendingApproval (Patch 4)
-    let has_one_approval = route.map_or(false, |r| {
-        r.session_route.as_ref().map_or(false, |sr| sr.pending_approval_id.is_some())
+    let has_one_approval = route.is_some_and(|r| {
+        r.session_route.as_ref().is_some_and(|sr| sr.pending_approval_id.is_some())
     });
     predicates.push(WorkflowActionOutcomePredicateResult {
         predicate: WorkflowActionOutcomePredicate::RouteHasExactlyOnePendingApproval,
@@ -117,9 +116,9 @@ pub fn evaluate_action_outcome(
     });
 
     // 11. PendingApprovalIdMatchesRoute
-    let approval_match = route.map_or(false, |r| {
-        r.session_route.as_ref().map_or(false, |sr| {
-            sr.pending_approval_id.as_ref().map_or(false, |id| *id == request.pending_approval_id)
+    let approval_match = route.is_some_and(|r| {
+        r.session_route.as_ref().is_some_and(|sr| {
+            sr.pending_approval_id.as_ref().is_some_and(|id| *id == request.pending_approval_id)
         })
     });
     predicates.push(WorkflowActionOutcomePredicateResult {
@@ -130,8 +129,8 @@ pub fn evaluate_action_outcome(
 
     // 12. ToolCallIdMatchesWhenPresent
     let tc_match = if let Some(ref req_tc) = request.tool_call_id {
-        route.map_or(false, |r| {
-            r.session_route.as_ref().map_or(false, |sr| sr.tool_call_id.as_ref() == Some(req_tc))
+        route.is_some_and(|r| {
+            r.session_route.as_ref().is_some_and(|sr| sr.tool_call_id.as_ref() == Some(req_tc))
         })
     } else {
         true // No tool call ID required

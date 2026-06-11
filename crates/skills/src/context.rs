@@ -4,7 +4,7 @@
 //! summaries that carry no executable fields, no function pointers,
 //! no tool handles, no command strings.
 
-use crate::manifest::{SkillContextKind, SkillDefinition};
+use crate::manifest::SkillDefinition;
 use crate::registry::SkillRegistry;
 
 /// Session-safe summary of a skill. No structured executable fields.
@@ -54,7 +54,7 @@ pub fn build_skill_context_summaries(registry: &SkillRegistry) -> Vec<SkillConte
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{SkillDefinition, SkillId};
+    use crate::manifest::{SkillDefinition, SkillId, SkillContextKind};
     use crate::registry::SkillValidationReport;
 
     fn test_registry() -> SkillRegistry {

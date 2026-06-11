@@ -2,14 +2,14 @@
 //!
 //! Evaluation-only. Creates isolated stores. Does not share state with runtime.
 
-use crate::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
+use crate::memory_coordinator::MemoryCoordinator;
 use crate::memory_evaluation_model::run_mock_model;
 use openwand_core::events::{SessionEvent, OpenWandTraceEvent};
 use openwand_core::mode::InteractionMode;
 use openwand_memory::evaluation::{
     EvaluationModelConfig, MemoryEvaluationReport, MemoryEvaluationScenario,
-    PromptInputEvaluationSnapshot, RepoConsistencySummarySnapshot,
-    ScenarioExecutionMode, SeedResolutionMaps,
+    PromptInputEvaluationSnapshot, RepoConsistencySummarySnapshot, SeedResolutionMaps,
+    ScenarioExecutionMode,
 };
 use openwand_memory::provenance_hydration::{HydratedMemoryClaim, MemoryTrustBucket};
 use openwand_memory::evaluation_judge::MemoryEvaluationJudge;
@@ -46,6 +46,12 @@ pub struct MemoryEvaluationHarness {
     trace_store: Arc<InMemoryTraceStore<StoredEvent>>,
 }
 
+impl Default for MemoryEvaluationHarness {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryEvaluationHarness {
     pub fn new() -> Self {
         Self {
@@ -78,7 +84,7 @@ impl MemoryEvaluationHarness {
         working_dir: &Path,
         config: &crate::memory_coordinator::PromptInputProductionConfig,
     ) -> MemoryEvaluationReport {
-        let maps = self.seed_all(scenario).await;
+        let _maps = self.seed_all(scenario).await;
 
         // 2. Create coordinator with isolated stores
         let coordinator = MemoryCoordinator::new(
@@ -217,7 +223,7 @@ impl MemoryEvaluationHarness {
 
         // Phase 2: Seed trace relations (resolves labels to TraceIds)
         for rel in &scenario.seed_relations {
-            let from_id = match maps.trace_labels.get(&rel.from_label) {
+            let _from_id = match maps.trace_labels.get(&rel.from_label) {
                 Some(id) => openwand_trace::ids::TraceId(id.clone()),
                 None => continue,
             };
@@ -236,7 +242,7 @@ impl MemoryEvaluationHarness {
                 "CausedBy" => TraceRelationKind::CausedBy,
                 "Reverts" => TraceRelationKind::Reverts,
                 "References" => TraceRelationKind::References,
-                other => continue, // Unknown kinds skipped for eval seeding
+                _other => continue, // Unknown kinds skipped for eval seeding
             };
             // Append a minimal entry with the relation pointing to the target
             let event = StoredEvent(OpenWandTraceEvent::Session(SessionEvent::Started {
@@ -293,18 +299,17 @@ impl MemoryEvaluationHarness {
                 confidence: seed.confidence,
                 source_episode_ids: vec![format!("eval_ep_{}", seed.claim.replace(' ', "_"))],
             };
-            if let Ok(Some(record)) = self.memory_store.accept_candidate(candidate).await {
-                if let Some(ref label) = seed.label {
+            if let Ok(Some(record)) = self.memory_store.accept_candidate(candidate).await
+                && let Some(ref label) = seed.label {
                     maps.memory_labels.insert(label.clone(), record.record_id.clone());
                 }
-            }
         }
 
         // Phase 4: Supersession (resolve labels to record IDs)
         for seed in &scenario.seed_memory {
             if let Some(ref superseded_label) = seed.superseded_by_label {
                 // This seed supersedes the one with label = superseded_label
-                if let (Some(new_record_id), Some(old_record_id)) = (
+                if let (Some(_new_record_id), Some(old_record_id)) = (
                     seed.label.as_ref().and_then(|l| maps.memory_labels.get(l)),
                     maps.memory_labels.get(superseded_label),
                 ) {

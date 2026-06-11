@@ -4,7 +4,6 @@
 //! Unsupported claims become Unverifiable, not hallucinated failures.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// A parsed repo claim pattern.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

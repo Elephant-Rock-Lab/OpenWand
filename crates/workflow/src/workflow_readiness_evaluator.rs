@@ -6,8 +6,8 @@
 
 use chrono::Utc;
 
-use crate::plan::{TaskPlan, TaskPlanStatus};
-use crate::plan_review::{TaskPlanReview, TaskPlanReviewDecision, TaskPlanReviewId};
+use crate::plan::TaskPlan;
+use crate::plan_review::{TaskPlanReview, TaskPlanReviewDecision};
 use crate::workflow_proposal::{WorkflowProposal, WorkflowProposalStatus};
 use crate::workflow_proposal_review::{WorkflowProposalReview, WorkflowProposalReviewDecision};
 use crate::workflow_readiness::*;
@@ -340,7 +340,7 @@ pub fn evaluate_workflow_readiness(
         .find(|r| r.proposal_id == request.proposal_id
             && r.review_id == request.review_id);
     let idempotency_ok = match matching_existing {
-        Some(existing) => {
+        Some(_existing) => {
             // Same key → ok (returns existing), different key + Ready → blocked
             true // We handle this at persistence layer
         }
@@ -426,7 +426,7 @@ pub fn evaluate_workflow_readiness(
         .map(|p| p.source_task_plan_id.clone())
         .unwrap_or_else(|| crate::plan::TaskPlanId("unknown".into()));
     let source_review_id = proposal
-        .and_then(|p| {
+        .and_then(|_p| {
             context
                 .source_task_plan_review
                 .as_ref()
@@ -469,9 +469,7 @@ mod tests {
     use super::*;
     use crate::builder::build_task_plan;
     use crate::context::TaskPlanInput;
-    use crate::plan::TaskPlanId;
     use crate::plan_review::{TaskPlanReview, task_review_id_for};
-    use crate::workflow_proposal::WorkflowProposalId;
     use crate::workflow_proposal_builder::{WorkflowProposalInput, build_workflow_proposal};
     use crate::workflow_proposal_review::{
         WorkflowProposalFeedback, WorkflowProposalReview, WorkflowProposalReviewDecision,

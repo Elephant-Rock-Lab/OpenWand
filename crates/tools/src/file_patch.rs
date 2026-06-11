@@ -167,7 +167,6 @@ async fn file_patch_apply(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::ToolExecutor;
 
     fn test_context(dir: &tempfile::TempDir) -> ToolCallContext {
         ToolCallContext {

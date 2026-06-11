@@ -3,7 +3,6 @@
 //! Evaluates all readiness predicates for an accepted manual result review.
 //! No LLM, no tool calls, no provider invocation, no shell/git, no reconciliation.
 
-use chrono::Utc;
 
 use crate::workflow_manual_result::WorkflowManualResult;
 use crate::workflow_manual_result_review::WorkflowManualResultReview;
@@ -40,56 +39,56 @@ pub fn evaluate_manual_result_reconciliation_readiness(
         review.is_some(), if review.is_some() { "Found" } else { "Missing" }));
 
     // 3. ReviewDecisionIsAccepted
-    let accepted = review.map_or(false, |r| {
+    let accepted = review.is_some_and(|r| {
         matches!(r.decision, crate::workflow_manual_result_review::WorkflowManualResultReviewDecision::Accepted)
     });
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ReviewDecisionIsAccepted,
         accepted, if accepted { "Accepted" } else { "Not accepted" }));
 
     // 4. ManualResultWasReportedByOperator
-    let reported = mr.map_or(false, |m| m.reported_by_operator);
+    let reported = mr.is_some_and(|m| m.reported_by_operator);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ManualResultWasReportedByOperator,
         reported, if reported { "Reported" } else { "Not reported" }));
 
     // 5. ManualResultNotVerifiedByOpenwand
-    let not_verified = mr.map_or(false, |m| !m.verified_by_openwand);
+    let not_verified = mr.is_some_and(|m| !m.verified_by_openwand);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ManualResultNotVerifiedByOpenwand,
         not_verified, if not_verified { "Not verified" } else { "Claims verified" }));
 
     // 6. ReviewAcceptsReportedEvidenceOnly
-    let evidence_only = review.map_or(false, |r| r.acceptance_snapshot.accepts_reported_evidence
+    let evidence_only = review.is_some_and(|r| r.acceptance_snapshot.accepts_reported_evidence
         && !r.acceptance_snapshot.verifies_external_state);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ReviewAcceptsReportedEvidenceOnly,
         evidence_only, if evidence_only { "Reported evidence only" } else { "Claims more than reported evidence" }));
 
     // Patch 1: 7-12. Hash matching predicates
-    let review_hash_ok = review.map_or(false, |r| {
+    let review_hash_ok = review.is_some_and(|r| {
         let actual = blake3::hash(serde_json::to_string(r).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_manual_result_review_hash
     });
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ManualResultReviewHashMatchesRequest,
         review_hash_ok || review.is_none(), if review_hash_ok { "Match" } else { "Mismatch" }));
 
-    let mr_hash_ok = mr.map_or(false, |m| {
+    let mr_hash_ok = mr.is_some_and(|m| {
         let actual = blake3::hash(serde_json::to_string(m).unwrap_or_default().as_bytes()).to_hex().to_string();
         actual == request.expected_manual_result_hash
     });
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::ManualResultHashMatchesRequest,
         mr_hash_ok || mr.is_none(), if mr_hash_ok { "Match" } else { "Mismatch" }));
 
-    let cr_hash_ok = mr.map_or(false, |m| m.command_review_hash == request.expected_command_review_hash);
+    let cr_hash_ok = mr.is_some_and(|m| m.command_review_hash == request.expected_command_review_hash);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::CommandReviewHashMatchesRequest,
         cr_hash_ok || mr.is_none(), if cr_hash_ok { "Match" } else { "Mismatch" }));
 
-    let cc_hash_ok = mr.map_or(false, |m| m.command_composer_hash == request.expected_command_composer_hash);
+    let cc_hash_ok = mr.is_some_and(|m| m.command_composer_hash == request.expected_command_composer_hash);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::CommandComposerHashMatchesRequest,
         cc_hash_ok || mr.is_none(), if cc_hash_ok { "Match" } else { "Mismatch" }));
 
-    let cd_hash_ok = mr.map_or(false, |m| m.command_descriptor_hash == request.expected_command_descriptor_hash);
+    let cd_hash_ok = mr.is_some_and(|m| m.command_descriptor_hash == request.expected_command_descriptor_hash);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::CommandDescriptorHashMatchesRequest,
         cd_hash_ok || mr.is_none(), if cd_hash_ok { "Match" } else { "Mismatch" }));
 
-    let lc_hash_ok = mr.map_or(false, |m| m.loop_controller_hash == request.expected_loop_controller_hash);
+    let lc_hash_ok = mr.is_some_and(|m| m.loop_controller_hash == request.expected_loop_controller_hash);
     predicates.push(pr(WorkflowManualResultReconciliationReadinessPredicate::LoopControllerHashMatchesRequest,
         lc_hash_ok || mr.is_none(), if lc_hash_ok { "Match" } else { "Mismatch" }));
 

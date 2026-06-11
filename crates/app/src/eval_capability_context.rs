@@ -10,19 +10,15 @@
 //!
 //! This module runs in default `cargo test` (not behind `real-model-eval`).
 
-use openwand_core::events::{
-    CapabilityManifestAuditState, CapabilityPromptOrderPosition, InferenceEvent,
-    TraceHashAlgorithm,
-};
 use openwand_goals::manifest::{GoalDefinition, GoalId, GoalStatus};
 use openwand_goals::registry::{GoalRegistry, GoalValidationReport};
 use openwand_skills::manifest::{SkillContextKind, SkillDefinition, SkillId};
+use openwand_core::events::{CapabilityPromptOrderPosition, CapabilityManifestAuditState, TraceHashAlgorithm, InferenceEvent};
 use openwand_skills::registry::{SkillRegistry, SkillValidationReport};
 
 use crate::session_capability_prompt;
 use crate::ui::skills_goals_state::{
-    self, build_capability_preview, build_readiness_report, CapabilityPreviewMode,
-    SkillGoalManifestState,
+    self, build_readiness_report, build_capability_preview, CapabilityPreviewMode,
 };
 
 // ── Fixture matrix (Patch 4) ────────────────────────────────────────────

@@ -4,7 +4,7 @@
 //! This is the composition boundary where store types become UI types.
 
 use crate::ui::dto::{
-    CreateSessionRequest, UiMessageRole, UiSessionSummary, UiSessionView,
+    CreateSessionRequest, UiSessionSummary, UiSessionView,
 };
 use crate::ui::replay::{self, UiTimelineItem};
 use crate::ui::run_bridge;

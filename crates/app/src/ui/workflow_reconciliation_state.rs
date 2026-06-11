@@ -1,7 +1,6 @@
 //! UI workflow reconciliation state — read-only display helpers.
 
 use openwand_workflow::workflow_reconciliation::*;
-use openwand_workflow::workflow_run::WorkflowStageRunStatus;
 
 #[derive(Debug, Clone)]
 pub struct WorkflowReconciliationSummaryRow { pub reconciliation_id: String, pub status: String, pub decision: String }
@@ -75,7 +74,7 @@ pub fn workflow_lifecycle_event_lines(progression: &WorkflowStageProgression) ->
 mod tests {
     use super::*;
     use openwand_workflow::workflow_action_outcome::WorkflowActionOutcomeStatus;
-    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowStageLifecycleEvent, WorkflowStageLifecycleKind, WorkflowStageRun};
+    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowStageLifecycleEvent, WorkflowStageLifecycleKind, WorkflowStageRun, WorkflowStageRunStatus};
     use openwand_workflow::workflow_action_route::WorkflowActionRouteId;
     use openwand_workflow::workflow_action_outcome::WorkflowActionOutcomeId;
     use openwand_workflow::workflow_proposal::WorkflowStageKind;

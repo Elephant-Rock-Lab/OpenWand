@@ -23,7 +23,7 @@ use crate::eval_proposal_execution::AutoCommitExecutionId;
 use crate::eval_proposal_review::AutoCommitProposalReviewId;
 use crate::eval_remote_push_readiness::{
     RemotePushReadinessId, RemotePushReadinessRecord, RemotePushReadinessStatus,
-    RemotePushReadinessDecision, LocalBranchPushSnapshot, RemoteTrackingSnapshot,
+    RemotePushReadinessDecision,
 };
 
 // ── Proposal ID ────────────────────────────────────────────────────────────

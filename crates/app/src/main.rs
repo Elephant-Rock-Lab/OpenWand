@@ -4,19 +4,12 @@
 
 use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
-use openwand_app::memory_coordinator::{MemoryCoordinator, PromptInputProductionConfig};
 use openwand_app::session_runtime::build_session_runtime;
-use openwand_app::session_runtime::build_write_policy;
-use openwand_core::SessionId;
-use openwand_llm::LlmClient;
-use openwand_memory::{MemoryExtractor, MemoryReadStore, MemoryStore, SqliteMemoryStore};
-use openwand_policy::PolicyEngine;
+use openwand_memory::MemoryExtractor;
 use openwand_session::config::{RunConfig, RunStopReason, RunSummary};
 use openwand_session::message::MessageContent;
-use openwand_session::runner::{ApprovalDecision, SessionRunner};
+use openwand_session::runner::ApprovalDecision;
 use openwand_store::StoredEvent;
-use openwand_tools::executor::ToolExecutor;
-use openwand_trace::TraceStore;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
@@ -1653,7 +1646,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 );
 
                 // Print comparison summary
-                if let Some(bt) = comparison.score_delta.baseline_total {
+                if let Some(_bt) = comparison.score_delta.baseline_total {
                     let delta = comparison.score_delta.delta.unwrap_or(0);
                     let sign = if delta >= 0 { "+" } else { "" };
                     println!("  vs Baseline: {} {} ({:?})", sign, delta,
@@ -1724,7 +1717,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 println!();
                 println!("Dimensions:");
                 for dd in &comparison.dimension_deltas {
-                    if let Some(bs) = dd.baseline_score {
+                    if let Some(_bs) = dd.baseline_score {
                         let delta = dd.delta.unwrap_or(0);
                         let sign = if delta >= 0 { "+" } else { "" };
                         let status = if delta < 0 { "⚠" } else if delta > 0 { "✓" } else { "=" };
@@ -2586,7 +2579,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 AutoCommitCommands::PushReadiness { command } => {
                     use openwand_app::eval_remote_push_readiness::*;
                     use openwand_app::eval_post_commit_verify::*;
-                    use openwand_app::eval_proposal_execution::AutoCommitExecutionId;
+                    
 
                     match command {
                         PushReadinessCommands::Evaluate { verification_id, remote, branch, idempotency_key, output_dir, json } => {
@@ -3207,7 +3200,7 @@ fn cmd_workflow_proposal(cmd: WorkflowProposalCommands) -> Result<()> {
     use openwand_app::task_planning::*;
     use openwand_app::workflow_proposal::*;
     use openwand_workflow::plan::TaskPlanId;
-    use openwand_workflow::plan_review::{TaskPlanReviewDecision, task_review_id_for};
+    
     use openwand_workflow::workflow_proposal::WorkflowProposalId;
     use openwand_workflow::workflow_proposal_builder::{WorkflowProposalInput, build_workflow_proposal};
     use openwand_workflow::workflow_proposal_review::{
@@ -3616,8 +3609,8 @@ fn cmd_workflow_execution(cmd: WorkflowExecutionCommands) -> Result<()> {
     use openwand_workflow::workflow_proposal::WorkflowProposalId;
     use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
     use openwand_workflow::workflow_readiness::WorkflowReadinessId;
-    use openwand_workflow::workflow_readiness::WorkflowEnvironmentSnapshot;
-    use openwand_workflow::workflow_run::{WorkflowExecutionRequest, WorkflowRunStatus};
+    
+    use openwand_workflow::workflow_run::WorkflowExecutionRequest;
     use openwand_workflow::workflow_execution_gate::{WorkflowExecutionContext, evaluate_workflow_execution};
     use chrono::Utc;
 
@@ -3671,14 +3664,13 @@ fn cmd_workflow_execution(cmd: WorkflowExecutionCommands) -> Result<()> {
             };
             let mut record = evaluate_workflow_execution(&request, &context);
             // Advance stages through lifecycle
-            if record.status == openwand_workflow::workflow_run::WorkflowRunStatus::Suspended {
-                if let Some(ref proposal) = context.proposal {
+            if record.status == openwand_workflow::workflow_run::WorkflowRunStatus::Suspended
+                && let Some(ref proposal) = context.proposal {
                     let (stages, events, action_requests) = openwand_workflow::workflow_run_lifecycle::advance_stages(proposal);
                     record.stages = stages;
                     record.lifecycle_events = events;
                     record.action_requests = action_requests;
                 }
-            }
             let path = save_workflow_run(std::path::Path::new(&output_dir), &record)
                 .map_err(|e| anyhow::anyhow!(e))?;
             if json {
@@ -3797,10 +3789,10 @@ fn cmd_workflow_action(cmd: WorkflowActionCommands) -> Result<()> {
     use openwand_app::workflow_session_bridge::{DeterministicSessionBridge, WorkflowSessionBridge};
     use openwand_workflow::workflow_action_route::*;
     use openwand_workflow::workflow_action_route_gate::{WorkflowActionRouteContext, evaluate_action_route};
-    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowRunStatus, WorkflowActionRoutingStatus};
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
     use openwand_workflow::workflow_readiness::WorkflowReadinessId;
     use openwand_workflow::workflow_proposal::WorkflowProposalId;
-    use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
+    
     use chrono::Utc;
 
     match cmd {
@@ -4086,7 +4078,7 @@ fn cmd_workflow_reconciliation(cmd: WorkflowReconciliationCommands) -> Result<()
     use openwand_app::workflow_reconciliation::*;
     use openwand_workflow::workflow_reconciliation::*;
     use openwand_workflow::workflow_reconciliation_gate::{WorkflowReconciliationContext, evaluate_reconciliation};
-    use openwand_workflow::workflow_stage_progression::{compute_stage_progression, apply_progression_to_stages, build_run_revision};
+    
     use openwand_workflow::workflow_run::WorkflowExecutionId;
     use openwand_workflow::workflow_action_route::WorkflowActionRouteId;
     use openwand_workflow::workflow_action_outcome::WorkflowActionOutcomeId;
@@ -4339,7 +4331,7 @@ fn cmd_workflow_next_action_review(cmd: WorkflowNextActionReviewCommands) -> Res
                 feedback: Some(fb), creates_route: false, routes_action_now: false,
                 executes_tool_now: false, mutates_workflow_state_now: false, reviewed_at: chrono::Utc::now(),
             };
-            let path = save_next_action_review(std::path::Path::new(&output_dir), &review).map_err(|e| anyhow::anyhow!(e))?;
+            let _path = save_next_action_review(std::path::Path::new(&output_dir), &review).map_err(|e| anyhow::anyhow!(e))?;
             if json { println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?); }
             else { println!("Review: {} — Rejected", review.review_id.0); }
         }
@@ -4355,7 +4347,7 @@ fn cmd_workflow_next_action_review(cmd: WorkflowNextActionReviewCommands) -> Res
                 feedback: Some(fb), creates_route: false, routes_action_now: false,
                 executes_tool_now: false, mutates_workflow_state_now: false, reviewed_at: chrono::Utc::now(),
             };
-            let path = save_next_action_review(std::path::Path::new(&output_dir), &review).map_err(|e| anyhow::anyhow!(e))?;
+            let _path = save_next_action_review(std::path::Path::new(&output_dir), &review).map_err(|e| anyhow::anyhow!(e))?;
             if json { println!("{}", serde_json::to_string_pretty(&review).context("Serialize")?); }
             else { println!("Review: {} — ChangesRequested", review.review_id.0); }
         }
@@ -4594,7 +4586,7 @@ fn cmd_workflow_loop(cmd: WorkflowLoopCommands) -> Result<()> {
                 latest_next_action_routing: None,
             };
             let record = evaluate_loop_controller(&request, &ctx);
-            let path = save_loop_controller(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            let _path = save_loop_controller(store, &record).map_err(|e| anyhow::anyhow!(e))?;
             if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
             else { println!("Controller: {} — {:?}", record.controller_id.0, record.status); }
         }
@@ -4660,7 +4652,7 @@ fn cmd_workflow_command(cmd: WorkflowCommandCommands) -> Result<()> {
                 loop_controller_record: None, workflow_run: None, latest_revision: None,
             };
             let record = compose_command_descriptor(&request, &ctx);
-            let path = save_command_composer(store, &record).map_err(|e| anyhow::anyhow!(e))?;
+            let _path = save_command_composer(store, &record).map_err(|e| anyhow::anyhow!(e))?;
             if json { println!("{}", serde_json::to_string_pretty(&record).context("Serialize")?); }
             else { println!("Composer: {} — {:?}", record.composer_id.0, record.status); }
         }
@@ -5098,7 +5090,7 @@ fn cmd_workflow_manual_result_review(cmd: WorkflowManualResultReviewCommands, ou
     use openwand_workflow::workflow_loop_controller::WorkflowLoopControllerId;
     use openwand_workflow::workflow_run::WorkflowExecutionId;
 
-    let store = std::path::Path::new(&output_dir);
+    let _store = std::path::Path::new(&output_dir);
     match cmd {
         WorkflowManualResultReviewCommands::ReviewAccept {
             manual_result_id, workflow_execution_id, command_review_id,

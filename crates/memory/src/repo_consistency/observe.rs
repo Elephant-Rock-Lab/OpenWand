@@ -89,14 +89,14 @@ pub fn observe_repo(fs: &dyn RepoReadFs, repo_root: &Path) -> Result<RepoObserva
     // Observe crates/* directories
     let crates_dir = repo_root.join("crates");
     let mut crates = Vec::new();
-    if fs.exists(&crates_dir) {
-        if let Ok(entries) = fs.read_dir(&crates_dir) {
+    if fs.exists(&crates_dir)
+        && let Ok(entries) = fs.read_dir(&crates_dir) {
             for entry in entries {
                 let cargo_path = entry.join("Cargo.toml");
-                if fs.exists(&cargo_path) {
-                    if let Ok(content) = fs.read_to_string(&cargo_path) {
-                        if let Some((name, _, _)) = parse_crate_cargo_toml(&content) {
-                            let crate_path = normalize_repo_path(&entry.strip_prefix(repo_root).unwrap_or(&entry));
+                if fs.exists(&cargo_path)
+                    && let Ok(content) = fs.read_to_string(&cargo_path)
+                        && let Some((name, _, _)) = parse_crate_cargo_toml(&content) {
+                            let crate_path = normalize_repo_path(entry.strip_prefix(repo_root).unwrap_or(&entry));
                             let src_dir = entry.join("src");
                             let test_dir = entry.join("tests");
 
@@ -110,11 +110,8 @@ pub fn observe_repo(fs: &dyn RepoReadFs, repo_root: &Path) -> Result<RepoObserva
                                 test_files,
                             });
                         }
-                    }
-                }
             }
         }
-    }
 
     // Observe docs/* files
     let docs_dir = repo_root.join("docs");
@@ -194,8 +191,8 @@ fn parse_dependencies(crate_name: &str, content: &str) -> Vec<ObservedDependency
             in_deps = trimmed == "[dependencies]";
             continue;
         }
-        if in_deps {
-            if let Some(dep_name) = trimmed.split('=').next() {
+        if in_deps
+            && let Some(dep_name) = trimmed.split('=').next() {
                 let dep_name = dep_name.trim().to_string();
                 if !dep_name.is_empty() {
                     deps.push(ObservedDependency {
@@ -204,7 +201,6 @@ fn parse_dependencies(crate_name: &str, content: &str) -> Vec<ObservedDependency
                     });
                 }
             }
-        }
     }
     deps
 }
@@ -223,7 +219,7 @@ fn list_files_recursive(fs: &dyn RepoReadFs, dir: &Path, repo_root: &Path) -> Ve
             if fs.exists(&entry) {
                 if let Ok(entries2) = fs.read_dir(&entry) {
                     // It's a directory — recurse
-                    let relative = entry.strip_prefix(repo_root).unwrap_or(&entry);
+                    let _relative = entry.strip_prefix(repo_root).unwrap_or(&entry);
                     for sub_entry in entries2 {
                         let rel = sub_entry.strip_prefix(repo_root).unwrap_or(&sub_entry);
                         files.push(normalize_repo_path(rel));

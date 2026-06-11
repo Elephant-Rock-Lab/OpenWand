@@ -1,6 +1,6 @@
 //! Memory evaluation report rendering.
 
-use crate::evaluation::{MemoryEvaluationReport, MemoryEvaluationFailure};
+use crate::evaluation::MemoryEvaluationReport;
 
 impl MemoryEvaluationReport {
     /// Render the report as stable markdown.

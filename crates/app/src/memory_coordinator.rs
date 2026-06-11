@@ -12,7 +12,7 @@ use openwand_memory::{
 use openwand_memory::prompt_assembly::{MemoryPromptAssemblyInputs, RepoConsistencyPromptAssembler};
 use openwand_memory::provenance_hydration::{HydratedMemoryClaim, MemoryProvenanceHydrator};
 use openwand_memory::trace_relation_hydration::{
-    ClaimTraceLineage, TraceEventAuditMetadata, TraceRelationAuditHydrator, TraceRelationAuditRow,
+    TraceEventAuditMetadata, TraceRelationAuditHydrator, TraceRelationAuditRow,
 };
 use openwand_memory::repo_consistency::{
     classify_current_claim, detect_missing_in_memory, observe_repo,
@@ -144,7 +144,7 @@ fn assemble_from_governed(
                                 .cloned()
                                 .unwrap_or_default(),
                             detail: gf.finding.detail.clone(),
-                            severity: gf.finding.severity.clone(),
+                            severity: gf.finding.severity,
                             inclusion_reason: PromptInclusionReason::MissingMemoryGap,
                         });
                     }
@@ -592,7 +592,7 @@ impl MemoryCoordinator {
         // 6. Attach lineage to claims
         claims
             .into_iter()
-            .zip(lineages.into_iter())
+            .zip(lineages)
             .map(|(mut claim, lineage)| {
                 claim.trace_lineage = Some(lineage);
                 claim

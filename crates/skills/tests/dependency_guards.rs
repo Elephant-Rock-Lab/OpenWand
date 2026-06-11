@@ -13,7 +13,7 @@ fn read_all_sources() -> String {
     for entry in std::fs::read_dir(src_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "rs") {
+        if path.extension().is_some_and(|e| e == "rs") {
             all_source.push_str(&std::fs::read_to_string(&path).unwrap());
             all_source.push('\n');
         }

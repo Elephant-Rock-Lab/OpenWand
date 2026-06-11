@@ -7,7 +7,6 @@
 use std::path::Path;
 
 use openwand_workflow::workflow_external_attestation::*;
-use openwand_workflow::workflow_run::WorkflowExecutionId;
 
 fn attestations_root(store_root: &Path) -> std::path::PathBuf {
     store_root.join("workflow_external_attestations")
@@ -122,13 +121,11 @@ pub fn list_external_attestations(
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "json") {
-            if let Ok(json) = std::fs::read_to_string(&path) {
-                if let Ok(att) = serde_json::from_str::<WorkflowExternalAttestation>(&json) {
+        if path.extension().is_some_and(|ext| ext == "json")
+            && let Ok(json) = std::fs::read_to_string(&path)
+                && let Ok(att) = serde_json::from_str::<WorkflowExternalAttestation>(&json) {
                     results.push(att);
                 }
-            }
-        }
     }
     Ok(results)
 }
@@ -206,6 +203,7 @@ fn load_index_list(
 mod tests {
     use super::*;
     use openwand_workflow::workflow_external_attestation::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
 
     fn test_dir() -> std::path::PathBuf {
         tempfile::tempdir().unwrap().into_path()

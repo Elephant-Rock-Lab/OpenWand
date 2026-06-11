@@ -84,7 +84,7 @@ fn assemble_prompt_inputs(findings: &[RepoConsistencyFinding]) -> MemoryPromptAs
                 missing.push(MissingMemoryObservation {
                     repo_evidence_key: finding.repo_evidence_key.first().cloned().unwrap_or_default(),
                     detail: finding.detail.clone(),
-                    severity: finding.severity.clone(),
+                    severity: finding.severity,
                     inclusion_reason: PromptInclusionReason::MissingMemoryGap,
                 });
             }

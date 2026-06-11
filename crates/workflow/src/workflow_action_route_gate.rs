@@ -4,11 +4,10 @@
 //! All inputs are pre-loaded evidence.
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 
 use crate::workflow_action_route::*;
 use crate::workflow_action_route_validation::{
-    action_route_id_for, validate_route_prompt_includes_governance_constraint,
+    action_route_id_for,
     validate_route_prompt_no_executable_fields,
 };
 use crate::workflow_run::{WorkflowActionRequest, WorkflowRunRecord, WorkflowRunStatus, WorkflowStageRun, WorkflowStageRunStatus};
@@ -50,7 +49,7 @@ pub fn evaluate_action_route(
     });
 
     // 2. WorkflowRunIsSuspended
-    let run_suspended = run.map_or(false, |r| r.status == WorkflowRunStatus::Suspended);
+    let run_suspended = run.is_some_and(|r| r.status == WorkflowRunStatus::Suspended);
     predicates.push(WorkflowActionRoutePredicateResult {
         predicate: WorkflowActionRoutePredicate::WorkflowRunIsSuspended,
         passed: run_suspended,
@@ -66,7 +65,7 @@ pub fn evaluate_action_route(
     });
 
     // 4. StageIsSuspended
-    let stage_suspended = stage.map_or(false, |s| s.status == WorkflowStageRunStatus::Suspended);
+    let stage_suspended = stage.is_some_and(|s| s.status == WorkflowStageRunStatus::Suspended);
     predicates.push(WorkflowActionRoutePredicateResult {
         predicate: WorkflowActionRoutePredicate::StageIsSuspended,
         passed: stage_suspended,
@@ -82,7 +81,7 @@ pub fn evaluate_action_route(
     });
 
     // 6. ActionRequestPreparedForSessionRouting
-    let prepared = action_req.map_or(false, |a| a.routing_status == WorkflowActionRoutingStatus::PreparedForFutureSessionRouting);
+    let prepared = action_req.is_some_and(|a| a.routing_status == WorkflowActionRoutingStatus::PreparedForFutureSessionRouting);
     predicates.push(WorkflowActionRoutePredicateResult {
         predicate: WorkflowActionRoutePredicate::ActionRequestPreparedForSessionRouting,
         passed: prepared,
@@ -90,10 +89,10 @@ pub fn evaluate_action_route(
     });
 
     // 7. ActionRequestHashMatchesRequest
-    let hash_matches = action_req.map_or(false, |_a| {
+    let _hash_matches = action_req.is_some_and(|_a| {
         // Compute a simple hash of the action request fields
         let preimage = format!("{}:{}", request.action_request_id, context.action_request_hash);
-        let computed = blake3::hash(preimage.as_bytes()).to_hex().to_string();
+        let _computed = blake3::hash(preimage.as_bytes()).to_hex().to_string();
         !context.action_request_hash.is_empty() && !request.expected_action_request_hash.is_empty()
     });
     // Simplified: check that expected hash is non-empty (full hash verification at persistence)
@@ -113,12 +112,12 @@ pub fn evaluate_action_route(
     });
 
     // 9. ActionRequestStillNonExecutable
-    let non_exec = action_req.map_or(false, |a| {
+    let _non_exec = action_req.is_some_and(|a| {
         // Action request must not have gained executable fields
         a.capability_category.starts_with("capability:") || !a.purpose.is_empty()
     });
     // More precise: check that action request has no tool_name, command, etc.
-    let truly_non_exec = action_req.map_or(false, |_a| true); // WorkflowActionRequest has no executable fields by construction
+    let truly_non_exec = action_req.is_some_and(|_a| true); // WorkflowActionRequest has no executable fields by construction
     predicates.push(WorkflowActionRoutePredicateResult {
         predicate: WorkflowActionRoutePredicate::ActionRequestStillNonExecutable,
         passed: truly_non_exec,
@@ -247,7 +246,7 @@ mod tests {
     use chrono::Utc;
 
     fn suspended_run() -> WorkflowRunRecord {
-        let mut stage = WorkflowStageRun {
+        let stage = WorkflowStageRun {
             stage_id: "stage_tool".into(), title: "Prepare".into(),
             kind: WorkflowStageKind::PrepareChange,
             status: WorkflowStageRunStatus::Suspended, order: 1,

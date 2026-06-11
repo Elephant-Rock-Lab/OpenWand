@@ -76,6 +76,7 @@ pub struct AuditPacketReview {
 
 /// Build a content-addressed review ID: wapr_<blake3(request fields)>
 pub fn compute_review_id(request: &AuditPacketReviewRequest) -> AuditPacketReviewId {
+    let decision_str = format!("{:?}", request.decision);
     let input = format!(
         "{}{}{}{}{}{}{}{}",
         request.inspection_id,
@@ -83,7 +84,7 @@ pub fn compute_review_id(request: &AuditPacketReviewRequest) -> AuditPacketRevie
         request.expected_audit_packet_hash,
         request.expected_chain_hash,
         request.reviewer,
-        format!("{:?}", request.decision),
+        decision_str,
         request.scope,
         request.idempotency_key,
     );

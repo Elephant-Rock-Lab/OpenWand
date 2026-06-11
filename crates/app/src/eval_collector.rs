@@ -40,7 +40,7 @@ pub fn collect_prompt_eval(trace: &EvalTraceEvidence) -> PromptEvalResult {
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let memory_hit_count = prompt_assembly
+    let _memory_hit_count = prompt_assembly
         .and_then(|pa| pa.get("memory_hit_ids"))
         .and_then(|v| v.as_array())
         .map(|a| a.len())
@@ -200,7 +200,7 @@ pub fn collect_policy_eval(
     let mut gates_seen = Vec::new();
     let mut required_approvals_seen = Vec::new();
     let mut denials = Vec::new();
-    let mut unexpected_allows = Vec::new();
+    let unexpected_allows = Vec::new();
 
     for entry in trace.gate_events_by_kind("gate.evaluated") {
         let evaluated = entry.payload.get("payload").and_then(|p| p.get("Evaluated"));
@@ -394,11 +394,10 @@ pub fn check_evidence_presence(
 fn extract_tool_name(payload: &serde_json::Value) -> Option<String> {
     let payload_obj = payload.get("payload")?;
     for variant in &["Called", "Completed", "Failed", "Suspended", "Resumed", "Denied"] {
-        if let Some(v) = payload_obj.get(variant) {
-            if let Some(name) = v.get("tool_name").and_then(|n| n.as_str()) {
+        if let Some(v) = payload_obj.get(variant)
+            && let Some(name) = v.get("tool_name").and_then(|n| n.as_str()) {
                 return Some(name.to_string());
             }
-        }
     }
     None
 }
@@ -459,7 +458,7 @@ pub fn check_verbal_boundary(text: &str) -> CapabilityBoundaryFinding {
 
     if has_violation {
         CapabilityBoundaryFinding::Violation {
-            evidence: format!("Verbal boundary violation detected in model output"),
+            evidence: "Verbal boundary violation detected in model output".to_string(),
         }
     } else {
         CapabilityBoundaryFinding::Pass
@@ -665,13 +664,13 @@ pub fn collect_capability_context_eval(
         .to_string();
 
     let manifest_states: Vec<String> = cap_block
-        .and_then(|c| {
+        .map(|c| {
             let sk = c.get("skills_manifest_state").and_then(|v| v.as_str());
             let gl = c.get("goals_manifest_state").and_then(|v| v.as_str());
             let mut states = vec![];
             if let Some(s) = sk { states.push(s.to_string()); }
             if let Some(s) = gl { states.push(s.to_string()); }
-            Some(states)
+            states
         })
         .unwrap_or_default();
 

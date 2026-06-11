@@ -86,11 +86,10 @@ impl EvalReportStore {
             let scenario_name = scenario_dir.file_name().to_string_lossy().to_string();
 
             // Apply filter
-            if let Some(ref id) = filter.scenario_id {
-                if scenario_name != *id {
+            if let Some(ref id) = filter.scenario_id
+                && scenario_name != *id {
                     continue;
                 }
-            }
 
             let entries: Vec<_> = std::fs::read_dir(scenario_dir.path())
                 .map_err(|e| format!("Failed to read scenario dir: {}", e))?

@@ -9,7 +9,7 @@
 
 use crate::evidence::EvidenceKind;
 use crate::prompt_assembly::{
-    MemoryPromptAssemblyInputs, PromptInclusionReason, UnverifiableMemoryClaim,
+    MemoryPromptAssemblyInputs, PromptInclusionReason,
 };
 use crate::provenance::ProvenanceSnapshot;
 use crate::provenance_hydration::{
@@ -17,7 +17,7 @@ use crate::provenance_hydration::{
 };
 use crate::trace_relation_hydration::TraceRelationCounts;
 use crate::repo_consistency::{
-    ConsistencySeverity, RepoConsistencyFinding, RepoConsistencyFindingKind, RepoConsistencyReport,
+    ConsistencySeverity, RepoConsistencyFindingKind, RepoConsistencyReport,
 };
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
@@ -130,7 +130,7 @@ impl RepoFilteredPanelView {
 
             let panel_claim = MemoryPanelClaim {
                 claim_text: finding.claim_text.clone().unwrap_or_default(),
-                finding_kind: finding.kind.clone(),
+                finding_kind: finding.kind,
                 evidence_kind: finding.evidence_kind,
                 repo_evidence_key: finding.repo_evidence_key.clone(),
                 inclusion_reason: inclusion.cloned(),
@@ -144,7 +144,7 @@ impl RepoFilteredPanelView {
                 hydration_status: ProvenanceHydrationStatus::Missing {
                     reason: "from_coordinator_output — use from_hydrated_claims for provenance".to_string(),
                 },
-                severity: finding.severity.clone(),
+                severity: finding.severity,
                 trace_lineage_summary: None,
                 trace_relation_counts: None,
                 trace_lineage_status: None,
@@ -164,7 +164,7 @@ impl RepoFilteredPanelView {
                     missing_in_memory.push(MemoryPanelMissingObservation {
                         repo_evidence_key: finding.repo_evidence_key.first().cloned().unwrap_or_default(),
                         detail: finding.detail.clone(),
-                        severity: finding.severity.clone(),
+                        severity: finding.severity,
                     });
                 }
                 RepoConsistencyFindingKind::SupersededMemoryIgnored => {
@@ -231,7 +231,7 @@ impl RepoFilteredPanelView {
                 missing_in_memory.push(MemoryPanelMissingObservation {
                     repo_evidence_key: finding.repo_evidence_key.first().cloned().unwrap_or_default(),
                     detail: finding.detail.clone(),
-                    severity: finding.severity.clone(),
+                    severity: finding.severity,
                 });
             }
         }
@@ -259,7 +259,7 @@ impl RepoFilteredPanelView {
                 conflict_group_id: hc.conflict.as_ref().and_then(|c| c.conflict_group_id.clone()),
                 superseded_by: hc.supersession.as_ref().and_then(|s| s.superseded_by_record_id.clone()),
                 hydration_status: hc.hydration_status.clone(),
-                severity: hc.severity.clone(),
+                severity: hc.severity,
                 trace_lineage_summary: hc.trace_lineage.as_ref().map(|l| l.compact_summary()),
                 trace_relation_counts: hc.trace_lineage.as_ref().map(|l| l.counts()),
                 trace_lineage_status: hc.trace_lineage.as_ref().map(|l| format!("{:?}", l.hydration_status)),

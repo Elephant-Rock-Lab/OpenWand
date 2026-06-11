@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use crate::manifest::{GoalDefinition, GoalId, GoalManifest, GoalStatus};
+use crate::manifest::{GoalDefinition, GoalManifest, GoalStatus};
 
 /// Validated collection of goals.
 #[derive(Debug, Clone)]

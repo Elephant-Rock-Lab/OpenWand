@@ -53,9 +53,8 @@ pub fn save_loop_controller(
         .map_err(|e| format!("Latest: {}", e))?;
 
     let root = controller_root(store_root);
-    for (idx_name, key) in [
-        ("by_workflow_run", record.workflow_execution_id.0.as_str()),
-    ] {
+    {
+        let (idx_name, key) = ("by_workflow_run", record.workflow_execution_id.0.as_str());
         let idx_file = index_file(&root, idx_name, key);
         std::fs::create_dir_all(idx_file.parent().unwrap()).map_err(|e| format!("Index dir: {}", e))?;
         std::fs::write(&idx_file, record.controller_id.0.as_bytes()).map_err(|e| format!("Index: {}", e))?;
@@ -82,14 +81,13 @@ pub fn list_loop_controllers(store_root: &Path) -> Result<Vec<WorkflowLoopContro
     for entry in std::fs::read_dir(&dir).map_err(|e| format!("Dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Entry: {}", e))?;
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "json") {
+        if path.extension().is_some_and(|e| e == "json") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             if name == "latest" { continue; }
-            if let Ok(json) = std::fs::read_to_string(&path) {
-                if let Ok(record) = serde_json::from_str::<WorkflowLoopControllerRecord>(&json) {
+            if let Ok(json) = std::fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<WorkflowLoopControllerRecord>(&json) {
                     records.push(record);
                 }
-            }
         }
     }
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));

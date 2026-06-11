@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use crate::manifest::{SkillContextKind, SkillDefinition, SkillId, SkillManifest};
+use crate::manifest::{SkillDefinition, SkillManifest};
 
 /// Validated collection of skills.
 #[derive(Debug, Clone)]
@@ -180,7 +180,7 @@ description = "Second skill"
 "#,
         );
         let registry = load_skill_registry(&path);
-        assert!(registry.validation.errors.len() >= 1, "Should report duplicate ID error");
+        assert!(!registry.validation.errors.is_empty(), "Should report duplicate ID error");
         assert!(registry.validation.errors.iter().any(|e| e.message.contains("Duplicate")));
         std::fs::remove_dir_all(&dir).ok();
     }

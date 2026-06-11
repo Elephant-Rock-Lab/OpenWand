@@ -9,7 +9,7 @@ use crate::workflow_continuation::*;
 use crate::workflow_continuation_validation::continuation_readiness_id_for;
 use crate::workflow_reconciliation::WorkflowRunRevision;
 use crate::workflow_run::{
-    WorkflowExecutionId, WorkflowRunRecord, WorkflowStageRun, WorkflowStageRunStatus,
+    WorkflowRunRecord, WorkflowStageRun, WorkflowStageRunStatus,
     WorkflowActionRequest, WorkflowActionRoutingStatus,
 };
 use crate::workflow_reconciliation::is_terminal_stage_status;
@@ -68,7 +68,7 @@ pub fn evaluate_continuation_readiness(
     });
 
     // 5. RunRevisionBelongsToWorkflowRun
-    let rev_run_match = revision.map_or(false, |r| r.workflow_execution_id == request.workflow_execution_id);
+    let rev_run_match = revision.is_some_and(|r| r.workflow_execution_id == request.workflow_execution_id);
     predicates.push(WorkflowContinuationPredicateResult {
         predicate: WorkflowContinuationPredicate::RunRevisionBelongsToWorkflowRun,
         passed: rev_run_match,
@@ -122,7 +122,7 @@ pub fn evaluate_continuation_readiness(
     });
 
     // 11. NextStageIsPending
-    let next_pending = next_stage.map_or(false, |s| s.status == WorkflowStageRunStatus::Pending);
+    let next_pending = next_stage.is_some_and(|s| s.status == WorkflowStageRunStatus::Pending);
     predicates.push(WorkflowContinuationPredicateResult {
         predicate: WorkflowContinuationPredicate::NextStageIsPending,
         passed: next_pending || next_stage.is_none(), // OK if no next stage
@@ -130,7 +130,7 @@ pub fn evaluate_continuation_readiness(
     });
 
     // 12. NextStageDependenciesTerminal
-    let deps_terminal = next_stage.map_or(true, |s| {
+    let deps_terminal = next_stage.is_none_or(|s| {
         s.depends_on.iter().all(|dep_id| {
             stages.iter().any(|ss| ss.stage_id == *dep_id && is_terminal_stage_status(&ss.status))
         })
@@ -156,7 +156,7 @@ pub fn evaluate_continuation_readiness(
     });
 
     // 14. NextActionRequestPreparedForRouting
-    let action_prepared = next_action.map_or(false, |a| {
+    let action_prepared = next_action.is_some_and(|a| {
         matches!(a.routing_status,
             WorkflowActionRoutingStatus::PreparedForFutureSessionRouting
             | WorkflowActionRoutingStatus::SuspendedAwaitingApproval
@@ -169,7 +169,7 @@ pub fn evaluate_continuation_readiness(
     });
 
     // 15. NextActionRequestRemainsNonExecutable (Patch 1)
-    let non_executable = next_action.map_or(true, |a| {
+    let _non_executable = next_action.is_none_or(|a| {
         // Action requests must not contain executable fields
         // The WorkflowActionRequest struct has no tool_name, tool_args, command, shell, etc.
         // This check verifies the struct has no executable markers by design.
@@ -362,8 +362,6 @@ fn determine_continuation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow_proposal::WorkflowStageKind;
-    use crate::workflow_reconciliation::WorkflowReconciliationId;
 
     struct Fixtures {
         run: WorkflowRunRecord,
@@ -606,7 +604,7 @@ mod tests {
 /// Does not create route/outcome/reconciliation/revision records.
 pub fn build_next_action_proposal(
     readiness: &WorkflowContinuationReadinessRecord,
-    request: &WorkflowContinuationRequest,
+    _request: &WorkflowContinuationRequest,
 ) -> Option<WorkflowNextActionProposal> {
     if !matches!(readiness.status, WorkflowContinuationStatus::ProposalReady) {
         return None;
@@ -667,8 +665,6 @@ pub fn build_next_action_proposal(
 #[cfg(test)]
 mod proposal_tests {
     use super::*;
-    use crate::workflow_proposal::WorkflowStageKind;
-    use crate::workflow_reconciliation::WorkflowReconciliationId;
 
     fn proposal_ready_record() -> WorkflowContinuationReadinessRecord {
         WorkflowContinuationReadinessRecord {

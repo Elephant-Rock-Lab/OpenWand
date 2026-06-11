@@ -21,7 +21,7 @@ use openwand_core::ids::ApprovalRequestId;
 use openwand_core::snapshots::ApprovalContextSnapshot;
 use openwand_llm::{LlmClient, LlmDelta, LlmProvider, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
-use openwand_policy::{GateDecision, OutputGuardConfig, PolicyEngine, guard_output};
+use openwand_policy::{GateDecision, PolicyEngine, guard_output};
 use openwand_tools::executor::ToolExecutor;
 use openwand_trace::{Actor, AppendTraceEntry, TraceStore, TraceStreamId, TraceStreamScope};
 use std::sync::Arc;
@@ -97,6 +97,7 @@ struct GatedTools {
     /// Tools that were hard-blocked by policy (Block decision).
     hard_blocked: Vec<ToolCall>,
     /// True if any tool was blocked (either hard or pending).
+    #[allow(dead_code)]
     any_blocked: bool,
 }
 
@@ -351,8 +352,8 @@ impl SessionRunner {
             let llm_request = self.assemble_llm_request(&config).await?;
 
             // Emit capability context trace if block was included (Patch 1)
-            if let Some(ref cap) = config.capability_context {
-                if !cap.text.is_empty() {
+            if let Some(ref cap) = config.capability_context
+                && !cap.text.is_empty() {
                     let hash = sha256_of_text(&cap.text);
                     let event = InferenceEvent::CapabilityContextAssembled {
                         session_id: self.session_id.0.clone(),
@@ -368,7 +369,6 @@ impl SessionRunner {
                     };
                     let _ = self.append_capability_trace(event).await; // non-fatal
                 }
-            }
 
             // Inference
             self.emit_phase(Phase::Inference, step).await;
@@ -554,8 +554,8 @@ impl SessionRunner {
         let index = self.approval_recovery_index().await?;
 
         // Phase 1.5: Idempotency check — if caller specified an arid and it's already resolved
-        if let Some(arid) = decision.approval_request_id.as_ref() {
-            if let Some(resolved) = index.resolved.iter().find(|r| &r.approval_request_id == arid) {
+        if let Some(arid) = decision.approval_request_id.as_ref()
+            && let Some(resolved) = index.resolved.iter().find(|r| &r.approval_request_id == arid) {
                 return Ok(ApprovalResult {
                     resolution: match resolved.kind {
                         crate::approval_recovery::ResolvedApprovalKind::Approved => ApprovalResolution::Approve,
@@ -568,7 +568,6 @@ impl SessionRunner {
                     source: ApprovalSource::Recovered,
                 });
             }
-        }
 
         // Phase 2: Select target (pure logic)
         let cache_hint = self.pending_approval_hint().await;
@@ -635,20 +634,18 @@ impl SessionRunner {
         }
 
         // Wave 69B Patch 7: Verify tool name and args hash match
-        if let Some(resolved_name) = decision.tool_name.as_ref() {
-            if resolved_name != &target.context.tool_name {
+        if let Some(resolved_name) = decision.tool_name.as_ref()
+            && resolved_name != &target.context.tool_name {
                 return Err(SessionError::Internal(
                     "Approval tool name does not match the original request".into()
                 ));
             }
-        }
-        if let Some(resolved_hash) = decision.args_hash.as_ref() {
-            if resolved_hash != &target.context.args_hash {
+        if let Some(resolved_hash) = decision.args_hash.as_ref()
+            && resolved_hash != &target.context.args_hash {
                 return Err(SessionError::Internal(
                     "Approval tool arguments do not match the original request".into()
                 ));
             }
-        }
 
         let tool_name = target.tool_name.clone();
         let tool_call_id = target.context.tool_call_id.clone();
@@ -885,12 +882,12 @@ impl SessionRunner {
         let messages = self.loro_state.messages().map_err(SessionError::Internal)?;
         let llm_messages: Vec<openwand_llm::LlmMessage> = messages
             .iter()
-            .filter_map(|m| message_to_llm_message(m))
+            .filter_map(message_to_llm_message)
             .collect();
 
         let tool_defs = self.tools.available_tools();
         let llm_tools: Vec<openwand_llm::LlmToolDef> =
-            tool_defs.iter().map(|t| tool_def_to_llm_tool(t)).collect();
+            tool_defs.iter().map(tool_def_to_llm_tool).collect();
 
         Ok(LlmRequest {
             target: config.llm_target.clone().unwrap_or(LlmTarget {
@@ -918,11 +915,10 @@ impl SessionRunner {
                     }
                 }
                 // Capability context: bounded skills/goals data, separate section (Patch 7)
-                if let Some(ref cap) = config.capability_context {
-                    if !cap.text.is_empty() {
+                if let Some(ref cap) = config.capability_context
+                    && !cap.text.is_empty() {
                         base.push_str(&format!("\n\n{}", cap.text));
                     }
-                }
                 base
             }),
             tools: llm_tools.clone(),
@@ -1561,8 +1557,8 @@ pub fn select_approval_target(
     // Case 2: Caller wants "the single pending one" — use cache hint or scan
 
     // Try cache hint first
-    if let Some(cache_arid) = cache_hint {
-        if let Some(target) = index
+    if let Some(cache_arid) = cache_hint
+        && let Some(target) = index
             .pending
             .iter()
             .find(|p| p.context.approval_request_id == cache_arid)
@@ -1570,7 +1566,6 @@ pub fn select_approval_target(
             return Ok((target.clone(), ApprovalSource::Live));
         }
         // Cache was stale — fall through to scan
-    }
 
     // No cache or stale cache — use index
     match index.pending.len() {
@@ -1593,7 +1588,7 @@ pub struct UnresolvedSuspension {
 
 /// SHA-256 hash of text for trace integrity (Patch 5).
 pub fn sha256_of_text(text: &str) -> String {
-    use std::io::Write;
+    
     let hash = <sha2::Sha256 as sha2::Digest>::digest(text.as_bytes());
     format!("{:x}", hash)
 }

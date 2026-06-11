@@ -2,7 +2,6 @@
 
 use openwand_workflow::workflow_command_composer::*;
 use openwand_workflow::workflow_command_descriptor::*;
-use openwand_workflow::workflow_manual_operation::*;
 
 #[derive(Debug, Clone)]
 pub struct WorkflowCommandComposerSummaryRow { pub composer_id: String, pub status: String }

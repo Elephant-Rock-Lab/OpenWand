@@ -171,3 +171,71 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | `wvr_` | WorkflowVerificationReadinessId | 47 |
 | `wapr_` | AuditPacketReviewId | 49A |
 | `wapd_` | AuditPacketDistributionId | 49A |
+
+---
+
+## Phase: Gap Remediation
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 50A | Gap Remediation I — Provider Settings, Coverage | `wave-50a-lock` | ~3,416 | _(in commit)_ |
+| 51A | Gap Remediation II — Cancellation, Panic Hardening | `wave-51a-lock` | ~3,420 | _(in commit)_ |
+
+---
+
+## Phase: Desktop Workflow Visibility
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 52A | Design System Foundation | `wave-52a-lock` | 642 | _(in commit)_ |
+| 53A | Operator Console Desktop Surface | `wave-53a-lock` | 655 | _(in commit)_ |
+| 54A | Evidence Chain Inspector Desktop Surface | `wave-54a-lock` | 668 | _(in commit)_ |
+| 55A | Audit Packet Review & Distribution Surface | `wave-55a-lock` | 686 | _(in commit)_ |
+| 56A | Manual Result Ladder Desktop Surface | `wave-56a-lock` | 727 | _(in commit)_ |
+| 57A | Workflow Routing & Next-Action Surface | `wave-57a-lock` | 752 | _(in commit)_ |
+| 58A | Workflow Execution Timeline Surface | `wave-58a-lock` | 774 | _(in commit)_ |
+
+---
+
+## Phase: Desktop Shell Decomposition
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 59A | Desktop UI Shell Refactor | `wave-59a-lock` | 778 | _(in commit)_ |
+| 60A | Desktop Session Shell Refactor | `wave-60a-lock` | 795 | _(in commit)_ |
+| 61A | Desktop Bootstrap Boundary & Runtime Ownership | `wave-61a-lock` | 806 | _(in commit)_ |
+
+---
+
+## Phase: Capability-Context Integration
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 62A | Skills & Goals Runtime Integration Readiness | `wave-62a-lock` | 836 | _(in commit)_ |
+| 63A | Skills & Goals Context Projection Wiring | `wave-63a-lock` | 888 | _(in commit)_ |
+| 64A | Capability Context Explainability & Prompt Preview | `wave-64a-lock` | 880 | _(in commit)_ |
+| 65A | Capability Context Audit Trace | `wave-65a-lock` | 955 | _(in commit)_ |
+| 66A | Deterministic Evaluation Harness | `wave-66a-lock` | 986 | _(in commit)_ |
+| 67A | Real-Model Boundary Evaluation | `wave-67a-lock` | 1,006 | _(in commit)_ |
+| 68A | Evaluation Readiness & Reporting | `wave-68a-lock` | 1,032 | _(in commit)_ |
+
+---
+
+## Phase: Release-Blocker Remediation
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 69A | Filesystem Sandbox & Workspace Authority | `wave-69a-lock` | 1,125 | _(in commit)_ |
+| 69B | Approval Workspace Binding | `wave-69b-lock` | 1,135 | _(in commit)_ |
+| 69C | Canonical Build, Desktop Compile, Test Baseline | `wave-69c-lock` | 1,135 | _(in commit)_ |
+| 69D | Truthful Verification Commands | `wave-69d-lock` | 1,141 | _(in commit)_ |
+| 69E | Production Trace Attribution | `wave-69e-lock` | 1,141 | _(in commit)_ |
+
+---
+
+## Phase: Release Hardening
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 69F | Release Hardening & Residual Risk Closure | `wave-69f-lock` | 1,141 | `docs/DEFERRED_RISKS.md` |
+| 69G | RC Truth Ledger & Publication Baseline | `wave-69g-lock` | 1,144 | `docs/RELEASE_CANDIDATE_LEDGER.md` |

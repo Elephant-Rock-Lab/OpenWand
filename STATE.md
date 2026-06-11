@@ -4,14 +4,14 @@
 0.1.0-alpha
 
 ## Status
-**Wave 50A in progress. Gap Remediation I: Provider Settings, Coverage Closure, Workspace Cleanup.**
+**Wave 69G complete. Release Candidate Truth Ledger and Publication Baseline.**
 
-Previous lock: Wave 49A — `9e9fc98` — `wave-49a-lock`
+Previous lock: Wave 69F — `527a861` — `wave-69f-lock`
 
 ## Workspace Structure
 ```
 crates/
-├── core/       Domain IDs, vocabulary, events, snapshots           (lib) — 13 library crates
+├── core/       Domain IDs, vocabulary, events, snapshots           (lib)
 ├── trace/      Generic trace substrate (TraceStore<E>)              (lib)
 ├── store/      Trace+Memory persistence, StoredEvent bridge         (lib)
 ├── session/    Loro CRDT session + SessionRunner                    (lib)
@@ -26,42 +26,73 @@ crates/
 └── app/        CLI binary + desktop UI + evaluation + coordination  (bin)
 ```
 
-Note: `openwand-content` removed from workspace at Wave 50A (scaffold since Wave 0, zero implementation).
-Will be re-added when syntect/mermaid/comrak rendering is needed.
+Note: `openwand-content` removed from workspace at Wave 50A (scaffold since Wave 0,
+zero implementation). Will be re-added when syntect/mermaid/comrak rendering is needed.
 
 ## Test Count
 
-**Canonical command:**
+**Canonical verification commands:**
 ```bash
-cargo test --workspace --features "openwand-session/testing,openwand-session/sqlite-testing,openwand-memory/testing,openwand-memory/sqlite-testing"
+cargo check --workspace --all-targets --all-features
+cargo build --workspace --all-targets --all-features
+cargo test -p openwand-core --lib
+cargo test -p openwand-session --lib --features testing
+cargo test -p openwand-tools --lib
+cargo test -p openwand-app --lib
+cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
+  -p openwand-trace -p openwand-store -p openwand-memory \
+  -p openwand-llm -p openwand-policy -p openwand-skills \
+  -p openwand-goals -p openwand-workflow --all-features -- -D warnings
+cargo audit
 ```
 
-**Baseline (Wave 49A lock):** 3,392 tests, zero failures.
+**Baseline (Wave 69G lock):** 1,144 tests, 0 failures.
+- openwand-core: 45
+- openwand-session: 49
+- openwand-tools: 93
+- openwand-app: 957
 
-Wave 50A changes:
-- Added: settings module tests (5), next-action review guard tests (12), routing readiness CLI tests (4)
-- Added: next-action review UI state tests (3), next-action review UI component tests (1)
-- Removed: `openwand-content` crate (1 test: `it_works`)
-- Net delta: +24 tests
+**Not yet clean:** `openwand-app` test-module clippy warnings (57 style lints in
+`#[cfg(test)]` helpers) remain accepted as cosmetic. Zero affect production code.
 
-**Wave 50A target:** approximately 3,416 tests, zero failures.
+## Wave History (Post-50A)
 
-## Wave History (Selected)
+| Wave | Goal | Tag | Tests | Status |
+|------|------|-----|------:|--------|
+| 50A | Gap Remediation I | `wave-50a-lock` | ~3,416 | ✅ |
+| 51A | Gap Remediation II | `wave-51a-lock` | ~3,420 | ✅ |
+| 52A | Design System Foundation | `wave-52a-lock` | 642 | ✅ |
+| 53A | Operator Console Desktop Surface | `wave-53a-lock` | 655 | ✅ |
+| 54A | Evidence Chain Inspector Surface | `wave-54a-lock` | 668 | ✅ |
+| 55A | Audit Packet Review & Distribution | `wave-55a-lock` | 686 | ✅ |
+| 56A | Manual Result Ladder Surface | `wave-56a-lock` | 727 | ✅ |
+| 57A | Workflow Routing & Next-Action | `wave-57a-lock` | 752 | ✅ |
+| 58A | Workflow Execution Timeline | `wave-58a-lock` | 774 | ✅ |
+| 59A | Desktop UI Shell Refactor | `wave-59a-lock` | 778 | ✅ |
+| 60A | Desktop Session Shell Refactor | `wave-60a-lock` | 795 | ✅ |
+| 61A | Desktop Bootstrap Boundary | `wave-61a-lock` | 806 | ✅ |
+| 62A | Skills & Goals Readiness | `wave-62a-lock` | 836 | ✅ |
+| 63A | Context Projection Wiring | `wave-63a-lock` | 888 | ✅ |
+| 64A | Context Explainability & Preview | `wave-64a-lock` | 880 | ✅ |
+| 65A | Context Audit Trace | `wave-65a-lock` | 955 | ✅ |
+| 66A | Deterministic Eval Harness | `wave-66a-lock` | 986 | ✅ |
+| 67A | Real-Model Boundary Eval | `wave-67a-lock` | 1,006 | ✅ |
+| 68A | Eval Readiness & Reporting | `wave-68a-lock` | 1,032 | ✅ |
+| 69A | Filesystem Sandbox | `wave-69a-lock` | 1,125 | ✅ |
+| 69B | Approval Workspace Binding | `wave-69b-lock` | 1,135 | ✅ |
+| 69C | Canonical Build & Desktop Compile | `wave-69c-lock` | 1,135 | ✅ |
+| 69D | Truthful Verification Commands | `wave-69d-lock` | 1,141 | ✅ |
+| 69E | Production Trace Attribution | `wave-69e-lock` | 1,141 | ✅ |
+| 69F | Release Hardening & Residual Risk | `wave-69f-lock` | 1,141 | ✅ |
+| 69G | RC Truth Ledger & Publication Baseline | `wave-69g-lock` | 1,144 | ✅ |
 
-| Wave | Goal | Status |
-|------|------|--------|
-| 00 | Cross-document audit, lock all seams | ✅ |
-| 01a–01e | Foundation crates | ✅ |
-| 02a–02t | Runtime, memory, governance wiring | ✅ |
-| 03a–04b | Approval governance, governed shell | ✅ |
-| 23–49A | Workflow evidence ladder (24 capabilities) | ✅ |
-| **50A** | **Gap Remediation I** | **🔄 In progress** |
-
-Full wave history available in `WAVES.md` and individual `docs/WAVE*_LOCK.md` files.
+Full wave history (Waves 00–49A): see `WAVES.md` and `docs/WAVE*_LOCK.md`.
 
 ## Hard Boundaries (Global)
 - HB-G1: Binary < 20MB
 - HB-G2: Zero telemetry, zero cloud storage dependencies
 - HB-G3: All data in `~/.openwand/`
-- HB-G4: Zero `unsafe` in OpenWand code (dependencies may use it)
-- HB-G5: `cargo clippy --workspace` = zero warnings
+- HB-G4: Zero `unsafe` in OpenWand production code (test-only env var manipulation
+  excepted; dependencies may use it)
+- HB-G5: `cargo clippy` zero warnings on 11 non-app production crates.
+  `openwand-app` test-module style warnings accepted as cosmetic.

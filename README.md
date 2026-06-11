@@ -61,12 +61,13 @@ cargo test --workspace --features "openwand-session/testing,openwand-session/sql
 4. **Observable** — every action produces a structured, typed result
 5. **Self-improving** — agents learn from mistakes via ACE Skillbook
 6. **Extensible** — MCP servers add capabilities without touching core
-7. **Governed** — workflow evidence ladder with hash-bound immutable records
+7. **Governed** — workflow evidence ladder with hash-bound append-only records
 8. **Disk-verified** — every development wave starts from repository truth
 
 ## Workflow Evidence Ladder
 
-OpenWand's workflow system builds an immutable evidence chain:
+OpenWand's workflow system builds an append-only evidence chain (structural hash-chaining;
+immutability enforcement deferred to verifier, not yet implemented):
 
 ```
 skills/goals → task plan → review → proposal → review → readiness
@@ -76,7 +77,10 @@ skills/goals → task plan → review → proposal → review → readiness
 → manual result capture
 ```
 
-Each step is content-addressed (`blake3`), hash-bound to its predecessor, and guarded against unauthorized mutation. The workflow crate is a leaf dependency with exactly 6 crates: `serde`, `serde_json`, `blake3`, `chrono`, `thiserror`, `tracing`.
+Each step is content-addressed (`blake3`), hash-bound to its predecessor, and guarded against
+unauthorized mutation. No runtime verifier enforces append-only at the store level yet.
+The workflow crate is a leaf dependency with exactly 6 crates: `serde`, `serde_json`, `blake3`,
+`chrono`, `thiserror`, `tracing`.
 
 ## Development Doctrine
 

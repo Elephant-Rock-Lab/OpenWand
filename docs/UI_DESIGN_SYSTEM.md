@@ -8,11 +8,11 @@ All tokens live in `crates/app/src/ui/design_tokens.rs` as `pub const &str`.
 
 | Module | Prefix | Examples |
 |--------|--------|---------|
-| `COLORS` | Semantic name | `PRIMARY`, `SUCCESS_BG`, `TEXT_MUTED` |
-| `TYPO` | `FONT_` or `TEXT_` | `FONT_BODY`, `TEXT_SM`, `TEXT_BASE` |
-| `SPACING` | `SPACE_` + size | `SPACE_SM`, `SPACE_LG`, `SPACE_2XL` |
-| `RADIUS` | Size | `SM`, `MD`, `LG`, `PILL` |
-| `LAYOUT` | Dimension name | `SIDEBAR_LEFT_WIDTH`, `DOT_SIZE` |
+| `colors` | Semantic name | `PRIMARY`, `SUCCESS_BG`, `TEXT_MUTED` |
+| `typo` | `FONT_` or `TEXT_` | `FONT_BODY`, `TEXT_SM`, `TEXT_BASE` |
+| `spacing` | `SPACE_` + size | `SPACE_SM`, `SPACE_LG`, `SPACE_2XL` |
+| `radius` | Size | `SM`, `MD`, `LG`, `PILL` |
+| `layout_dims` | Dimension name | `SIDEBAR_LEFT_WIDTH`, `DOT_SIZE` |
 
 When adding new tokens, follow the existing naming pattern and add a corresponding test.
 

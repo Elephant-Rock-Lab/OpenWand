@@ -678,7 +678,6 @@ pub fn validate_tool_lifecycle(
 #[cfg(test)]
 mod workspace_authority_tests {
     use super::*;
-    use crate::approval_recovery::*;
 
     fn make_recovery_with_workspace(ws: Option<&str>) -> PendingApprovalRecovery {
         PendingApprovalRecovery {

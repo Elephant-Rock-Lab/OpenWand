@@ -239,3 +239,12 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 |------|-------|-----|------:|----------|
 | 69F | Release Hardening & Residual Risk Closure | `wave-69f-lock` | 1,141 | `docs/DEFERRED_RISKS.md` |
 | 69G | RC Truth Ledger & Publication Baseline | `wave-69g-lock` | 1,144 | `docs/RELEASE_CANDIDATE_LEDGER.md` |
+
+---
+
+## Phase: RC Validation
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 70A | Release Candidate Validation Pass | `wave-70a-lock` | 1,146 | `docs/RC_VALIDATION_REPORT.md` |
+| 70B | RC Validation Gap Closure | `wave-70b-lock` | 1,148 | `docs/RC_VALIDATION_REPORT.md` |

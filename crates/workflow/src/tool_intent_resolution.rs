@@ -5,6 +5,8 @@
 
 use crate::workflow_proposal::is_valid_capability_category;
 use crate::workflow_readiness::{ToolIntentResolutionSnapshot, ToolIntentResolutionStatus};
+#[cfg(test)]
+use crate::workflow_proposal::FORBIDDEN_TOOL_NAMES;
 
 /// Known descriptive capability categories.
 pub const CAPABILITY_CATEGORIES: &[&str] = &[

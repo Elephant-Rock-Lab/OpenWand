@@ -47,6 +47,7 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 | C5 | 15 cargo audit warnings (all transitive, via Dioxus/Loro) | Dependency | Accepted (DEFERRED-002) |
 | C6 | 23 commits ahead of origin/master | Publication | Pending user decision (DEFERRED-007) |
 | C7 | No concurrent mutation tests for MutationHelper | Testing | Closed 69G — single-writer is architecturally enforced; 3 direct tests added |
+| C8 | 69F workspace --all-targets regression | Build | Closed 70B — #[cfg(test)] imports restored for workflow/memory crates |
 
 ---
 

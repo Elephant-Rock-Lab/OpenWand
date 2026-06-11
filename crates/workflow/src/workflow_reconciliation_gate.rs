@@ -10,6 +10,7 @@ use crate::workflow_reconciliation::*;
 use crate::workflow_reconciliation_validation::reconciliation_id_for;
 use crate::workflow_run::{WorkflowRunRecord, WorkflowStageRunStatus};
 
+
 /// Context for reconciliation predicate evaluation.
 pub struct WorkflowReconciliationContext<'a> {
     pub workflow_run: Option<&'a WorkflowRunRecord>,
@@ -241,7 +242,7 @@ pub fn evaluate_reconciliation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow_action_outcome::{WorkflowActionOutcomeDecision, WorkflowApprovalResolution};
+    use crate::workflow_action_outcome::{WorkflowActionOutcomeDecision, WorkflowApprovalResolution, WorkflowActionOutcomeId, WorkflowSessionActionOutcomeSnapshot};
     use crate::workflow_action_route::{
         WorkflowActionRouteId, WorkflowActionRouteRecord, WorkflowActionRouteStatus,
         WorkflowActionRouteDecision, WorkflowActionRoutePrompt, WorkflowSessionRouteSnapshot,
@@ -249,7 +250,7 @@ mod tests {
     use crate::workflow_run::{
         WorkflowExecutionId, WorkflowRunRecord, WorkflowRunStatus,
         WorkflowExecutionDecision, WorkflowRunSnapshot, WorkflowAbortSnapshot,
-        WorkflowActionRequest, WorkflowActionRoutingStatus,
+        WorkflowActionRequest, WorkflowActionRoutingStatus, WorkflowStageRun,
     };
     use crate::workflow_proposal::{WorkflowProposalId, WorkflowStageKind};
     use crate::workflow_readiness::WorkflowReadinessId;

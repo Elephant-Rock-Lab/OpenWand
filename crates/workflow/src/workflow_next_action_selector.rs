@@ -13,6 +13,10 @@ use crate::workflow_run::{
     WorkflowActionRequest, WorkflowActionRoutingStatus,
 };
 use crate::workflow_reconciliation::is_terminal_stage_status;
+#[cfg(test)]
+use crate::workflow_proposal::WorkflowStageKind;
+#[cfg(test)]
+use crate::workflow_reconciliation::WorkflowReconciliationId;
 
 /// Context for continuation evaluation.
 pub struct WorkflowContinuationContext<'a> {
@@ -362,6 +366,7 @@ fn determine_continuation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workflow_run::{WorkflowExecutionId, WorkflowStageRun};
 
     struct Fixtures {
         run: WorkflowRunRecord,
@@ -665,6 +670,7 @@ pub fn build_next_action_proposal(
 #[cfg(test)]
 mod proposal_tests {
     use super::*;
+    use crate::workflow_run::WorkflowExecutionId;
 
     fn proposal_ready_record() -> WorkflowContinuationReadinessRecord {
         WorkflowContinuationReadinessRecord {

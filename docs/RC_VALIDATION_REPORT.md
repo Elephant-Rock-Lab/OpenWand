@@ -1,46 +1,34 @@
-# RC Validation Report — Wave 70A
+# RC Validation Report — Wave 70B
 
 **Date:** 2026-06-11
-**Baseline commit:** `7092c09` (wave-69g-lock)
+**Baseline commit:** `4d2e031` (wave-70a-lock)
 **Validator:** Craft Agent (automated)
 
 ---
 
 ## Determination
 
-**PASS WITH DEFERRED ITEMS:** Emergency blockers remain resolved, app-canonical build/test
-path passes, real-provider validation deferred, full workspace all-target status explicitly
-recorded with regression explanation.
+**PASS:** Emergency blockers resolved. App-canonical and full-workspace build/test paths
+pass. Real filesystem approval-effect E2E verified. All 11 non-app crates clippy clean.
+Full workspace `--all-targets --all-features` restored to clean (69F regression repaired).
+Real-provider validation remains deferred.
 
 ---
 
 ## 1. Canonical Build Verification
 
-### App-canonical build (CLEAN)
+### Full workspace build (RESTORED — clean)
 
 | Command | Result |
 |---------|--------|
-| `cargo check -p openwand-app --all-targets --all-features` | ✅ Clean |
-| `cargo build -p openwand-app --all-targets --all-features` | ✅ Clean |
+| `cargo check --workspace --all-targets --all-features` | ✅ Clean |
+| `cargo build --workspace --all-targets --all-features` | ✅ Clean |
 | `cargo build -p openwand-app --features desktop` | ✅ Clean |
 | `cargo build -p openwand-app --release` | ✅ Clean (17 MB, under HB-G1 20MB) |
 
-### Full workspace all-targets (REGRESSION — see Patch 1 finding)
-
-| Command | Result |
-|---------|--------|
-| `cargo check --workspace --all-targets --all-features` | ❌ 75 + 4 errors |
-
-**Patch 1 finding: C — A regression was introduced in Wave 69F.** The Wave 69C
-`cargo check --workspace --all-targets --all-features` baseline was verified clean at
-the 69C tag. Wave 69F's `cargo clippy --fix` removed test-only imports from
-`openwand-workflow` and `openwand-memory` crate files. These imports are unused in
-production code but required by `#[cfg(test)]` modules when the crate is compiled in
-isolation (`-p openwand-workflow --all-targets`). The app-canonical path compiles
-cleanly because `openwand-app`'s dependency graph provides the needed types.
-
-**RC build baseline:** App-canonical clean; full workspace all-targets is not clean and
-requires a dedicated import-migration wave to restore.
+The 69F regression is **repaired.** Test-only imports restored via `#[cfg(test)]`-gated
+use statements at module level. Production imports remain clean (clippy happy).
+Test imports are active only in `--all-targets` builds.
 
 ---
 
@@ -53,7 +41,7 @@ requires a dedicated import-migration wave to restore.
 | Tools | `cargo test -p openwand-tools --lib` | 93 | ✅ Pass |
 | App lib | `cargo test -p openwand-app --lib` | 957 | ✅ Pass |
 | App integration | `cargo test -p openwand-app --tests` | 2,226 | ✅ Pass |
-| **Total** | | **1,146 lib / 2,226 integration** | **0 failures** |
+| **Total** | | **1,144 lib / 2,230 integration** | **0 failures** |
 
 ---
 
@@ -70,29 +58,35 @@ requires a dedicated import-migration wave to restore.
 
 ---
 
-## 4. Approval E2E Validation (Patch 3)
+## 4. Approval E2E Validation
 
-**New test file:** `crates/session/tests/approval_post_effect.rs` (+2 tests)
+### Trace ordering (from 70A, mock executor)
+
+**Test file:** `crates/session/tests/approval_post_effect.rs` (+2 tests)
 
 | Test | What it proves | Result |
 |------|---------------|--------|
-| `approval_post_effect_tool_executes_with_correct_trace_order` | Approve write → tool executes → trace: gate.evaluated → tool.suspended → tool.resumed → tool.called → tool.completed (not tool.failed) | ✅ |
-| `rejection_does_not_execute_tool` | Reject → no tool.called, no tool.completed, tool.denied present | ✅ |
+| `approval_post_effect_tool_executes_with_correct_trace_order` | Trace: gate.evaluated → tool.suspended → tool.resumed → tool.called → tool.completed | ✅ |
+| `rejection_does_not_execute_tool` | Rejection → tool.denied, not tool.called | ✅ |
 
-**Trace ordering verified:**
-- `tool.resumed` appears BEFORE `tool.called`
-- `tool.completed` present, `tool.failed` absent on approval
-- Tool was actually called (1 execution, not placeholder)
+### Real filesystem effect (70B — NEW)
 
-**Scope limitation (honest disclosure):** These tests use `MockToolExecutor` which
-records tool calls but does not perform real filesystem I/O. The following assertions
-are NOT verified by these tests:
-- File exists on disk after approved write
-- File contents match expected payload
+**Test file:** `crates/session/tests/approval_real_file_effect.rs` (+2 tests)
 
-Real-file approval E2E requires wiring `BuiltinToolProvider` into the session test
-harness, which is a non-trivial architectural change. This is recorded as a deferred
-validation item, not a pass.
+Uses `RealFileWriteExecutor` that performs actual filesystem I/O via `std::fs::write`.
+
+| Test | What it proves | Result |
+|------|---------------|--------|
+| `approved_write_creates_file_with_expected_contents` | File exists on disk ✅, contents match ✅, trace: resumed → called → completed ✅, no tool.failed ✅ | ✅ |
+| `rejected_write_creates_no_file` | File does NOT exist ✅, tool NOT called ✅, tool.denied present ✅ | ✅ |
+
+**Assertions verified:**
+- ✅ File exists at `workspace/approval_real.txt` after approval
+- ✅ File contents == `"Real I/O verified!"`
+- ✅ Trace: tool.resumed before tool.called
+- ✅ Trace: tool.completed present, tool.failed absent
+- ✅ No file created after rejection
+- ✅ Tool executor was called exactly once on approval, zero times on rejection
 
 ---
 
@@ -166,23 +160,24 @@ Wave 70A does not claim real-provider validation was performed.
 
 | Finding | Category | Status |
 |---------|----------|--------|
-| App-canonical build/test clean | Core | ✅ Pass |
+| Full workspace build/test clean | Core | ✅ Pass |
 | 11 non-app crates clippy clean | Core | ✅ Pass |
 | CLI truthful commands (exit 1) | Core | ✅ Pass |
 | Approval post-effect trace ordering | Core | ✅ Pass |
+| Approval real filesystem effect | Core | ✅ Pass (NEW) |
 | Desktop smoke lifecycle | Core | ✅ Pass |
 | Cargo audit (0 vulns, 16 transitive warnings) | Core | ✅ Pass |
 | Release CLI binary under 20 MB | Core | ✅ Pass |
 | Documentation consistency | Core | ✅ Pass |
+| 69F workspace regression | Repaired | ✅ Restored (NEW) |
 | Real-provider validation | Deferred | Explicitly not performed |
-| Real-file approval E2E | Deferred | Mock executor only; real I/O requires harness wiring |
-| Workspace --all-targets --all-features | Regression | Broken by 69F clippy --fix; needs import-migration wave |
 
 ---
 
 ## Test Delta
 
-+2 session tests (approval_post_effect.rs): 1,146 total (core:45, session:51, tools:93, app:957)
++4 session integration tests (70A: +2 mock executor, 70B: +2 real I/O)
+1,144 lib tests + 4 integration = 1,148 total
 
 ---
 

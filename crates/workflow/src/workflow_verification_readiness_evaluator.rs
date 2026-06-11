@@ -12,6 +12,15 @@ use crate::workflow_verification_readiness::{
     build_readiness_record, p,
 };
 
+#[cfg(test)]
+use crate::workflow_verification_readiness::{VerificationReadinessTargetKind, VerificationReadinessStatus, compute_readiness_id};
+#[cfg(test)]
+use crate::workflow_run::{WorkflowExecutionId, WorkflowStageRun};
+#[cfg(test)]
+use crate::workflow_action_outcome::{WorkflowActionOutcomeId, WorkflowSessionActionOutcomeSnapshot};
+#[cfg(test)]
+use crate::workflow_reconciliation::WorkflowReconciliationId;
+
 /// Evaluate full verification readiness for a manual result with review context.
 /// Patch 4: Requires latest accepted review.
 pub fn evaluate_manual_result_readiness(

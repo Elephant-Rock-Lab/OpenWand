@@ -93,7 +93,7 @@ pub fn detect_missing_in_memory(
 mod tests {
     use super::*;
     use crate::evidence::EvidenceKind;
-    use super::super::observe::ObservedCrate;
+    use super::super::observe::{ObservedCrate, ObservedDependency};
     use crate::ranking::MemoryRankScore;
 
     fn make_hit(text: &str) -> RankedMemoryHit {

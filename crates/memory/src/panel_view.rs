@@ -343,7 +343,7 @@ impl RepoFilteredPanelView {
 mod tests {
     use super::*;
     use crate::repo_consistency::{
-        RepoMemoryInputSummary, RepoObservationSummary, RepoConsistencySummary,
+        RepoMemoryInputSummary, RepoObservationSummary, RepoConsistencySummary, RepoConsistencyFinding,
     };
 
     fn make_finding(kind: RepoConsistencyFindingKind, claim: &str) -> RepoConsistencyFinding {

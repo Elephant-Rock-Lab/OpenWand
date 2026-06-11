@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 69G complete. Release Candidate Truth Ledger and Publication Baseline.**
+**Wave 70B complete. RC Validation Gap Closure.**
 
-Previous lock: Wave 69F — `527a861` — `wave-69f-lock`
+Previous lock: Wave 70A — `4d2e031` — `wave-70a-lock`
 
 ## Workspace Structure
 ```

@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 71C complete. RC Readiness Reconciliation and TOCTOU Risk Ledger.**
+**Wave 72A complete. Public RC Publication.**
 
-Previous lock: Wave 71B — `10f7e3b` — `wave-71b-lock`
+Previous lock: Wave 71C — `82b7488` — `wave-71c-lock`
 
 ## Workspace Structure
 ```

@@ -197,10 +197,14 @@ wave-71b-lock
 
 ## Publication State
 
-**Local RC artifact prepared; remote publication pending by user decision.**
+**Published. Remote repository contains RC commits and lock tags.**
 
-- Local master: 30 commits ahead of origin/master (Wave 50A through 71B)
-- Not pushed — pending user decision
+- Remote: https://github.com/Octo-Lex/OpenWand
+- Remote master: `82b7488` (wave-71c-lock) — verified
+- Local/remote: in sync (0 ahead, 0 behind)
+- 60 total tags on remote (31 RC-era: wave-52a-lock through wave-71c-lock)
+- Publication date: 2026-06-11
+- Status: **Release candidate for external review — not a final release**
 
 ---
 
@@ -209,7 +213,7 @@ wave-71b-lock
 1. Real-provider validation with auth + non-sensitive fixture workspace — deferred
 2. App test-module clippy cleanup — accepted as cosmetic
 3. Transitive dependency warnings (15: 13 unmaintained, 2 unsound) — accepted pending upstream upgrades
-4. Remote publication — pending by user decision
+4. Remote publication — ✅ Published 2026-06-11
 5. Sandbox TOCTOU boundary (DEFERRED-008) — accepted residual risk, documented threat model
 
 ---

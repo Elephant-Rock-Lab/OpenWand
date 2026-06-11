@@ -3,7 +3,10 @@
 **Release:** OpenWand RC-1
 **Date:** 2026-06-11
 **Prepared by:** Craft Agent (automated)
-**Status:** Local RC artifact prepared; remote publication pending by user decision.
+**Status:** Published. Remote repository contains RC commits and lock tags.
+**Repository:** https://github.com/Octo-Lex/OpenWand
+**Publication date:** 2026-06-11
+**Classification: Release candidate for external review — not a final release.**
 
 ---
 

@@ -19,7 +19,7 @@ use openwand_core::SessionId;
 use openwand_core::ToolCallId;
 use openwand_core::ids::ApprovalRequestId;
 use openwand_core::snapshots::ApprovalContextSnapshot;
-use openwand_llm::{LlmClient, LlmDelta, LlmRequest, LlmTarget};
+use openwand_llm::{LlmClient, LlmDelta, LlmProvider, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, OutputGuardConfig, PolicyEngine, guard_output};
 use openwand_tools::executor::ToolExecutor;
@@ -27,6 +27,45 @@ use openwand_trace::{Actor, AppendTraceEntry, TraceStore, TraceStreamId, TraceSt
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tokio_util::sync::CancellationToken;
+
+/// Derive a human-readable provider name from LlmProvider.
+fn provider_display_name(p: &LlmProvider) -> String {
+    match p {
+        LlmProvider::OpenAI => "openai".into(),
+        LlmProvider::Anthropic => "anthropic".into(),
+        LlmProvider::Ollama => "ollama".into(),
+        LlmProvider::OpenRouter => "openrouter".into(),
+        LlmProvider::Gemini => "gemini".into(),
+        LlmProvider::Groq => "groq".into(),
+        LlmProvider::XAI => "xai".into(),
+        LlmProvider::DeepSeek => "deepseek".into(),
+        LlmProvider::Custom { name } => name.clone(),
+    }
+}
+
+/// Identity of the LLM used for a request, derived from RunConfig.
+#[derive(Debug, Clone)]
+struct TraceIdentity {
+    provider: String,
+    model: String,
+}
+
+impl TraceIdentity {
+    /// Derive from the optional LlmTarget in RunConfig.
+    /// Returns ("unavailable", "unavailable") when target is not configured.
+    fn from_config(config: &RunConfig) -> Self {
+        match &config.llm_target {
+            Some(target) => Self {
+                provider: provider_display_name(&target.provider),
+                model: target.model.clone(),
+            },
+            None => Self {
+                provider: "unavailable".into(),
+                model: "unavailable".into(),
+            },
+        }
+    }
+}
 
 /// Why inference stopped.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -339,7 +378,8 @@ impl SessionRunner {
             if matches!(inference_output.stop_reason, InferenceStopReason::Cancelled) {
                 stop_reason = RunStopReason::Cancelled;
                 if !inference_output.text.is_empty() {
-                    self.record_assistant_message(&inference_output.text).await?;
+                    let identity = TraceIdentity::from_config(&config);
+                    self.record_assistant_message(&inference_output.text, &identity).await?;
                 }
                 break;
             }
@@ -368,7 +408,8 @@ impl SessionRunner {
             };
 
             if !assistant_text.is_empty() {
-                self.record_assistant_message(&assistant_text).await?;
+                let identity = TraceIdentity::from_config(&config);
+                self.record_assistant_message(&assistant_text, &identity).await?;
             }
 
             if inference_output.tool_calls.is_empty() {
@@ -378,7 +419,8 @@ impl SessionRunner {
 
             // ToolGate
             self.emit_phase(Phase::ToolGate, step).await;
-            let gated = self.gate_tool_calls(&inference_output.tool_calls, config.mode.clone()).await?;
+            let identity = TraceIdentity::from_config(&config);
+            let gated = self.gate_tool_calls(&inference_output.tool_calls, config.mode.clone(), &identity.model).await?;
 
             // Record gate evaluations in trace for ALL decisions
             self.record_gate_evaluations(&gated).await?;
@@ -770,9 +812,9 @@ impl SessionRunner {
         Ok(())
     }
 
-    async fn record_assistant_message(&self, text: &str) -> Result<(), SessionError> {
+    async fn record_assistant_message(&self, text: &str, identity: &TraceIdentity) -> Result<(), SessionError> {
         let event = OpenWandTraceEvent::Inference(InferenceEvent::Completed {
-            model: "mock".into(),
+            model: identity.model.clone(),
             tokens: openwand_core::snapshots::TokenUsageSnapshot {
                 input: 0,
                 output: 0,
@@ -786,8 +828,8 @@ impl SessionRunner {
         self.mutation
             .apply(
                 Actor::Llm {
-                    model: "mock".into(),
-                    provider: "mock".into(),
+                    model: identity.model.clone(),
+                    provider: identity.provider.clone(),
                 },
                 event,
                 vec![],
@@ -799,14 +841,14 @@ impl SessionRunner {
         let assistant_event = OpenWandTraceEvent::Session(
             SessionEvent::AssistantMessageGenerated {
                 text: text.to_string(),
-                model: "unknown".into(),
+                model: identity.model.clone(),
             },
         );
         self.mutation
             .apply(
                 Actor::Llm {
-                    model: "mock".into(),
-                    provider: "mock".into(),
+                    model: identity.model.clone(),
+                    provider: identity.provider.clone(),
                 },
                 assistant_event,
                 vec![],
@@ -853,9 +895,9 @@ impl SessionRunner {
         Ok(LlmRequest {
             target: config.llm_target.clone().unwrap_or(LlmTarget {
                 provider: openwand_llm::LlmProvider::Custom {
-                    name: "mock".into(),
+                    name: "unavailable".into(),
                 },
-                model: "mock".into(),
+                model: "unavailable".into(),
                 base_url: None,
                 api_key: None,
             }),
@@ -982,6 +1024,7 @@ impl SessionRunner {
         &self,
         calls: &[ToolCall],
         mode: InteractionMode,
+        model: &str,
     ) -> Result<GatedTools, SessionError> {
         let mut allowed = Vec::new();
         let mut pending_confirmation = Vec::new();
@@ -1005,7 +1048,7 @@ impl SessionRunner {
                 mode: mode.clone(),
                 context: openwand_policy::PolicyContext {
                     working_directory: self.working_directory.clone(),
-                    model: "mock".into(),
+                    model: model.into(),
                     session_id: self.session_id.clone(),
                     recent_gate_history: vec![],
                 },
@@ -1568,5 +1611,93 @@ pub fn manifest_audit_state_from_str(s: &str) -> openwand_core::events::Capabili
         openwand_core::events::CapabilityManifestAuditState::FoundEmpty
     } else {
         openwand_core::events::CapabilityManifestAuditState::NotFound
+    }
+}
+
+#[cfg(test)]
+mod trace_identity_tests {
+    use super::*;
+    use crate::config::RunConfig;
+    use openwand_llm::{LlmProvider, LlmTarget};
+
+    #[test]
+    fn trace_identity_from_config_with_real_target() {
+        let config = RunConfig {
+            max_steps: 1,
+            mode: InteractionMode::Direct,
+            working_directory: ".".into(),
+            system_prompt: None,
+            llm_target: Some(LlmTarget {
+                provider: LlmProvider::OpenAI,
+                model: "gpt-4o".into(),
+                base_url: None,
+                api_key: None,
+            }),
+            memory_prompt_inputs: None,
+            output_guard: None,
+            capability_context: None,
+        };
+        let identity = TraceIdentity::from_config(&config);
+        assert_eq!("openai", identity.provider);
+        assert_eq!("gpt-4o", identity.model);
+    }
+
+    #[test]
+    fn trace_identity_from_config_without_target() {
+        let config = RunConfig::default();
+        let identity = TraceIdentity::from_config(&config);
+        assert_eq!("unavailable", identity.provider);
+        assert_eq!("unavailable", identity.model);
+    }
+
+    #[test]
+    fn trace_identity_from_custom_provider() {
+        let config = RunConfig {
+            max_steps: 1,
+            mode: InteractionMode::Direct,
+            working_directory: ".".into(),
+            system_prompt: None,
+            llm_target: Some(LlmTarget {
+                provider: LlmProvider::Custom { name: "my-local-llm".into() },
+                model: "llama-3".into(),
+                base_url: Some("http://localhost:11434".into()),
+                api_key: None,
+            }),
+            memory_prompt_inputs: None,
+            output_guard: None,
+            capability_context: None,
+        };
+        let identity = TraceIdentity::from_config(&config);
+        assert_eq!("my-local-llm", identity.provider);
+        assert_eq!("llama-3", identity.model);
+    }
+
+    #[test]
+    fn provider_display_name_covers_all_variants() {
+        assert_eq!("openai", provider_display_name(&LlmProvider::OpenAI));
+        assert_eq!("anthropic", provider_display_name(&LlmProvider::Anthropic));
+        assert_eq!("ollama", provider_display_name(&LlmProvider::Ollama));
+        assert_eq!("openrouter", provider_display_name(&LlmProvider::OpenRouter));
+        assert_eq!("gemini", provider_display_name(&LlmProvider::Gemini));
+        assert_eq!("groq", provider_display_name(&LlmProvider::Groq));
+        assert_eq!("xai", provider_display_name(&LlmProvider::XAI));
+        assert_eq!("deepseek", provider_display_name(&LlmProvider::DeepSeek));
+        assert_eq!("custom", provider_display_name(&LlmProvider::Custom { name: "custom".into() }));
+    }
+
+    #[test]
+    fn trace_identity_does_not_contain_mock() {
+        let config = RunConfig::default();
+        let identity = TraceIdentity::from_config(&config);
+        assert_ne!("mock", identity.provider, "provider should not be 'mock'");
+        assert_ne!("mock", identity.model, "model should not be 'mock'");
+    }
+
+    #[test]
+    fn trace_identity_does_not_contain_unknown() {
+        let config = RunConfig::default();
+        let identity = TraceIdentity::from_config(&config);
+        assert_ne!("unknown", identity.provider, "provider should not be 'unknown'");
+        assert_ne!("unknown", identity.model, "model should not be 'unknown'");
     }
 }

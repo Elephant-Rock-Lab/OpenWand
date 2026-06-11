@@ -14,8 +14,8 @@
 | Binary | `target/release/openwand.exe` |
 | Size | 17,260,032 bytes (16.4 MB) |
 | SHA-256 | `826C5F87CCCD40DC35D58E472E9D8FD3A943F8F0B632508A73B06917061A6159` |
-| Commit | `d6fa1f077cf920843bc8e95ce954cf45fc3f9413` |
-| Tag | `wave-70b-lock` |
+| Artifact code commit | `d6fa1f0` (`wave-70b-lock`) |
+| Packaging metadata commit | `e50356d` (`wave-70c-lock`) |
 | Target | `x86_64-pc-windows-msvc` |
 | Profile | `release` (optimized) |
 | Features | `desktop` |

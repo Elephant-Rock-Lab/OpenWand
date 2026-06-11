@@ -19,8 +19,8 @@ for release-candidate validation, not yet a final release declaration.**
 
 | Field | Value |
 |-------|-------|
-| Commit | `d6fa1f077cf920843bc8e95ce954cf45fc3f9413` |
-| Tag | `wave-70b-lock` |
+| Artifact code commit | `d6fa1f077cf920843bc8e95ce954cf45fc3f9413` (`wave-70b-lock`) |
+| Packaging metadata commit | `e50356d6a2da59793cf8c9b0191b2dde1f844d3c` (`wave-70c-lock`) |
 | Target triple | `x86_64-pc-windows-msvc` |
 | Build profile | `release` (optimized) |
 | Feature set | `--features desktop` |
@@ -69,7 +69,7 @@ cargo audit
 
 ## Tag Sequence
 
-**26 tags** from `wave-52a-lock` through `wave-70b-lock`:
+**27 tags** from `wave-52a-lock` through `wave-70c-lock`:
 
 | Range | Count | Waves |
 |-------|------:|-------|
@@ -77,8 +77,8 @@ cargo audit
 | 59A–61A | 3 | Shell decomposition |
 | 62A–68A | 7 | Capability-context integration |
 | 69A–69G | 7 | Release-blocker remediation + hardening |
-| 70A–70B | 2 | RC validation |
-| **Total** | **26** | |
+| 70A–70C | 3 | RC validation + packaging |
+| **Total** | **27** | |
 
 Full tag list:
 ```
@@ -88,6 +88,7 @@ wave-62a-lock wave-63a-lock wave-64a-lock wave-65a-lock wave-66a-lock
 wave-67a-lock wave-68a-lock wave-69a-lock wave-69b-lock wave-69c-lock
 wave-69d-lock wave-69e-lock wave-69f-lock wave-69g-lock wave-70a-lock
 wave-70b-lock
+wave-70c-lock
 ```
 
 ---

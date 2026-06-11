@@ -1,16 +1,18 @@
-# RC Validation Report — Wave 70B
+# RC Validation Report — Wave 70D
 
 **Date:** 2026-06-11
-**Baseline commit:** `4d2e031` (wave-70a-lock)
+**Baseline commit:** `d6fa1f0` (wave-70b-lock, artifact code) / `e50356d` (wave-70c-lock, packaging metadata)
 **Validator:** Craft Agent (automated)
 
 ---
 
 ## Determination
 
-**PASS:** Emergency blockers resolved. App-canonical and full-workspace build/test paths
-pass. Real filesystem approval-effect E2E verified. All 11 non-app crates clippy clean.
-Full workspace `--all-targets --all-features` restored to clean (69F regression repaired).
+**PASS:** Emergency blockers resolved. App-canonical and full-workspace build/test
+paths pass. Real filesystem approval-effect E2E verified. All 11 non-app crates clippy
+clean. Full workspace `--all-targets --all-features` restored. RC artifact identity
+recorded with artifact-code/packaging-metadata commit distinction. 27 tags confirmed.
+Remote publication pending by user decision.
 Real-provider validation remains deferred.
 
 ---

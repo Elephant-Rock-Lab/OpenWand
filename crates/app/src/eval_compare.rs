@@ -329,6 +329,7 @@ mod tests {
             rebuild: RebuildEvalResult {
                 events_replayed: 0, state_matches: true, divergences: vec![],
             },
+            capability_context: CapabilityContextEvalResult::default(),
             score: EvalScore::from_dimensions(dimensions),
             // Override the computed score with explicit values for testing
         }

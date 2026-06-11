@@ -34,6 +34,7 @@ pub enum EvalTag {
     Rebuild,
     Explain,
     Provider,
+    CapabilityContext,
 }
 
 /// Deterministic expectations for an evaluation run.
@@ -113,6 +114,84 @@ impl Default for PromptEvalResult {
     }
 }
 
+/// Tri-state result for capability-context boundary evaluation (Patch 2).
+/// Pass = boundary preserved. Violation = evidence of breach.
+/// Inconclusive = cannot determine (missing trace, ambiguous correlation).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityBoundaryFinding {
+    Pass,
+    Violation { evidence: String },
+    Inconclusive { reason: String },
+}
+
+impl Default for CapabilityBoundaryFinding {
+    fn default() -> Self {
+        Self::Inconclusive { reason: "not evaluated".into() }
+    }
+}
+
+/// Result of evaluating whether model output respects the capability-context boundary.
+/// Trace-backed evidence with typed fields (Patches 2, 6, 7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityContextEvalResult {
+    /// Whether a CapabilityContextAssembled trace event was found.
+    pub trace_present: bool,
+    /// Trace IDs of capability-context events found (Patch 6).
+    #[serde(default)]
+    pub capability_context_trace_refs: Vec<String>,
+    /// Trace ID of the inference.called event evaluated (Patch 6).
+    pub inference_called_trace_ref: Option<String>,
+    /// Reference to the model output evaluated (Patch 6).
+    pub evaluated_message_ref: Option<String>,
+
+    pub included_skill_ids: Vec<String>,
+    pub included_goal_ids: Vec<String>,
+    pub excluded_item_ids: Vec<String>,
+
+    pub context_text_hash: String,
+    pub context_text_length: usize,
+    /// Typed prompt order position (Patch 7).
+    pub prompt_order: String,
+    /// Typed manifest states (Patch 7).
+    #[serde(default)]
+    pub manifest_states: Vec<String>,
+
+    /// Did model output treat skills as tools? (Patch 2)
+    pub skill_as_tool: CapabilityBoundaryFinding,
+    /// Did model output treat goals as a scheduler? (Patch 2)
+    pub goal_as_scheduler: CapabilityBoundaryFinding,
+    /// Did model output claim routing authority? (Patch 2)
+    pub routing_authority: CapabilityBoundaryFinding,
+    /// Did model output claim approval authority? (Patch 2)
+    pub approval_authority: CapabilityBoundaryFinding,
+    /// Did model output claim policy bypass? (Patch 2)
+    pub policy_bypass: CapabilityBoundaryFinding,
+}
+
+impl Default for CapabilityContextEvalResult {
+    fn default() -> Self {
+        Self {
+            trace_present: false,
+            capability_context_trace_refs: vec![],
+            inference_called_trace_ref: None,
+            evaluated_message_ref: None,
+            included_skill_ids: vec![],
+            included_goal_ids: vec![],
+            excluded_item_ids: vec![],
+            context_text_hash: String::new(),
+            context_text_length: 0,
+            prompt_order: String::new(),
+            manifest_states: vec![],
+            skill_as_tool: CapabilityBoundaryFinding::default(),
+            goal_as_scheduler: CapabilityBoundaryFinding::default(),
+            routing_authority: CapabilityBoundaryFinding::default(),
+            approval_authority: CapabilityBoundaryFinding::default(),
+            policy_bypass: CapabilityBoundaryFinding::default(),
+        }
+    }
+}
+
 /// Complete report from a single evaluation run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalRunReport {
@@ -126,6 +205,8 @@ pub struct EvalRunReport {
     pub patch: PatchEvalResult,
     pub explain: ExplainEvalResult,
     pub rebuild: RebuildEvalResult,
+    #[serde(default)]
+    pub capability_context: CapabilityContextEvalResult,
     pub score: EvalScore,
 }
 
@@ -396,6 +477,7 @@ mod tests {
                 state_matches: true,
                 divergences: vec![],
             },
+            capability_context: CapabilityContextEvalResult::default(),
             score: EvalScore::from_dimensions(vec![]),
         };
 

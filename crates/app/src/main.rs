@@ -1630,6 +1630,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                     patch: patch_result,
                     explain: explain_result,
                     rebuild: rebuild_result,
+                    capability_context: CapabilityContextEvalResult::default(),
                     score,
                 };
 
@@ -2046,6 +2047,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                         rebuild: openwand_app::eval_model::RebuildEvalResult {
                             events_replayed: 0, state_matches: false, divergences: vec![],
                         },
+                        capability_context: openwand_app::eval_model::CapabilityContextEvalResult::default(),
                         score: openwand_app::eval_model::EvalScore {
                             total: 0, max: 0, pass_rate: 0.0, dimensions: vec![],
                         },

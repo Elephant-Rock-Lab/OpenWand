@@ -215,6 +215,7 @@ mod tests {
                 state_matches: true,
                 divergences: vec![],
             },
+            capability_context: CapabilityContextEvalResult::default(),
             score: EvalScore::from_dimensions(vec![]),
         }
     }

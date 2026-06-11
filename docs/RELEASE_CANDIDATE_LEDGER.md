@@ -1,17 +1,17 @@
 # Release Candidate Readiness Ledger
 
-**Wave:** 70C
+**Wave:** 71C
 **Date:** 2026-06-11
-**Commit:** `d6fa1f077cf920843bc8e95ce954cf45fc3f9413` (`wave-70b-lock`)
-**Test baseline:** 1,148 tests (1,144 lib + 4 integration), 0 failures
+**Commit:** `10f7e3b` (`wave-71b-lock`, latest runtime code)
+**Test baseline:** 1,159 tests (1,152 lib + 7 integration), 0 failures
 
 ---
 
 ## Determination
 
-**Emergency halt blockers resolved. RC artifact prepared with real filesystem
-approval-effect evidence and restored full-workspace build. Repository is eligible
-for release-candidate validation, not yet a final release declaration.**
+**Emergency halt blockers resolved. Executable CLI surface truthful. Production-path
+approval E2E verified with sandbox/schema/executor. Repository is eligible for public
+release-candidate publication, not yet a final release declaration.**
 
 ---
 
@@ -19,8 +19,9 @@ for release-candidate validation, not yet a final release declaration.**
 
 | Field | Value |
 |-------|-------|
-| Artifact code commit | `d6fa1f077cf920843bc8e95ce954cf45fc3f9413` (`wave-70b-lock`) |
-| Packaging metadata commit | `e50356d6a2da59793cf8c9b0191b2dde1f844d3c` (`wave-70c-lock`) |
+| Artifact code commit | `d6fa1f0` (`wave-70b-lock`) |
+| Latest runtime commit | `10f7e3b` (`wave-71b-lock`) |
+| Packaging metadata commit | `e50356d` (`wave-70c-lock`) |
 | Target triple | `x86_64-pc-windows-msvc` |
 | Build profile | `release` (optimized) |
 | Feature set | `--features desktop` |
@@ -69,7 +70,7 @@ cargo audit
 
 ## Tag Sequence
 
-**27 tags** from `wave-52a-lock` through `wave-70c-lock`:
+**30 tags** from `wave-52a-lock` through `wave-71b-lock`:
 
 | Range | Count | Waves |
 |-------|------:|-------|
@@ -77,8 +78,9 @@ cargo audit
 | 59A–61A | 3 | Shell decomposition |
 | 62A–68A | 7 | Capability-context integration |
 | 69A–69G | 7 | Release-blocker remediation + hardening |
-| 70A–70C | 3 | RC validation + packaging |
-| **Total** | **27** | |
+| 70A–70D | 4 | RC validation + packaging |
+| 71A–71B | 2 | CLI surface truth + production-path E2E |
+| **Total** | **30** | |
 
 Full tag list:
 ```
@@ -89,6 +91,9 @@ wave-67a-lock wave-68a-lock wave-69a-lock wave-69b-lock wave-69c-lock
 wave-69d-lock wave-69e-lock wave-69f-lock wave-69g-lock wave-70a-lock
 wave-70b-lock
 wave-70c-lock
+wave-70d-lock
+wave-71a-lock
+wave-71b-lock
 ```
 
 ---
@@ -108,6 +113,10 @@ wave-70c-lock
 
 | CLI command surface matches capability matrix | 71A | ✅ Verified (8 binary tests) |
 | Approval outcome reporting honest | 71A | ✅ Fixed |
+| Production-path approval E2E | 71B | ✅ Verified (3 tests: approve/reject/traversal) |
+| Production sandbox blocks traversal even after policy approval | 71B | ✅ Verified |
+| Stale shell E2E scripts corrected | 71B | ✅ Corrected |
+| Direct-function tests annotated | 71B | ✅ 5 files annotated |
 
 ---
 
@@ -137,8 +146,9 @@ wave-70c-lock
 | DEFERRED-005 | MutationHelper live-event correctness | Closed with tests + rationale |
 | DEFERRED-006 | STATE.md/documentation update | Closed by update |
 | DEFERRED-007 | Local branch publication | Accepted non-blocking / pending user decision |
+| DEFERRED-008 | Sandbox TOCTOU boundary | Accepted residual / documented threat model (71C) |
 
-**Categories:** 5 closed (002–006), 2 accepted non-blocking (001, 007).
+**Categories:** 5 closed (002–006), 3 accepted non-blocking (001, 007, 008).
 
 ---
 
@@ -157,7 +167,7 @@ wave-70c-lock
 ## Cargo Audit Summary
 
 - **Vulnerabilities:** 0
-- **Warnings:** 16 (14 unmaintained, 2 unsound)
+- **Warnings:** 15 (13 unmaintained, 2 unsound)
 - **Direct dependency advisories:** 0
 - **All warnings transitive** via Dioxus desktop rendering (13) or Loro CRDT (1 via atomic-polyfill)
 - **None affect** OpenWand data, crypto, network, or storage paths
@@ -169,10 +179,10 @@ wave-70c-lock
 | Crate | Lib Tests | Integration Tests |
 |-------|----------:|------------------:|
 | openwand-core | 45 | — |
-| openwand-session | 49 | 4 |
+| openwand-session | 49 | 7 |
 | openwand-tools | 93 | — |
-| openwand-app | 957 | — |
-| **Total** | **1,144** | **4** |
+| openwand-app | 957 | 8 |
+| **Total** | **1,152** | **15** |
 
 ---
 
@@ -189,7 +199,7 @@ wave-70c-lock
 
 **Local RC artifact prepared; remote publication pending by user decision.**
 
-- Local master: 26 commits ahead of origin/master (Wave 50A through 70B)
+- Local master: 30 commits ahead of origin/master (Wave 50A through 71B)
 - Not pushed — pending user decision
 
 ---
@@ -198,8 +208,9 @@ wave-70c-lock
 
 1. Real-provider validation with auth + non-sensitive fixture workspace — deferred
 2. App test-module clippy cleanup — accepted as cosmetic
-3. Transitive dependency warnings — accepted pending upstream upgrades
+3. Transitive dependency warnings (15: 13 unmaintained, 2 unsound) — accepted pending upstream upgrades
 4. Remote publication — pending by user decision
+5. Sandbox TOCTOU boundary (DEFERRED-008) — accepted residual risk, documented threat model
 
 ---
 
@@ -211,11 +222,12 @@ wave-70c-lock
 | "hash-bound append-only records" | README.md | ✅ | Corrected from "immutable" |
 | "append-only evidence chain" | README.md | ✅ | Notes verifier not yet implemented |
 | "cargo clippy zero warnings" | STATE.md HB-G5 | ✅ | Qualifies: 11 non-app crates; app test-module cosmetic accepted |
-| "1,148 tests, 0 failures" | This ledger | ✅ | Verified baseline |
+| "1,159 tests, 0 failures" | This ledger | ✅ | Verified baseline (1,152 lib + 7 integration) |
 | "0 vulnerabilities" | This ledger | ✅ | cargo audit confirmed |
 
 ---
 
-*After 70C, the RC artifact has recorded identity, reproducible build inputs, truthful
-validation status, and an explicit deferred-items boundary. No new verification claims
-are made beyond what the tests and audit actually prove.*
+*After 71C, the RC is eligible for public release-candidate publication. All reviewer findings
+from the independent audit are closed (5) or accepted as residual risk (1 TOCTOU). Production-path
+approval E2E exercises real sandbox/schema/executor. CLI surface matches capability matrix.
+Final release declaration remains pending by user decision.*

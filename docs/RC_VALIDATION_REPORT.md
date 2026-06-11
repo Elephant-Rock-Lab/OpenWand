@@ -1,7 +1,8 @@
-# RC Validation Report — Wave 70D
+# RC Validation Report — Wave 71C
 
 **Date:** 2026-06-11
-**Baseline commit:** `d6fa1f0` (wave-70b-lock, artifact code) / `e50356d` (wave-70c-lock, packaging metadata)
+**Baseline commit:** `10f7e3b` (wave-71b-lock, latest runtime)
+**Previous artifact:** `d6fa1f0` (wave-70b-lock) / `e50356d` (wave-70c-lock, packaging)
 **Validator:** Craft Agent (automated)
 
 ---
@@ -19,7 +20,7 @@ Real-provider validation remains deferred.
 
 ## 1. Canonical Build Verification
 
-### Full workspace build (RESTORED — clean)
+### Full workspace build (clean)
 
 | Command | Result |
 |---------|--------|

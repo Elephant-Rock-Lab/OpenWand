@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 71B complete. E2E Honesty and Production-Path Approval Validation.**
+**Wave 71C complete. RC Readiness Reconciliation and TOCTOU Risk Ledger.**
 
-Previous lock: Wave 71A — `3ee13a9` — `wave-71a-lock`
+Previous lock: Wave 71B — `10f7e3b` — `wave-71b-lock`
 
 ## Workspace Structure
 ```

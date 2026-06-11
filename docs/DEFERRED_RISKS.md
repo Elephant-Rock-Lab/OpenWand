@@ -93,3 +93,12 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **Category:** Publication process
 - **Detail:** 23 commits ahead of origin/master (Wave 50A through 69G). Not pushed in this wave.
 - **Resolution path:** User decides when and how to publish.
+
+### DEFERRED-008: Sandbox TOCTOU boundary
+- **Status:** Accepted residual risk
+- **Category:** Filesystem security
+- **Threat model:** A local concurrent filesystem adversary (a separate process running on the same machine) replaces a validated directory with a symlink between the time `resolve_workspace_path()` canonicalizes and validates the path and the time `std::fs::write()` (or `create_dir_all()`) follows the path to write. This is a TOCTOU (time-of-check/time-of-use) race.
+- **What is fixed:** Direct path traversal (`../../../etc/passwd`), static symlink escapes, Windows drive/UNC prefixes, and parent directory (`..`) components are all rejected at validation time. Production-path E2E test proves `../../../etc/escape.txt` is blocked even when policy approves the write.
+- **What remains:** Handle-relative filesystem operations (e.g., Windows `CreateFile` with `FILE_FLAG_NO_REPARSE_POINT`, Linux `O_NOFOLLOW`) would close the TOCTOU gap by ensuring the write target cannot be replaced between validation and use. This requires platform-specific unsafe code or a native crate.
+- **Risk acceptance rationale:** The adversary model requires local concurrent filesystem access on the same machine as OpenWand, with timing precision to win the race window. This is not a model-driven or network-accessible attack. The existing sandbox blocks all static path manipulations.
+- **Resolution path:** Handle-relative writes in a future wave, or explicit documentation that OpenWand assumes a non-adversarial local filesystem.

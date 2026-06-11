@@ -481,6 +481,9 @@ fn summarize_event_kind(event: &OpenWandTraceEvent) -> String {
             InferenceEvent::Called { model, .. } => format!("Inference called: {}", model),
             InferenceEvent::Completed { .. } => "Inference completed".into(),
             InferenceEvent::Failed { model, error, .. } => format!("Inference failed: {} — {}", model, truncate(error, 50)),
+            InferenceEvent::CapabilityContextAssembled { included_skill_ids, included_goal_ids, .. } => {
+                format!("Capability context assembled: {} skills, {} goals", included_skill_ids.len(), included_goal_ids.len())
+            }
         },
         OpenWandTraceEvent::Gate(e) => match e {
             GateEvent::Evaluated { passed, summary, .. } => {

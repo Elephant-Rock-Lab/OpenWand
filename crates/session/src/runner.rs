@@ -23,7 +23,7 @@ use openwand_llm::{LlmClient, LlmDelta, LlmRequest, LlmTarget};
 use openwand_memory::{MemoryQuery, MemoryReadStore};
 use openwand_policy::{GateDecision, OutputGuardConfig, PolicyEngine, guard_output};
 use openwand_tools::executor::ToolExecutor;
-use openwand_trace::{Actor, TraceStore, TraceStreamId, TraceStreamScope};
+use openwand_trace::{Actor, AppendTraceEntry, TraceStore, TraceStreamId, TraceStreamScope};
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -306,6 +306,26 @@ impl SessionRunner {
             // BeforeInference — assemble request
             self.emit_phase(Phase::BeforeInference, step).await;
             let llm_request = self.assemble_llm_request(&config).await?;
+
+            // Emit capability context trace if block was included (Patch 1)
+            if let Some(ref cap) = config.capability_context {
+                if !cap.text.is_empty() {
+                    let hash = sha256_of_text(&cap.text);
+                    let event = InferenceEvent::CapabilityContextAssembled {
+                        session_id: self.session_id.0.clone(),
+                        included_skill_ids: cap.included_skill_ids.clone(),
+                        included_goal_ids: cap.included_goal_ids.clone(),
+                        excluded_item_ids: cap.excluded_item_ids.clone(),
+                        skills_manifest_state: manifest_audit_state_from_str(&cap.skills_manifest_state),
+                        goals_manifest_state: manifest_audit_state_from_str(&cap.goals_manifest_state),
+                        context_text_hash: hash,
+                        context_text_hash_algorithm: openwand_core::events::TraceHashAlgorithm::Sha256,
+                        context_text_length: cap.text.len(),
+                        prompt_order_position: openwand_core::events::CapabilityPromptOrderPosition::AfterMemoryBlock,
+                    };
+                    let _ = self.append_capability_trace(event).await; // non-fatal
+                }
+            }
 
             // Inference
             self.emit_phase(Phase::Inference, step).await;
@@ -890,6 +910,25 @@ impl SessionRunner {
         Ok(InferenceOutput { text, tool_calls, stop_reason })
     }
 
+    /// Append capability context trace event (non-fatal, Patch 1).
+    async fn append_capability_trace(
+        &self,
+        event: InferenceEvent,
+    ) -> Result<(), SessionError> {
+        let command = AppendTraceEntry {
+            actor: Actor::System { component: "session_runner".into() },
+            event: StoredEvent(OpenWandTraceEvent::Inference(event)),
+            relations: vec![],
+            stream_id: TraceStreamId {
+                scope: TraceStreamScope::Session,
+                id: self.session_id.0.clone(),
+            },
+            idempotency_key: None,
+        };
+        self.trace.append(command).await.map_err(|e| SessionError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
     async fn gate_tool_calls(
         &self,
         calls: &[ToolCall],
@@ -1457,4 +1496,27 @@ pub struct UnresolvedSuspension {
     pub tool_call_id: ToolCallId,
     pub tool_name: String,
     pub suspended_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// SHA-256 hash of text for trace integrity (Patch 5).
+pub fn sha256_of_text(text: &str) -> String {
+    use std::io::Write;
+    let hash = <sha2::Sha256 as sha2::Digest>::digest(text.as_bytes());
+    format!("{:x}", hash)
+}
+
+/// Convert manifest state string from CapabilityContextBlock to typed audit state (Patch 3).
+pub fn manifest_audit_state_from_str(s: &str) -> openwand_core::events::CapabilityManifestAuditState {
+    let lower = s.to_lowercase();
+    if lower.contains("not found") {
+        openwand_core::events::CapabilityManifestAuditState::NotFound
+    } else if lower.contains("invalid") {
+        openwand_core::events::CapabilityManifestAuditState::Invalid
+    } else if lower.contains("found with items") {
+        openwand_core::events::CapabilityManifestAuditState::FoundWithItems
+    } else if lower.contains("found but empty") || lower.contains("found empty") {
+        openwand_core::events::CapabilityManifestAuditState::FoundEmpty
+    } else {
+        openwand_core::events::CapabilityManifestAuditState::NotFound
+    }
 }

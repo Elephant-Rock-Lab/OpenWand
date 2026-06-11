@@ -84,6 +84,8 @@ async fn exec_approval_trace_order_is_gate_suspended_resumed_called_completed() 
     let decision = ApprovalDecision {
         approval_request_id: None,
         resolution: ApprovalResolution::Approve,
+        tool_name: None,
+        args_hash: None,
     };
     let _approve_result = harness
         .runner
@@ -141,6 +143,8 @@ async fn exec_rejection_records_denied_no_execution() {
         resolution: ApprovalResolution::Reject {
             reason: Some("user denied execution".into()),
         },
+        tool_name: None,
+        args_hash: None,
     };
     let _reject_result = harness
         .runner

@@ -52,6 +52,7 @@ fn make_context() -> ApprovalContextSnapshot {
         requested_action_summary: "Write test.txt".into(),
         rollback_plan: None,
         metadata: serde_json::Value::Null,
+        canonical_workspace: None,
     }
 }
 

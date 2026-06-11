@@ -33,6 +33,7 @@ fn make_pending(name: &str) -> PendingApprovalRecovery {
             requested_action_summary: "test".into(),
             rollback_plan: None,
             metadata: serde_json::Value::Null,
+            canonical_workspace: None,
         },
         tool_name: name.into(),
         reason: "test".into(),

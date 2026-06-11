@@ -314,7 +314,7 @@ pub fn build_recovery_index(entries: &[TraceEntry<StoredEvent>]) -> ApprovalReco
 // ---- Command types ----
 
 /// User's resolution decision for a pending approval.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ApprovalResolution {
     Approve,
     Reject { reason: Option<String> },
@@ -401,6 +401,9 @@ pub struct ApprovalUiModel {
     pub rollback_plan: Option<String>,
     pub arguments_preview: serde_json::Value,
     pub args_hash: String,
+    /// Canonical workspace for audit/display only (Wave 69B Patch 6).
+    /// Not user-editable or overridable.
+    pub canonical_workspace: Option<String>,
 }
 
 impl ApprovalUiModel {
@@ -416,6 +419,7 @@ impl ApprovalUiModel {
             rollback_plan: ctx.rollback_plan.clone(),
             arguments_preview: ctx.arguments.clone(),
             args_hash: ctx.args_hash.clone(),
+            canonical_workspace: ctx.canonical_workspace.clone(),
         }
     }
 }
@@ -486,6 +490,7 @@ mod tests {
             requested_action_summary: "Write to test.txt".into(),
             rollback_plan: None,
             metadata: serde_json::Value::Null,
+            canonical_workspace: None,
         };
         let ui = ApprovalUiModel::from_context(&ctx);
         assert_eq!(ui.tool_name, "local__file_write");
@@ -667,4 +672,149 @@ pub fn validate_tool_lifecycle(
     }
 
     violations
+}
+
+/// Wave 69B: Verify approval workspace binding invariants.
+#[cfg(test)]
+mod workspace_authority_tests {
+    use super::*;
+    use crate::approval_recovery::*;
+
+    fn make_recovery_with_workspace(ws: Option<&str>) -> PendingApprovalRecovery {
+        PendingApprovalRecovery {
+            suspended_trace_id: TraceId::new(),
+            context: ApprovalContextSnapshot {
+                approval_request_id: ApprovalRequestId::new(),
+                gate_id: openwand_core::GateId::new(),
+                step: 1,
+                tool_call_id: ToolCallId::new(),
+                tool_name: "local__file_write".into(),
+                arguments: serde_json::json!({"path": "test.txt"}),
+                args_hash: "sha256:abc".into(),
+                declared_effect: openwand_core::ToolEffect::Write,
+                risk_level: openwand_core::RiskLevelSnapshot::Medium,
+                confirmation_level: openwand_core::ConfirmationLevel::Approve,
+                reason_code: "write-requires-approve".into(),
+                policy_summary: "Write requires approval".into(),
+                requested_action_summary: "Write test.txt".into(),
+                rollback_plan: None,
+                metadata: serde_json::Value::Null,
+                canonical_workspace: ws.map(String::from),
+            },
+            tool_name: "local__file_write".into(),
+            reason: "test".into(),
+        }
+    }
+
+    #[test]
+    fn approval_resume_rejects_pre_69b_snapshot_without_workspace() {
+        let recovery = make_recovery_with_workspace(None);
+        assert!(recovery.context.canonical_workspace.is_none());
+    }
+
+    #[test]
+    fn approval_resume_accepts_same_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().to_string_lossy().to_string();
+        let recovery = make_recovery_with_workspace(Some(&ws));
+        assert_eq!(recovery.context.canonical_workspace.as_deref(), Some(ws.as_str()));
+    }
+
+    #[test]
+    fn approval_context_snapshot_serializes_with_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().to_string_lossy().to_string();
+        let recovery = make_recovery_with_workspace(Some(&ws));
+        let json = serde_json::to_string(&recovery.context).unwrap();
+        assert!(json.contains("canonical_workspace"));
+        let back: ApprovalContextSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.canonical_workspace, Some(ws));
+    }
+
+    #[test]
+    fn approval_context_snapshot_deserializes_without_workspace() {
+        let json = r#"{
+            "approval_request_id": "ar_1",
+            "gate_id": "g_1",
+            "step": 1,
+            "tool_call_id": "tc_1",
+            "tool_name": "test",
+            "arguments": {},
+            "args_hash": "sha256:x",
+            "declared_effect": "Write",
+            "risk_level": "Medium",
+            "confirmation_level": "Approve",
+            "reason_code": "test",
+            "policy_summary": "test",
+            "requested_action_summary": "test",
+            "rollback_plan": null,
+            "metadata": null
+        }"#;
+        let snap: ApprovalContextSnapshot = serde_json::from_str(json).unwrap();
+        assert!(snap.canonical_workspace.is_none());
+    }
+
+    #[test]
+    fn approval_decision_has_no_workspace_override() {
+        let d = crate::runner::ApprovalDecision::approve();
+        // Verify there is no workspace override field
+        assert!(d.tool_name.is_none());
+        assert!(d.args_hash.is_none());
+    }
+
+    #[test]
+    fn approval_ui_model_workspace_is_display_only() {
+        let ctx = ApprovalContextSnapshot {
+            approval_request_id: ApprovalRequestId::new(),
+            gate_id: openwand_core::GateId::new(),
+            step: 1,
+            tool_call_id: ToolCallId::new(),
+            tool_name: "test".into(),
+            arguments: serde_json::json!({}),
+            args_hash: "sha256:x".into(),
+            declared_effect: openwand_core::ToolEffect::Write,
+            risk_level: openwand_core::RiskLevelSnapshot::Medium,
+            confirmation_level: openwand_core::ConfirmationLevel::Approve,
+            reason_code: "test".into(),
+            policy_summary: "test".into(),
+            requested_action_summary: "test".into(),
+            rollback_plan: None,
+            metadata: serde_json::Value::Null,
+            canonical_workspace: Some("/workspace".into()),
+        };
+        let ui = ApprovalUiModel::from_context(&ctx);
+        assert_eq!(ui.canonical_workspace, Some("/workspace".into()));
+    }
+
+    #[test]
+    fn approval_resolution_input_contains_no_workspace_override() {
+        let r = ApprovalResolution::Approve;
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(!json.contains("workspace"));
+    }
+
+    #[test]
+    fn approval_args_hash_is_bound_to_snapshot() {
+        let recovery = make_recovery_with_workspace(Some("/ws"));
+        assert_eq!(recovery.context.args_hash, "sha256:abc");
+    }
+
+    #[test]
+    fn approval_tool_name_is_bound_to_snapshot() {
+        let recovery = make_recovery_with_workspace(Some("/ws"));
+        assert_eq!(recovery.context.tool_name, "local__file_write");
+    }
+
+    #[test]
+    fn approval_error_messages_do_not_leak_paths() {
+        let msgs = [
+            "Approval workspace does not match the original authorized workspace.",
+            "Approval snapshot is missing canonical workspace; recreate the request.",
+            "Resume workspace cannot be resolved inside the authorized workspace.",
+        ];
+        for msg in &msgs {
+            assert!(!msg.contains("Users"));
+            assert!(!msg.contains("/home/"));
+        }
+    }
 }

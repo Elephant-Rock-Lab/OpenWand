@@ -85,27 +85,31 @@ pub struct ApprovalDecision {
     pub approval_request_id: Option<openwand_core::ApprovalRequestId>,
     /// The resolution itself.
     pub resolution: ApprovalResolution,
+    /// Tool name binding (Wave 69B Patch 7). If set, must match snapshot.
+    pub tool_name: Option<String>,
+    /// Args hash binding (Wave 69B Patch 7). If set, must match snapshot.
+    pub args_hash: Option<String>,
 }
 
 impl ApprovalDecision {
     /// Approve the single pending approval (no explicit ID).
     pub fn approve() -> Self {
-        Self { approval_request_id: None, resolution: ApprovalResolution::Approve }
+        Self { approval_request_id: None, resolution: ApprovalResolution::Approve, tool_name: None, args_hash: None }
     }
 
     /// Reject the single pending approval (no explicit ID).
     pub fn reject() -> Self {
-        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: None } }
+        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: None }, tool_name: None, args_hash: None }
     }
 
     /// Reject with an explicit reason.
     pub fn reject_with_reason(reason: impl Into<String>) -> Self {
-        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: Some(reason.into()) } }
+        Self { approval_request_id: None, resolution: ApprovalResolution::Reject { reason: Some(reason.into()) }, tool_name: None, args_hash: None }
     }
 
     /// Resolve a specific approval by ID.
     pub fn for_approval(arid: openwand_core::ApprovalRequestId, resolution: ApprovalResolution) -> Self {
-        Self { approval_request_id: Some(arid), resolution }
+        Self { approval_request_id: Some(arid), resolution, tool_name: None, args_hash: None }
     }
 }
 
@@ -557,6 +561,51 @@ impl SessionRunner {
                 "Cannot resolve approval: {} conflict(s) detected",
                 index.conflicts.len()
             )));
+        }
+
+        // Wave 69B Patch 1/3/4: Workspace authority binding — check BEFORE tool.resumed
+        match &target.context.canonical_workspace {
+            Some(snapshot_ws) => {
+                // Canonicalize resume workspace and compare (Patch 3)
+                let resume_ws = std::path::Path::new(&config.working_directory);
+                let canonical_resume = resume_ws
+                    .canonicalize()
+                    .map_err(|_| SessionError::Internal(
+                        "Resume workspace cannot be resolved inside the authorized workspace".into()
+                    ))?;
+                let canonical_snapshot = std::path::Path::new(snapshot_ws)
+                    .canonicalize()
+                    .map_err(|_| SessionError::Internal(
+                        "Approval snapshot workspace is malformed; recreate the request".into()
+                    ))?;
+                if canonical_resume != canonical_snapshot {
+                    return Err(SessionError::Internal(
+                        "Approval workspace does not match the original authorized workspace".into()
+                    ));
+                }
+            }
+            None => {
+                // Patch 1: Fail-closed on missing workspace (pre-69B snapshot)
+                return Err(SessionError::Internal(
+                    "Approval snapshot is missing canonical workspace; recreate the request".into()
+                ));
+            }
+        }
+
+        // Wave 69B Patch 7: Verify tool name and args hash match
+        if let Some(resolved_name) = decision.tool_name.as_ref() {
+            if resolved_name != &target.context.tool_name {
+                return Err(SessionError::Internal(
+                    "Approval tool name does not match the original request".into()
+                ));
+            }
+        }
+        if let Some(resolved_hash) = decision.args_hash.as_ref() {
+            if resolved_hash != &target.context.args_hash {
+                return Err(SessionError::Internal(
+                    "Approval tool arguments do not match the original request".into()
+                ));
+            }
         }
 
         let tool_name = target.tool_name.clone();
@@ -1244,6 +1293,7 @@ impl SessionRunner {
             requested_action_summary: format!("Execute '{}' with provided arguments", pending.tool_call.name),
             rollback_plan: pending.gate_evaluation.rollback_plan.clone(),
             metadata: serde_json::Value::Null,
+            canonical_workspace: Some(self.working_directory.clone()),
         };
 
         let event = OpenWandTraceEvent::Tool(ToolEvent::Suspended {

@@ -90,6 +90,11 @@ pub struct ApprovalContextSnapshot {
     /// Optional future-proof metadata, not used for authority.
     #[serde(default)]
     pub metadata: serde_json::Value,
+    /// Canonical workspace root captured at policy/suspension boundary (Wave 69B).
+    /// Set when the approval request is created. Used to reject resume with different workspace.
+    /// None for pre-69B snapshots — resume rejects these (fail-closed).
+    #[serde(default)]
+    pub canonical_workspace: Option<String>,
 }
 
 /// Serializable error summary for trace events.
@@ -202,6 +207,7 @@ mod tests {
             requested_action_summary: "Write to test.txt".into(),
             rollback_plan: Some("Delete test.txt".into()),
             metadata: serde_json::Value::Null,
+            canonical_workspace: None,
         };
         roundtrip(&snap);
     }

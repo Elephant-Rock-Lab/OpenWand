@@ -248,3 +248,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 |------|-------|-----|------:|----------|
 | 70A | Release Candidate Validation Pass | `wave-70a-lock` | 1,146 | `docs/RC_VALIDATION_REPORT.md` |
 | 70B | RC Validation Gap Closure | `wave-70b-lock` | 1,148 | `docs/RC_VALIDATION_REPORT.md` |
+| 70C | Release Candidate Packaging and Publication Prep | `wave-70c-lock` | 1,148 | `docs/RC_PUBLICATION_NOTES.md` |

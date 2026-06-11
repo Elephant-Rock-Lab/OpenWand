@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 70B complete. RC Validation Gap Closure.**
+**Wave 70C complete. Release Candidate Packaging and Publication Prep.**
 
-Previous lock: Wave 70A — `4d2e031` — `wave-70a-lock`
+Previous lock: Wave 70B — `d6fa1f0` — `wave-70b-lock`
 
 ## Workspace Structure
 ```

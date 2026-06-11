@@ -63,8 +63,8 @@ mod desktop_render {
     pub fn render_readiness_empty_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {}; border-bottom: 1px solid {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_FAINT, COLORS::BORDER_LIGHT,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_FAINT, colors::BORDER_LIGHT,
         );
         rsx! {
             div { style: "{style}",
@@ -77,8 +77,8 @@ mod desktop_render {
     pub fn render_readiness_loading_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_MUTED,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_MUTED,
         );
         rsx! {
             div { style: "{style}",
@@ -119,14 +119,14 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let row_s = format!(
             "display: flex; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
-        let label_s = format!("min-width: 140px; color: {};", COLORS::TEXT_PRIMARY);
-        let value_s = format!("color: {};", COLORS::TEXT_MUTED);
+        let label_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
+        let value_s = format!("color: {};", colors::TEXT_MUTED);
         let note = readiness_not_execution_permission_note();
         let note_s = format!(
             "font-size: {}; color: {}; font-style: italic; margin-top: {};",
-            TYPO::TEXT_XS, COLORS::TEXT_MUTED, SPACING::SPACE_SM,
+            typo::TEXT_XS, colors::TEXT_MUTED, spacing::SPACE_SM,
         );
 
         rsx! {
@@ -188,11 +188,11 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let row_s = format!(
             "display: flex; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
-        let name_s = format!("min-width: 260px; color: {};", COLORS::TEXT_PRIMARY);
+        let name_s = format!("min-width: 260px; color: {};", colors::TEXT_PRIMARY);
         let status_s = |passed: bool| {
-            format!("min-width: 80px; color: {};", if passed { COLORS::ACCENT_INFO } else { COLORS::ACCENT_ERROR })
+            format!("min-width: 80px; color: {};", if passed { colors::SUCCESS_TEXT } else { colors::ERROR_TEXT })
         };
 
         rsx! {
@@ -204,7 +204,7 @@ mod desktop_render {
                     div { style: "{row_s}",
                         span { style: "{name_s}", "{pred.name}" }
                         span { style: "{status_s(pred.passed)}", "{predicate_status_label(pred.passed)}" }
-                        span { style: "color: {};", COLORS::TEXT_MUTED, "{pred.reason}" }
+                        span { style: "color: #888;", "{pred.reason}" }
                     }
                 }
             }

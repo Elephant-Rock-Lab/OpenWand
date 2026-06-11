@@ -59,8 +59,8 @@ mod desktop_render {
     pub fn render_review_empty_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {}; border-bottom: 1px solid {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_FAINT, COLORS::BORDER_LIGHT,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_FAINT, colors::BORDER_LIGHT,
         );
         rsx! {
             div { style: "{style}",
@@ -73,8 +73,8 @@ mod desktop_render {
     pub fn render_review_loading_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_MUTED,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_MUTED,
         );
         rsx! {
             div { style: "{style}",
@@ -115,14 +115,14 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let row_s = format!(
             "display: flex; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
-        let label_s = format!("min-width: 140px; color: {};", COLORS::TEXT_PRIMARY);
-        let value_s = format!("color: {};", COLORS::TEXT_MUTED);
+        let label_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
+        let value_s = format!("color: {};", colors::TEXT_MUTED);
         let note = review_not_certification_note();
         let note_s = format!(
             "font-size: {}; color: {}; font-style: italic; margin-top: {};",
-            TYPO::TEXT_XS, COLORS::TEXT_MUTED, SPACING::SPACE_SM,
+            typo::TEXT_XS, colors::TEXT_MUTED, spacing::SPACE_SM,
         );
 
         rsx! {
@@ -173,9 +173,9 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let row_s = format!(
             "display: flex; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
-        let label_s = format!("min-width: 200px; color: {};", COLORS::TEXT_PRIMARY);
+        let label_s = format!("min-width: 200px; color: {};", colors::TEXT_PRIMARY);
 
         let flags = [
             ("Accepts reported evidence", acceptance.accepts_reported_evidence),
@@ -192,10 +192,10 @@ mod desktop_render {
                 for (name, value) in flags {
                     div { style: "{row_s}",
                         span { style: "{label_s}", "{name}" }
-                        span {
-                            style: "color: {};",
-                            if value { COLORS::ACCENT_INFO } else { COLORS::TEXT_MUTED },
-                            if value { "Yes" } else { "No" }
+                        {
+                            let val_color = if value { "#2d6a2d" } else { "#888" };
+                            let val_label = if value { "Yes" } else { "No" };
+                            rsx! { span { style: "color: {val_color};", "{val_label}" } }
                         }
                     }
                 }

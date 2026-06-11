@@ -31,6 +31,7 @@ async fn ui_e2e_text_only_session_streams_to_transcript() {
         llm_target: None,
         memory_prompt_inputs: None,
         output_guard: None,
+        capability_context: None,
     };
     let result = harness.runner.run_turn("Hello".into(), config).await;
     assert!(result.is_ok());
@@ -71,6 +72,7 @@ async fn ui_e2e_tool_approval_session_waits_for_approval() {
         llm_target: None,
         memory_prompt_inputs: None,
         output_guard: None,
+        capability_context: None,
     };
 
     tokio::spawn(async move {
@@ -106,6 +108,7 @@ async fn ui_e2e_tool_rejection_visible_without_tool_execution() {
         llm_target: None,
         memory_prompt_inputs: None,
         output_guard: None,
+        capability_context: None,
     };
 
     // Run to suspension
@@ -164,6 +167,7 @@ async fn ui_e2e_policy_block_visible_without_tool_execution() {
         llm_target: None,
         memory_prompt_inputs: None,
         output_guard: None,
+        capability_context: None,
     };
     let result = harness.runner.run_turn("Write file".into(), config).await;
     assert!(result.is_ok());
@@ -197,6 +201,7 @@ async fn ui_e2e_tool_error_visible_as_tool_message() {
         llm_target: None,
         memory_prompt_inputs: None,
         output_guard: None,
+        capability_context: None,
     };
     let result = harness.runner.run_turn("Read file".into(), config).await;
     assert!(result.is_ok());

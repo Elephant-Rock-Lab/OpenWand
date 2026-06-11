@@ -120,7 +120,7 @@ fn save_push_chain(dir: &Path, readiness: &RemotePushReadinessRecord) -> (Remote
 
 fn make_eligible_readiness() -> AutoCommitReadinessReport {
     AutoCommitReadinessReport { generated_at: chrono::Utc::now(), report_schema_version: 1, target: ReadinessTarget::AutoCommit, status: AutoCommitReadinessStatus::Eligible,
-        score: ReadinessScore { weighted_pass_rate: 0.95, patch_pass_rate: 0.98, policy_pass_rate: 1.0, rebuild_pass_rate: 1.0, explain_pass_rate: 0.95, regression_count: 0 },
+        score: ReadinessScore { weighted_pass_rate: 0.95, patch_pass_rate: 0.98, policy_pass_rate: 1.0, rebuild_pass_rate: 1.0, explain_pass_rate: 0.95, capability_context_pass_rate: 1.0, regression_count: 0 },
         thresholds: AutoCommitReadinessThresholds::default(),
         evidence_window: EvidenceWindow { total_reports_found: 15, reports_used: 15, reports_skipped_incompatible: 0, scenario_ids_covered: vec!["test".into()], earliest_report: None, latest_report: None },
         scenario_results: vec![], blockers: vec![], warnings: vec![] }
@@ -139,6 +139,7 @@ fn make_eval_report() -> openwand_app::eval_model::EvalRunReport {
         patch: PatchEvalResult { planned: true, applied: true, preimage_verified: true, postimage_verified: true, rollback_available: true, changed_files_match_expected: true },
         explain: ExplainEvalResult { memory_matches: true, policy_matches: true, tool_matches: true, completion_matches: true },
         rebuild: RebuildEvalResult { events_replayed: 10, state_matches: true, divergences: vec![] },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore { total: 5, max: 5, pass_rate: 1.0, dimensions: vec![
             DimensionScore { name: "patch".into(), passed: 1, total: 1, evidence_refs: vec![EvalEvidenceRef { source: EvalEvidenceSource::Trace, event_kind: Some("file.patch".into()), summary: "test".into() }] },
         ] },

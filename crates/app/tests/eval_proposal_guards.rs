@@ -73,6 +73,7 @@ fn auto_commit_proposal_does_not_mutate_workspace() {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.95,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: openwand_app::eval_readiness::AutoCommitReadinessThresholds::default(),
@@ -157,6 +158,7 @@ fn proposal_generation_leaves_git_head_index_and_worktree_unchanged() {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.95,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: openwand_app::eval_readiness::AutoCommitReadinessThresholds::default(),
@@ -241,6 +243,7 @@ fn proposal_generation_leaves_git_head_index_and_worktree_unchanged() {
             state_matches: true,
             divergences: vec![],
         },
+        capability_context: openwand_app::eval_model::CapabilityContextEvalResult::default(),
         score: openwand_app::eval_model::EvalScore {
             total: 1,
             max: 1,

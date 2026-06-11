@@ -107,6 +107,7 @@ fn make_eligible_readiness() -> AutoCommitReadinessReport {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.95,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
@@ -154,6 +155,7 @@ fn make_eval_report() -> openwand_app::eval_model::EvalRunReport {
         explain: ExplainEvalResult { memory_matches: true, policy_matches: true,
             tool_matches: true, completion_matches: true },
         rebuild: RebuildEvalResult { events_replayed: 10, state_matches: true, divergences: vec![] },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore { total: 5, max: 5, pass_rate: 1.0, dimensions: vec![
             DimensionScore { name: "patch".to_string(), passed: 1, total: 1,
                 evidence_refs: vec![EvalEvidenceRef {

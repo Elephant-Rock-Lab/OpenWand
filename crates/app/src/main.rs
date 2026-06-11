@@ -1925,6 +1925,7 @@ async fn cmd_eval(cmd: EvalCommands) -> Result<()> {
                 max_allowed_regressions,
                 require_no_missing_rollback: true,
                 require_no_unexpected_file_changes: true,
+                min_capability_context_pass_rate: 1.0,
             };
 
             let report = compute_auto_commit_readiness(&reports, &thresholds);

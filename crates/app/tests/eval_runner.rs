@@ -64,6 +64,7 @@ fn eval_runner_writes_report_json() {
             state_matches: true,
             divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore::from_dimensions(vec![]),
     };
 
@@ -130,6 +131,7 @@ fn eval_report_schema_version_is_present() {
             state_matches: true,
             divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore::from_dimensions(vec![]),
     };
 

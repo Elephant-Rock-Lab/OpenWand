@@ -511,6 +511,7 @@ fn make_eligible_readiness() -> AutoCommitReadinessReport {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.95,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
@@ -540,6 +541,7 @@ fn make_blocked_readiness() -> AutoCommitReadinessReport {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.5,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
@@ -619,6 +621,7 @@ fn make_eval_report(scenario_id: &str) -> EvalRunReport {
             state_matches: true,
             divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore {
             total: 5,
             max: 5,

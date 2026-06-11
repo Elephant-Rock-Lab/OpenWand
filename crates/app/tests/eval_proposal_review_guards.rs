@@ -70,7 +70,7 @@ fn proposal_review_does_not_mutate_workspace() {
         score: ReadinessScore {
             weighted_pass_rate: 0.95, patch_pass_rate: 0.98,
             policy_pass_rate: 1.0, rebuild_pass_rate: 1.0,
-            explain_pass_rate: 0.95, regression_count: 0,
+            explain_pass_rate: 0.95, capability_context_pass_rate: 1.0, regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
         evidence_window: EvidenceWindow {
@@ -129,7 +129,7 @@ fn proposal_review_leaves_git_head_index_and_worktree_unchanged() {
         score: ReadinessScore {
             weighted_pass_rate: 0.95, patch_pass_rate: 0.98,
             policy_pass_rate: 1.0, rebuild_pass_rate: 1.0,
-            explain_pass_rate: 0.95, regression_count: 0,
+            explain_pass_rate: 0.95, capability_context_pass_rate: 1.0, regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
         evidence_window: EvidenceWindow {
@@ -212,6 +212,7 @@ fn make_minimal_eval_report() -> openwand_app::eval_model::EvalRunReport {
         rebuild: RebuildEvalResult {
             events_replayed: 0, state_matches: false, divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore { total: 0, max: 0, pass_rate: 0.0, dimensions: vec![] },
     }
 }

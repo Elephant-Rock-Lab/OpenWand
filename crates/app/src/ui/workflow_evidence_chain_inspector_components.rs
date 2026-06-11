@@ -121,7 +121,7 @@ mod desktop_render {
         let style = empty_state_style();
         rsx! {
             div { style: "{style}",
-                div { style: "font-size: 14px; color: {COLORS::TEXT_MUTED};",
+                div { style: "font-size: 14px; color: {colors::TEXT_MUTED};",
                     "Loading evidence chain inspector…"
                 }
             }
@@ -169,11 +169,11 @@ mod desktop_render {
         let badge_s = badge_style(coverage_tone);
         let hash_display = chain_hash_display(&row.chain_hash);
         let hash_label = chain_hash_label();
-        let title_style = format!("margin: 0 0 2px 0; font-size: {};", TYPO::TEXT_XL);
-        let id_style = format!("font-size: {}; color: {};", TYPO::TEXT_SM, COLORS::TEXT_MUTED);
+        let title_style = format!("margin: 0 0 2px 0; font-size: {};", typo::TEXT_XL);
+        let id_style = format!("font-size: {}; color: {};", typo::TEXT_SM, colors::TEXT_MUTED);
         let hash_style = format!(
             "font-size: {}; color: {}; font-family: {}; margin-top: {};",
-            TYPO::TEXT_XS, COLORS::TEXT_MUTED, TYPO::FONT_MONO, SPACING::SPACE_SM,
+            typo::TEXT_XS, colors::TEXT_MUTED, typo::FONT_MONO, spacing::SPACE_SM,
         );
 
         rsx! {
@@ -218,7 +218,7 @@ mod desktop_render {
         let dot_s = status_dot_style(tone, UiSize::Sm);
         let row_s = format!(
             "display: flex; align-items: center; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
 
         rsx! {
@@ -240,7 +240,7 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let scroll_s = format!(
             "max-height: 200px; overflow-y: auto; font-family: {};",
-            TYPO::FONT_MONO,
+            typo::FONT_MONO,
         );
 
         rsx! {
@@ -258,11 +258,11 @@ mod desktop_render {
                             let row_s = format!(
                                 "display: flex; align-items: center; gap: {}; padding: {} 0; \
                                  font-size: {}; border-bottom: 1px solid {};",
-                                SPACING::SPACE_SM, SPACING::SPACE_XS,
-                                TYPO::TEXT_SM, COLORS::BORDER_SUBTLE,
+                                spacing::SPACE_SM, spacing::SPACE_XS,
+                                typo::TEXT_SM, colors::BORDER_SUBTLE,
                             );
-                            let type_s = format!("min-width: 140px; color: {};", COLORS::TEXT_PRIMARY);
-                            let id_s = format!("color: {};", COLORS::TEXT_MUTED);
+                            let type_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
+                            let id_s = format!("color: {};", colors::TEXT_MUTED);
                             let label_s = format!("color: {};", tone.text());
                             rsx! {
                                 div { style: "{row_s}",
@@ -314,7 +314,7 @@ mod desktop_render {
                 div { style: "{scroll_s}",
                     { render_coverage_summary(summary.present_links, summary.missing_links, summary.not_yet_applicable) }
                     { render_chain_links(&state.links) }
-                    { render_chain_warnings(&state.coverage_summary.linkage_warnings.iter().map(|w| w.reason.clone()).collect::<Vec<_>>(), summary.warning_count) }
+                    { render_chain_warnings(&state.linkage_warnings.iter().map(|w| w.reason.clone()).collect::<Vec<_>>(), summary.warning_count) }
                 }
 
                 { render_safety_banner() }

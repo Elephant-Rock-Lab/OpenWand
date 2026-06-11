@@ -131,9 +131,10 @@ use dioxus::prelude::*;
 #[cfg(feature = "desktop")]
 pub fn render_trace_timeline(state: &LiveInspectorState) -> Element {
     let rows = trace_timeline_rows(state);
+    let title = format!("Trace Timeline ({})", rows.len());
     rsx! {
         div { style: "padding: 8px; font-family: monospace; font-size: 11px;",
-            div { style: "font-weight: 600; margin-bottom: 8px;", "Trace Timeline ({})", rows.len() }
+            div { style: "font-weight: 600; margin-bottom: 8px;", "{title}" }
             for row in &rows {
                 div { style: "display: flex; gap: 8px; padding: 1px 0;",
                     span { style: "color: #888; min-width: 120px;", "{row.time}" }
@@ -148,9 +149,10 @@ pub fn render_trace_timeline(state: &LiveInspectorState) -> Element {
 #[cfg(feature = "desktop")]
 pub fn render_gate_tool_history(state: &LiveInspectorState) -> Element {
     let rows = gate_tool_rows(state);
+    let title = format!("Gate/Tool History ({})", rows.len());
     rsx! {
         div { style: "padding: 8px; font-family: monospace; font-size: 11px;",
-            div { style: "font-weight: 600; margin-bottom: 8px;", "Gate/Tool History ({})", rows.len() }
+            div { style: "font-weight: 600; margin-bottom: 8px;", "{title}" }
             for row in &rows {
                 div { style: "display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid #eee;",
                     span { style: "min-width: 100px; font-weight: 500;", "{row.kind_display}" }

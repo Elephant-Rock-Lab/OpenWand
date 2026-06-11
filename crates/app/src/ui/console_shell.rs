@@ -14,7 +14,7 @@ pub fn load_console_shell(
 ) {
     use openwand_workflow::workflow_run::WorkflowExecutionId;
     let wfx_id = WorkflowExecutionId(session_id.to_string());
-    match openwand_app::workflow_operator_console::assemble_console_state(path, &wfx_id) {
+    match crate::workflow_operator_console::assemble_console_state(path, &wfx_id) {
         Ok(state) => {
             *console_state.write() = Some(state);
         }

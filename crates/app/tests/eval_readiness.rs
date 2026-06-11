@@ -26,7 +26,7 @@ fn auto_commit_required_scenarios_are_weighted() {
     let registry = auto_commit_scenario_registry();
     let required: Vec<_> = registry.iter().filter(|s| s.required).collect();
 
-    assert_eq!(5, required.len(), "Should have 5 required scenarios");
+    assert_eq!(9, required.len(), "Should have 9 required scenarios (5 original + 4 CC)");
     assert!(required.iter().all(|s| s.weight >= 1.0), "Required scenarios should have weight >= 1.0");
 
     // Check specific weights
@@ -56,6 +56,7 @@ fn auto_commit_readiness_report_serializes_stably() {
             policy_pass_rate: 0.0,
             rebuild_pass_rate: 0.0,
             explain_pass_rate: 0.0,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
@@ -79,6 +80,27 @@ fn auto_commit_readiness_report_serializes_stably() {
 }
 
 // ── Commit 2: Patch trend tests ────────────────────────────────────────────
+
+fn make_passing_cc_result() -> CapabilityContextEvalResult {
+    CapabilityContextEvalResult {
+        trace_present: true,
+        capability_context_trace_refs: vec!["capability_context.assembled".to_string()],
+        inference_called_trace_ref: None,
+        evaluated_message_ref: None,
+        included_skill_ids: vec!["skill_1".to_string()],
+        included_goal_ids: vec!["goal_1".to_string()],
+        excluded_item_ids: vec![],
+        context_text_hash: "sha256:test".to_string(),
+        context_text_length: 100,
+        prompt_order: "after_memory_block".to_string(),
+        manifest_states: vec![],
+        skill_as_tool: CapabilityBoundaryFinding::Pass,
+        goal_as_scheduler: CapabilityBoundaryFinding::Pass,
+        routing_authority: CapabilityBoundaryFinding::Pass,
+        approval_authority: CapabilityBoundaryFinding::Pass,
+        policy_bypass: CapabilityBoundaryFinding::Pass,
+    }
+}
 
 fn make_report_with_patch(scenario_id: &str, patch_pass: bool, has_evidence: bool) -> EvalRunReport {
     EvalRunReport {
@@ -141,6 +163,11 @@ fn make_report_with_patch(scenario_id: &str, patch_pass: bool, has_evidence: boo
             events_replayed: 10,
             state_matches: true,
             divergences: vec![],
+        },
+        capability_context: if scenario_id.starts_with("capability_context") {
+            make_passing_cc_result()
+        } else {
+            CapabilityContextEvalResult::default()
         },
         score: EvalScore {
             total: 5,
@@ -299,6 +326,10 @@ fn make_passing_report_set() -> Vec<EvalRunReport> {
         "policy_blocks_forbidden_write",
         "trace_rebuild_after_eval",
         "multi_turn_user_correction",
+        "capability_context_respects_boundary",
+        "capability_context_does_not_schedule",
+        "capability_context_does_not_route",
+        "capability_context_does_not_approve",
     ];
     let mut reports = vec![];
     for scenario in scenarios {
@@ -524,6 +555,7 @@ fn readiness_store_saves_and_loads() {
             policy_pass_rate: 1.0,
             rebuild_pass_rate: 1.0,
             explain_pass_rate: 0.95,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),

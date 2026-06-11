@@ -174,9 +174,9 @@ fn App() -> Element {
                 // Tab bar
                 div { style: "display: flex; border-bottom: 1px solid #ddd; background: #f7f7f7;",
                     {{
-                        let tab_session_active = ACTIVE_TAB.read() == "session";
-                        let tab_console_active = ACTIVE_TAB.read() == "console";
-                        let tab_inspector_active = ACTIVE_TAB.read() == "inspector";
+                        let tab_session_active = (*ACTIVE_TAB.read()) == "session";
+                        let tab_console_active = (*ACTIVE_TAB.read()) == "console";
+                        let tab_inspector_active = (*ACTIVE_TAB.read()) == "inspector";
                         let session_bg = if tab_session_active { "#fff" } else { "#f7f7f7" };
                         let session_border = if tab_session_active { "#ddd #ddd #fff #ddd" } else { "transparent" };
                         let console_bg = if tab_console_active { "#fff" } else { "#f7f7f7" };
@@ -253,9 +253,9 @@ fn App() -> Element {
                     }}
                 }
                 // Tab content
-                if ACTIVE_TAB.read() == "console" {
+                if (*ACTIVE_TAB.read()) == "console" {
                     { render_console_pane() }
-                } else if ACTIVE_TAB.read() == "inspector" {
+                } else if (*ACTIVE_TAB.read()) == "inspector" {
                     { render_inspector_pane() }
                 } else {
                     { render_detail_pane(service.clone(), memory.clone()) }

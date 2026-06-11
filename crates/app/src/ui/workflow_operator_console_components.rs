@@ -121,7 +121,7 @@ mod desktop_render {
         let style = empty_state_style();
         rsx! {
             div { style: "{style}",
-                div { style: "font-size: 14px; color: {COLORS::TEXT_MUTED};",
+                div { style: "font-size: 14px; color: {colors::TEXT_MUTED};",
                     "Loading operator console…"
                 }
             }
@@ -160,8 +160,8 @@ mod desktop_render {
         let header_style = header_bar_style();
         let detected_tone = detected_state_tone(&summary.detected_state);
         let status_badge_style = badge_style(detected_tone);
-        let id_style = format!("font-size: {}; color: {};", TYPO::TEXT_SM, COLORS::TEXT_MUTED);
-        let title_style = format!("margin: 0 0 2px 0; font-size: {};", TYPO::TEXT_XL);
+        let id_style = format!("font-size: {}; color: {};", typo::TEXT_SM, colors::TEXT_MUTED);
+        let title_style = format!("margin: 0 0 2px 0; font-size: {};", typo::TEXT_XL);
         let chain_tone = chain_consistency_tone(summary.chain_consistent);
         let chain_label = if summary.chain_consistent {
             "Chain consistent"
@@ -171,7 +171,7 @@ mod desktop_render {
         let chain_badge_style = badge_style(chain_tone);
         let explanation_style = format!(
             "font-size: {}; color: {}; margin-top: {}; line-height: 1.4;",
-            TYPO::TEXT_SM, COLORS::TEXT_SECONDARY, SPACING::SPACE_SM,
+            typo::TEXT_SM, colors::TEXT_SECONDARY, spacing::SPACE_SM,
         );
 
         rsx! {
@@ -232,14 +232,14 @@ mod desktop_render {
                         let row_s = format!(
                             "display: flex; align-items: center; gap: {}; padding: {} 0; \
                              border-bottom: 1px solid {}; font-size: {};",
-                            SPACING::SPACE_MD, SPACING::SPACE_SM,
-                            COLORS::BORDER_SUBTLE, TYPO::TEXT_SM,
+                            spacing::SPACE_MD, spacing::SPACE_SM,
+                            colors::BORDER_SUBTLE, typo::TEXT_SM,
                         );
                         let name_s = format!(
                             "min-width: 160px; font-weight: 500; color: {};",
-                            COLORS::TEXT_PRIMARY,
+                            colors::TEXT_PRIMARY,
                         );
-                        let progress_s = format!("color: {};", COLORS::TEXT_MUTED);
+                        let progress_s = format!("color: {};", colors::TEXT_MUTED);
                         rsx! {
                             div { style: "{row_s}",
                                 div { style: "{dot_s}" }
@@ -259,7 +259,7 @@ mod desktop_render {
         let header_s = section_header_style(UiTone::Primary);
         let scroll_s = format!(
             "max-height: 200px; overflow-y: auto; font-family: {};",
-            TYPO::FONT_MONO,
+            typo::FONT_MONO,
         );
 
         rsx! {
@@ -275,11 +275,11 @@ mod desktop_render {
                             let row_s = format!(
                                 "display: flex; align-items: center; gap: {}; padding: {} 0; \
                                  font-size: {}; border-bottom: 1px solid {};",
-                                SPACING::SPACE_SM, SPACING::SPACE_XS,
-                                TYPO::TEXT_SM, COLORS::BORDER_SUBTLE,
+                                spacing::SPACE_SM, spacing::SPACE_XS,
+                                typo::TEXT_SM, colors::BORDER_SUBTLE,
                             );
-                            let kind_s = format!("min-width: 140px; color: {};", COLORS::TEXT_PRIMARY);
-                            let id_s = format!("color: {};", COLORS::TEXT_MUTED);
+                            let kind_s = format!("min-width: 140px; color: {};", colors::TEXT_PRIMARY);
+                            let id_s = format!("color: {};", colors::TEXT_MUTED);
                             let status_label = evidence_link_status_label(&link.status);
                             rsx! {
                                 div { style: "{row_s}",
@@ -316,17 +316,17 @@ mod desktop_render {
                     {
                         let target_s = format!(
                             "font-weight: 600; font-size: {}; color: {}; padding: {} 0 {} 0;",
-                            TYPO::TEXT_SM, COLORS::TEXT_PRIMARY,
-                            SPACING::SPACE_SM, SPACING::SPACE_XS,
+                            typo::TEXT_SM, colors::TEXT_PRIMARY,
+                            spacing::SPACE_SM, spacing::SPACE_XS,
                         );
                         let row_s = format!(
                             "padding: {} {}; font-size: {}; color: {};",
-                            SPACING::SPACE_XS, SPACING::SPACE_MD,
-                            TYPO::TEXT_XS, COLORS::TEXT_MUTED,
+                            spacing::SPACE_XS, spacing::SPACE_MD,
+                            typo::TEXT_XS, colors::TEXT_MUTED,
                         );
                         let note_s = format!(
                             "font-size: {}; color: {}; font-style: italic;",
-                            TYPO::TEXT_XS, COLORS::TEXT_MUTED,
+                            typo::TEXT_XS, colors::TEXT_MUTED,
                         );
                         rsx! {
                             div {
@@ -368,11 +368,11 @@ mod desktop_render {
                         let row_s = format!(
                             "display: flex; gap: {}; padding: {} 0; font-size: {}; \
                              border-bottom: 1px solid {};",
-                            SPACING::SPACE_MD, SPACING::SPACE_SM,
-                            TYPO::TEXT_SM, COLORS::BORDER_SUBTLE,
+                            spacing::SPACE_MD, spacing::SPACE_SM,
+                            typo::TEXT_SM, colors::BORDER_SUBTLE,
                         );
-                        let label_s = format!("min-width: 120px; color: {};", COLORS::TEXT_PRIMARY);
-                        let value_s = format!("color: {};", COLORS::TEXT_MUTED);
+                        let label_s = format!("min-width: 120px; color: {};", colors::TEXT_PRIMARY);
+                        let value_s = format!("color: {};", colors::TEXT_MUTED);
                         rsx! {
                             div { style: "{row_s}",
                                 span { style: "{label_s}", "{summary.target_kind}:{summary.target_id}" }
@@ -390,7 +390,7 @@ mod desktop_render {
                     {
                         let note_s = format!(
                             "font-size: {}; color: {}; font-style: italic; margin-top: {};",
-                            TYPO::TEXT_XS, COLORS::TEXT_MUTED, SPACING::SPACE_SM,
+                            typo::TEXT_XS, colors::TEXT_MUTED, spacing::SPACE_SM,
                         );
                         rsx! { div { style: "{note_s}", "{note}" } }
                     }

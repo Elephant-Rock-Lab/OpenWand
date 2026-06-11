@@ -58,14 +58,16 @@ mod desktop_render {
     use super::*;
     use crate::ui::components::*;
     use crate::ui::layout::*;
+    use crate::ui::workflow_audit_packet_review_state::ReviewSummaryRow;
+    use crate::ui::workflow_audit_packet_review_components::render_review_list;
     use dioxus::prelude::*;
 
     /// Empty state when no distribution records exist.
     pub fn render_distribution_empty_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {}; border-bottom: 1px solid {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_FAINT, COLORS::BORDER_LIGHT,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_FAINT, colors::BORDER_LIGHT,
         );
         rsx! {
             div { style: "{style}",
@@ -78,8 +80,8 @@ mod desktop_render {
     pub fn render_distribution_loading_state() -> Element {
         let style = format!(
             "padding: {} {}; text-align: center; font-size: {}; color: {};",
-            SPACING::SPACE_LG, SPACING::SPACE_XL, TYPO::TEXT_SM,
-            COLORS::TEXT_MUTED,
+            spacing::SPACE_LG, spacing::SPACE_XL, typo::TEXT_SM,
+            colors::TEXT_MUTED,
         );
         rsx! {
             div { style: "{style}",
@@ -121,16 +123,16 @@ mod desktop_render {
         let proof_badge_s = badge_style(proof_tone);
         let row_s = format!(
             "display: flex; gap: {}; padding: {} 0; font-size: {};",
-            SPACING::SPACE_MD, SPACING::SPACE_SM, TYPO::TEXT_SM,
+            spacing::SPACE_MD, spacing::SPACE_SM, typo::TEXT_SM,
         );
-        let label_s = format!("min-width: 120px; color: {};", COLORS::TEXT_PRIMARY);
-        let value_s = format!("color: {};", COLORS::TEXT_MUTED);
+        let label_s = format!("min-width: 120px; color: {};", colors::TEXT_PRIMARY);
+        let value_s = format!("color: {};", colors::TEXT_MUTED);
         let note = distribution_no_delivery_proof_note();
         let dest_note = destination_metadata_note();
         let receipt_note = receipt_not_proven_note();
         let note_s = format!(
             "font-size: {}; color: {}; font-style: italic; margin-top: {};",
-            TYPO::TEXT_XS, COLORS::TEXT_MUTED, SPACING::SPACE_SM,
+            typo::TEXT_XS, colors::TEXT_MUTED, spacing::SPACE_SM,
         );
 
         rsx! {

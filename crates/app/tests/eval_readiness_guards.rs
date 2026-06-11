@@ -56,6 +56,7 @@ fn readiness_guard_persistence_writes_only_readiness_dir() {
             policy_pass_rate: 0.0,
             rebuild_pass_rate: 0.0,
             explain_pass_rate: 0.0,
+            capability_context_pass_rate: 1.0,
             regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
@@ -208,6 +209,7 @@ fn make_minimal_report(scenario_id: &str, passing: bool) -> EvalRunReport {
             state_matches: passing,
             divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore {
             total: if passing { 5 } else { 3 },
             max: 5,

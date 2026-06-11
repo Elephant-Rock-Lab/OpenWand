@@ -46,6 +46,7 @@ fn make_report(scenario_id: &str, total: u32) -> EvalRunReport {
         rebuild: RebuildEvalResult {
             events_replayed: 0, state_matches: true, divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore::from_dimensions(vec![
             DimensionScore { name: "memory".into(), passed: total, total: total, evidence_refs: vec![] },
         ]),

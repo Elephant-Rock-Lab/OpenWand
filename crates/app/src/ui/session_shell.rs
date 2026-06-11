@@ -37,9 +37,11 @@ pub fn memory_bucket_label(title: &str, count: usize) -> String {
 #[cfg(feature = "desktop")]
 mod desktop_render {
     use super::*;
+    use crate::ui::run_dto::UiRunEvent;
+    use dioxus::prelude::*;
 
     /// Render memory bucket groups.
-    pub fn render_memory_buckets(panel: &openwand_app::ui::memory_dto::UiFilteredMemoryPanel) -> dioxus::prelude::Element {
+    pub fn render_memory_buckets(panel: &crate::ui::memory_dto::UiFilteredMemoryPanel) -> dioxus::prelude::Element {
         if panel.is_empty() {
             return rsx! {
                 div { style: "padding: 24px 16px; color: #999; font-size: 12px; text-align: center;",
@@ -64,7 +66,7 @@ mod desktop_render {
     }
 
     /// Render a single memory bucket (Patch 4: read-only, explanatory).
-    pub fn render_bucket(title: &str, color: &str, rows: &[openwand_app::ui::memory_dto::UiMemoryPanelRow]) -> dioxus::prelude::Element {
+    pub fn render_bucket(title: &str, color: &str, rows: &[crate::ui::memory_dto::UiMemoryPanelRow]) -> dioxus::prelude::Element {
         if rows.is_empty() {
             return rsx! { div {} };
         }
@@ -91,7 +93,7 @@ mod desktop_render {
     }
 
     /// Render memory conflict groups (Patch 4: explanatory, not resolution control).
-    pub fn render_conflicts(title: &str, color: &str, conflicts: &[openwand_app::ui::memory_dto::UiMemoryPanelConflict]) -> dioxus::prelude::Element {
+    pub fn render_conflicts(title: &str, color: &str, conflicts: &[crate::ui::memory_dto::UiMemoryPanelConflict]) -> dioxus::prelude::Element {
         if conflicts.is_empty() {
             return rsx! { div {} };
         }
@@ -115,7 +117,7 @@ mod desktop_render {
     }
 
     /// Render a tool event (Patch 5: observational, no retry/resume/execute).
-    pub fn render_tool_event(event: openwand_app::ui::run_dto::UiRunEvent) -> dioxus::prelude::Element {
+    pub fn render_tool_event(event: crate::ui::run_dto::UiRunEvent) -> dioxus::prelude::Element {
         match event {
             UiRunEvent::ToolCallStarted { id: _, name } => rsx! {
                 div { style: "margin-bottom: 8px; padding: 8px 12px; background: #f0f8e8;

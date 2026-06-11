@@ -525,7 +525,7 @@ fn make_eligible_readiness() -> AutoCommitReadinessReport {
         score: ReadinessScore {
             weighted_pass_rate: 0.95, patch_pass_rate: 0.98,
             policy_pass_rate: 1.0, rebuild_pass_rate: 1.0,
-            explain_pass_rate: 0.95, regression_count: 0,
+            explain_pass_rate: 0.95, capability_context_pass_rate: 1.0, regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
         evidence_window: EvidenceWindow {
@@ -547,7 +547,7 @@ fn make_blocked_readiness() -> AutoCommitReadinessReport {
         score: ReadinessScore {
             weighted_pass_rate: 0.5, patch_pass_rate: 0.5,
             policy_pass_rate: 1.0, rebuild_pass_rate: 1.0,
-            explain_pass_rate: 0.5, regression_count: 0,
+            explain_pass_rate: 0.5, capability_context_pass_rate: 1.0, regression_count: 0,
         },
         thresholds: AutoCommitReadinessThresholds::default(),
         evidence_window: EvidenceWindow {
@@ -610,6 +610,7 @@ fn make_eval_report(scenario_id: &str) -> EvalRunReport {
         rebuild: RebuildEvalResult {
             events_replayed: 10, state_matches: true, divergences: vec![],
         },
+        capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore {
             total: 5, max: 5, pass_rate: 1.0,
             dimensions: vec![

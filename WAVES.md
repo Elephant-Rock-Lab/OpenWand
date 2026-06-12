@@ -281,3 +281,11 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 76B | Windows TOCTOU Residual Hardening Feasibility | `wave-76b-lock` | 2,266 | `docs/WINDOWS_TOCTOU_FEASIBILITY.md` |
 | 76C | Multi-Provider Validation Matrix | `wave-76c-lock` | 2,266 | `docs/PROVIDER_VALIDATION_MATRIX.md` |
 | 76D | Desktop Interaction E2E | `wave-76d-lock` | 2,272 | `crates/app/tests/desktop_interaction_e2e.rs` |
+
+---
+
+## Phase: Beta-Readiness Roadmap
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 77A | Beta Gap Ledger and Roadmap Reset | `wave-77a-lock` | 2,272 | `docs/BETA_GAP_LEDGER.md` |

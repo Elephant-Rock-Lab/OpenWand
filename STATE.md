@@ -4,9 +4,10 @@
 0.1.0-alpha
 
 ## Status
-**Wave 76D complete. Desktop Interaction E2E.**
+**Wave 77A complete. Beta Gap Ledger and Roadmap Reset.**
 
 Release: v0.1.0-alpha — `967dc96` — `v0.1.0-alpha`
+Post-alpha: `f05694d` (`wave-76d-lock`) → `HEAD` (77A)
 
 ## Workspace Structure
 ```
@@ -46,53 +47,48 @@ cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
 cargo audit
 ```
 
-**Baseline (Wave 70A lock):** 1,146 tests, 0 failures.
+**Post-alpha baseline (Wave 76D):** 2,272 lib + 28 integration tests, 0 failures.
 - openwand-core: 45
-- openwand-session: 51
-- openwand-tools: 93
-- openwand-app: 957
+- openwand-session: 49 + 14 integration
+- openwand-tools: 111
+- openwand-app: 957 + 14 integration (8 CLI surface + 6 desktop interaction)
 
 **Not yet clean:** `openwand-app` test-module clippy warnings (57 style lints in
 `#[cfg(test)]` helpers) remain accepted as cosmetic. Zero affect production code.
 
-## Wave History (Post-50A)
+## Post-Alpha Stabilization Arc
 
-| Wave | Goal | Tag | Tests | Status |
-|------|------|-----|------:|--------|
-| 50A | Gap Remediation I | `wave-50a-lock` | ~3,416 | ✅ |
-| 51A | Gap Remediation II | `wave-51a-lock` | ~3,420 | ✅ |
-| 52A | Design System Foundation | `wave-52a-lock` | 642 | ✅ |
-| 53A | Operator Console Desktop Surface | `wave-53a-lock` | 655 | ✅ |
-| 54A | Evidence Chain Inspector Surface | `wave-54a-lock` | 668 | ✅ |
-| 55A | Audit Packet Review & Distribution | `wave-55a-lock` | 686 | ✅ |
-| 56A | Manual Result Ladder Surface | `wave-56a-lock` | 727 | ✅ |
-| 57A | Workflow Routing & Next-Action | `wave-57a-lock` | 752 | ✅ |
-| 58A | Workflow Execution Timeline | `wave-58a-lock` | 774 | ✅ |
-| 59A | Desktop UI Shell Refactor | `wave-59a-lock` | 778 | ✅ |
-| 60A | Desktop Session Shell Refactor | `wave-60a-lock` | 795 | ✅ |
-| 61A | Desktop Bootstrap Boundary | `wave-61a-lock` | 806 | ✅ |
-| 62A | Skills & Goals Readiness | `wave-62a-lock` | 836 | ✅ |
-| 63A | Context Projection Wiring | `wave-63a-lock` | 888 | ✅ |
-| 64A | Context Explainability & Preview | `wave-64a-lock` | 880 | ✅ |
-| 65A | Context Audit Trace | `wave-65a-lock` | 955 | ✅ |
-| 66A | Deterministic Eval Harness | `wave-66a-lock` | 986 | ✅ |
-| 67A | Real-Model Boundary Eval | `wave-67a-lock` | 1,006 | ✅ |
-| 68A | Eval Readiness & Reporting | `wave-68a-lock` | 1,032 | ✅ |
-| 69A | Filesystem Sandbox | `wave-69a-lock` | 1,125 | ✅ |
-| 69B | Approval Workspace Binding | `wave-69b-lock` | 1,135 | ✅ |
-| 69C | Canonical Build & Desktop Compile | `wave-69c-lock` | 1,135 | ✅ |
-| 69D | Truthful Verification Commands | `wave-69d-lock` | 1,141 | ✅ |
-| 69E | Production Trace Attribution | `wave-69e-lock` | 1,141 | ✅ |
-| 69F | Release Hardening & Residual Risk | `wave-69f-lock` | 1,141 | ✅ |
-| 69G | RC Truth Ledger & Publication Baseline | `wave-69g-lock` | 1,144 | ✅ |
+| Wave | Title | Tag | Deliverable |
+|------|-------|-----|-------------|
+| 76A | Post-Alpha Issue Intake | `wave-76a-lock` | 5 issue templates + triage guide |
+| 76B | Windows TOCTOU Feasibility | `wave-76b-lock` | NT API feasibility document |
+| 76C | Multi-Provider Matrix | `wave-76c-lock` | 2 local models validated (4/4 PASS each) |
+| 76D | Desktop Interaction E2E | `wave-76d-lock` | 6 desktop interaction tests |
 
-Full wave history (Waves 00–49A): see `WAVES.md` and `docs/WAVE*_LOCK.md`.
+## Beta Gap Summary
+
+**Beta-blocking items (4 of 10 unresolved):**
+
+| # | Criterion | Status |
+|---|-----------|--------|
+| BC-1 | No unresolved release blockers | ✅ 6/6 resolved |
+| BC-2 | At least one hosted provider validated | ⬜ Not done |
+| BC-3 | Desktop UI interaction path validated | ⬜ Service/bridge only |
+| BC-6 | Documentation current through 76A–76D | ✅ This wave (77A) |
+| BC-7 | Beta release notes written | ⬌ Beta release wave |
+| BC-8 | Windows TOCTOU path revisited | ✅ Documented (76B) |
+| BC-9 | Multi-provider matrix expanded | ✅ 2 local models |
+| BC-10 | Non-Windows platform testing | ⬜ Deferred |
+
+**Beta path:** 77A (docs) → 77B (hosted provider) → 77C (desktop UX) → 77D (beta tag)
+
+See `docs/BETA_GAP_LEDGER.md` for full gap analysis.
 
 ## Hard Boundaries (Global)
 - HB-G1: Binary < 20MB
 - HB-G2: Zero telemetry, zero cloud storage dependencies
 - HB-G3: All data in `~/.openwand/`
 - HB-G4: Zero `unsafe` in OpenWand production code (test-only env var manipulation
-  excepted; dependencies may use it)
+  excepted; dependencies may use it; Unix libc openat封装在 WorkspaceWriteHandle)
 - HB-G5: `cargo clippy` zero warnings on 11 non-app production crates.
   `openwand-app` test-module style warnings accepted as cosmetic.

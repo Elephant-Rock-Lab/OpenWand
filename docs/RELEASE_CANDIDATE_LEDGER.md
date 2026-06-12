@@ -216,19 +216,64 @@ App integration tests: 8 binary CLI surface tests.
 
 ---
 
-## Next Decision Point
+## Post-Alpha Stabilization (76A–76D)
 
-v0.1.0-alpha is released. Remaining work is post-alpha iteration:
+| Item | Wave | Status |
+|------|------|--------|
+| Issue templates + triage guide | 76A | ✅ 5 templates + config.yml + POST_ALPHA_TRIAGE.md |
+| Windows TOCTOU feasibility | 76B | ✅ NtCreateFile path documented, scheduled v0.2.0 |
+| Multi-provider matrix | 76C | ✅ 2 local models validated (4/4 PASS each) |
+| Desktop interaction E2E | 76D | ✅ 6 tests, service/bridge path validated |
 
-| Option | Description |
-|--------|-------------|
-| A. External feedback | Collect and triage external review feedback |
-| B. v0.1.1-alpha | Windows NT API TOCTOU closure, clippy cleanup, dep refresh |
-| C. v0.2.0-alpha | New feature work (placeholder UI surfaces, hosted providers) |
-| D. v0.1.0 stable | Promote alpha to stable after feedback period |
+### Post-Alpha Validation Summary
+
+| Validation | Provider | Model | Tests | Result |
+|------------|----------|-------|------:|--------|
+| Real-provider (72C) | LM Studio | google/gemma-4-12b | 4 | ✅ PASS |
+| Real-provider (76C) | LM Studio | bartowski/qwen2.5-0.5b-instruct | 4 | ✅ PASS |
+| Desktop interaction (76D) | Mock | text_only | 6 | ✅ PASS |
+
+### Post-Alpha Test Baseline
+
+| Suite | Lib Tests | Integration Tests |
+|-------|----------:|------------------:|
+| openwand-core | 45 | — |
+| openwand-session | 49 | 14 |
+| openwand-tools | 111 | — |
+| openwand-app | 957 | 14 |
+| openwand-workflow | 728 | — |
+| openwand-trace | 41 | — |
+| openwand-store | 3 | — |
+| openwand-memory | 57 | — |
+| openwand-llm | 13 | — |
+| openwand-policy | 12 | — |
+| openwand-skills | 4 | — |
+| openwand-goals | 19 | — |
+| **Total** | **2,272** | **28** |
+
+### Beta Readiness
+
+See `docs/BETA_GAP_LEDGER.md` for full beta gap analysis.
+
+Beta-blocking items:
+- BC-2: At least one hosted provider validated (not done)
+- BC-3: Desktop UI interaction path validated (service/bridge only)
+- BC-7: Beta release notes written (beta release wave)
 
 ---
 
-*v0.1.0-alpha released 2026-06-12. First public alpha for evaluation and external
-review. Accepted residuals documented. Not production-ready. Not fully secure.
-See RELEASE_NOTES.md for full details.*
+## Next Decision Point
+
+Beta-readiness roadmap:
+
+| Wave | Description |
+|------|-------------|
+| 77A | Beta gap ledger and roadmap reset (this wave) |
+| 77B | Hosted provider validation |
+| 77C | Desktop UX validation |
+| 77D | Beta declaration |
+
+---
+
+*v0.1.0-alpha released 2026-06-12. Post-alpha stabilization complete (76A–76D).
+Beta gap ledger created (77A). Beta-blocking items identified. Not yet beta-ready.*

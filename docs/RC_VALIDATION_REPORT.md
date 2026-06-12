@@ -244,3 +244,49 @@ remains outside the candidate scope. This report follows that principle.*
 *Real-provider validation passed against LM Studio + google/gemma-4-12b on a non-sensitive
 fixture workspace. It does not claim validation across all providers, hosted APIs, all
 models, or deterministic model behavior.*
+
+---
+
+## Post-Alpha Validation Updates (76C, 76D)
+
+### Multi-Provider Matrix (76C)
+
+| Provider | Model | Simple Turn | Trace Attr | Tool Use | Sandbox | Result |
+|----------|-------|:-----------:|:----------:|:--------:|:-------:|:------:|
+| LM Studio | google/gemma-4-12b (12B) | ✅ | ✅ | ✅ | ✅ | PASS |
+| LM Studio | bartowski/qwen2.5-0.5b-instruct (0.5B) | ✅ | ✅ | ✅ | ✅ | PASS |
+| OpenAI API | — | ⬜ | ⬜ | ⬜ | ⬜ | SKIP |
+| Anthropic | — | ⬜ | ⬜ | ⬜ | ⬜ | SKIP (non-OpenAI-compatible) |
+| Ollama | — | ⬜ | ⬜ | ⬜ | ⬜ | SKIP |
+
+See `docs/PROVIDER_VALIDATION_MATRIX.md` for full details.
+
+### Desktop Interaction E2E (76D)
+
+| Test | What it validates | Result |
+|------|-------------------|--------|
+| UI DTO defaults | UiRunState starts in Idle with empty fields | ✅ PASS |
+| New running state | new_running() sets Running + RunStart phase | ✅ PASS |
+| Runner session ID | SessionRunner exposes session_id for rendering | ✅ PASS |
+| Turn updates state | Full path: mock LLM → runner → bridge → UiRunState | ✅ PASS |
+| Message structure | Messages have non-empty content for rendering | ✅ PASS |
+| Binary lifecycle | Desktop binary stays alive for 3 seconds | ✅ PASS |
+
+See `crates/app/tests/desktop_interaction_e2e.rs`.
+
+### Post-Alpha Test Baseline
+
+| Suite | Lib Tests | Integration Tests |
+|-------|----------:|------------------:|
+| openwand-app | 957 | 14 (8 CLI + 6 desktop) |
+| **Total** | **2,272** | **28** |
+
+### What Remains Unvalidated
+
+- Hosted provider endpoints (OpenAI API, Anthropic, etc.)
+- Dioxus rendering correctness (no headless framework for Dioxus 0.7)
+- Click/input event handling
+- Tab switching behavior
+- Visual layout/styling
+- Non-Windows platforms
+- Windows per-component micro-race closure

@@ -189,3 +189,80 @@ This release does **not** claim:
 - **Build:** `cargo build --workspace --all-targets --all-features`
 - **Test:** `cargo test --workspace`
 - **Desktop:** `cargo build -p openwand-app --features desktop`
+
+---
+
+## Post-Alpha Stabilization (76A–76D)
+
+Four stabilization waves completed after alpha publication:
+
+### 76A — Post-Alpha Issue Intake
+
+5 GitHub issue templates (bug, security, provider validation, UX feedback,
+validation checklist) + config.yml + `docs/POST_ALPHA_TRIAGE.md`.
+Issues matching documented residuals are closed with reference unless new
+ evidence expands scope.
+
+### 76B — Windows TOCTOU Residual Hardening Feasibility
+
+Investigated whether the remaining Windows intermediate-directory micro-race
+can be fully closed. **Result: Yes, via `NtCreateFile` with `RootDirectory` +
+`FILE_OPEN_REPARSE_POINT`.** Scheduled for v0.2.0. The 73C per-component
+hardening remains in place.
+
+See `docs/WINDOWS_TOCTOU_FEASIBILITY.md`.
+
+### 76C — Multi-Provider Validation Matrix
+
+Expanded real-provider validation from 1 to 2 local LM Studio models:
+
+| Model | Size | Simple Turn | Trace Attr | Tool Use | Sandbox | Result |
+|-------|------|:-----------:|:----------:|:--------:|:-------:|:------:|
+| google/gemma-4-12b | 12B | ✅ | ✅ | ✅ | ✅ | PASS |
+| bartowski/qwen2.5-0.5b-instruct | 0.5B | ✅ | ✅ | ✅ | ✅ | PASS |
+
+No hosted providers tested. Anthropic uses non-OpenAI-compatible API format,
+requires separate adapter.
+
+See `docs/PROVIDER_VALIDATION_MATRIX.md`.
+
+### 76D — Desktop Interaction E2E
+
+6 new tests exercise the desktop interaction path at the service/runner level:
+
+| Test | What it validates |
+|------|------------------|
+| UI DTO defaults | `UiRunState` starts in `Idle` with empty fields |
+| New running state | `new_running()` sets `Running` + `RunStart` phase |
+| Runner session ID | `SessionRunner` exposes `session_id` for rendering |
+| Turn updates state | Full path: mock LLM → runner → bridge → `UiRunState` |
+| Message structure | Messages have non-empty content for rendering |
+| Binary lifecycle | Desktop binary stays alive for 3 seconds |
+
+Dioxus rendering, click events, and visual behavior remain untested (no
+headless framework for Dioxus 0.7).
+
+See `crates/app/tests/desktop_interaction_e2e.rs`.
+
+### Post-Alpha Test Baseline
+
+| Suite | Tests |
+|-------|------:|
+| openwand-core | 45 |
+| openwand-session | 49 + 14 integration |
+| openwand-tools | 111 |
+| openwand-app | 957 + 14 integration |
+| openwand-workflow | 728 |
+| openwand-trace | 41 |
+| openwand-store | 3 |
+| openwand-memory | 57 |
+| openwand-llm | 13 |
+| openwand-policy | 12 |
+| openwand-skills | 4 |
+| openwand-goals | 19 |
+| **Total** | **2,272 lib + 28 integration** |
+
+### Beta Readiness
+
+See `docs/BETA_GAP_LEDGER.md` for the full beta gap analysis and roadmap.
+Beta-blocking items: hosted provider validation, desktop UX validation.

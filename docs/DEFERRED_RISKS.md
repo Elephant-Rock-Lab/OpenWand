@@ -105,3 +105,15 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **What remains (Windows):** There is a per-component TOCTOU window on Windows between `symlink_metadata()` and the subsequent `create_dir()` / `write_file_no_follow()` call. This window is orders of magnitude smaller than the original full-path race, but is not eliminated. Windows lacks `openat()` — there is no handle-relative directory open in the stable Win32 API that would allow fully closing this gap without using undocumented NT APIs.
 - **Risk acceptance rationale:** The remaining Windows per-component race requires local concurrent filesystem access with timing precision to win the race window on a single component step. This is not a model-driven or network-accessible attack. All static path manipulations, final-component races, and Unix intermediate-directory races are fully closed.
 - **Resolution path:** Accept as reduced residual, or implement via undocumented `NtCreateFile` with `RootDirectory` handle in a future wave.
+
+### DEFERRED-009: Hosted provider validation
+- **Status:** Beta-blocking
+- **Category:** Testing
+- **Detail:** No hosted provider (OpenAI API, Anthropic, etc.) has been validated. Only local LM Studio with two models tested (72C, 76C). Network behavior, auth flows, rate limiting, and error handling under real hosted conditions are unvalidated.
+- **Resolution path:** Configure API key for at least one hosted provider. Run real-provider validation suite. Record results.
+
+### DEFERRED-010: Desktop UI rendering validation
+- **Status:** Beta-blocking
+- **Category:** Testing
+- **Detail:** Desktop UI has been validated at the service/runner/bridge level (76D) but not at the Dioxus rendering level. No click event, input, tab switch, or visual layout testing has been performed. Dioxus 0.7 does not have a headless testing framework.
+- **Resolution path:** Manual desktop interaction test plan + screenshot-based visual validation, or automated approach when Dioxus provides a test framework.

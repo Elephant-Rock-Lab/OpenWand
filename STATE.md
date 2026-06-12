@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**v0.1.0-alpha released. First public alpha.**
+**Wave 76A complete. Post-Alpha Feedback and Issue Intake.**
 
-Release commit: `b9a2138` — `v0.1.0-alpha` — `wave-74b-lock`
+Release: v0.1.0-alpha — `967dc96` — `v0.1.0-alpha`
 
 ## Workspace Structure
 ```

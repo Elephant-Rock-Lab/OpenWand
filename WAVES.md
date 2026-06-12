@@ -277,3 +277,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 74A | Final Release Preparation and Truthful Release Notes | `wave-74a-lock` | 2,266 | `RELEASE_NOTES.md`, `docs/` |
 | 74B | Final Release External Audit Pass | `wave-74b-lock` | 2,266 | `docs/FINAL_AUDIT_REPORT.md` |
 | **v0.1.0-alpha** | **First Public Alpha Release** | **`v0.1.0-alpha`** | **2,266** | **`RELEASE_NOTES.md`** |
+| 76A | Post-Alpha Feedback and Issue Intake | `wave-76a-lock` | 2,266 | `.github/ISSUE_TEMPLATE/`, `docs/POST_ALPHA_TRIAGE.md` |

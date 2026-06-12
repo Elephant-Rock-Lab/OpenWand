@@ -1,0 +1,11 @@
+blank_issue_enabled: false
+contact_links:
+  - name: Release Notes
+    url: https://github.com/Octo-Lex/OpenWand/blob/master/RELEASE_NOTES.md
+    about: Read the v0.1.0-alpha release notes before filing issues.
+  - name: Accepted Residuals
+    url: https://github.com/Octo-Lex/OpenWand/blob/master/docs/DEFERRED_RISKS.md
+    about: Check known accepted limitations before reporting defects.
+  - name: Validation Report
+    url: https://github.com/Octo-Lex/OpenWand/blob/master/docs/RC_VALIDATION_REPORT.md
+    about: Full validation report with test results and caveats.

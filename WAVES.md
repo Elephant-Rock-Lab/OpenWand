@@ -269,3 +269,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 |------|-------|-----|------:|----------|
 | 72A | Public RC Publication | `wave-72a-lock` | 1,159 | `docs/RC_PUBLICATION_NOTES.md` |
 | 72B | Post-RC TOCTOU Hardening | `wave-72b-lock` | 1,162 | `crates/tools/src/sandbox.rs` |
+| 72C | Real-Provider Validation Test Infrastructure | `wave-72c-lock` | 1,162 | `crates/session/tests/real_provider_validation.rs` |

@@ -35,4 +35,4 @@ cargo_metadata = { workspace = true }
 tempfile = "3"
 walkdir = "2"
 openwand-store = { path = "../store" }
-openwand-llm = { path = "../llm", features = ["testing"] }
+openwand-llm = { path = "../llm", features = ["testing", "openai-compatible"] }

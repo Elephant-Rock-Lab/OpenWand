@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 72B complete. Post-RC TOCTOU Hardening.**
+**Wave 72C complete. Real-Provider Validation Test Infrastructure.**
 
-Previous lock: Wave 72A — `b8bdf26` — `wave-72a-lock`
+Previous lock: Wave 72B — `7d48c78` — `wave-72b-lock`
 
 ## Workspace Structure
 ```

@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 72C complete. Real-Provider Validation Against Published RC.**
+**Wave 72D complete. Final RC Ledger Refresh.**
 
-Previous lock: Wave 72B — `7d48c78` — `wave-72b-lock`
+Previous lock: Wave 72C — `9e0b0cd` — `wave-72c-lock`
 
 ## Workspace Structure
 ```

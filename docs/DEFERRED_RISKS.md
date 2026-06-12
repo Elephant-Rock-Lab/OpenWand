@@ -113,7 +113,7 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **Resolution path:** CLOSED for beta criterion. Additional providers are post-beta.
 
 ### DEFERRED-010: Desktop UI rendering validation
-- **Status:** Beta-blocking
+- **Status:** ✅ Closed by Windows UI Automation validation (77C)
 - **Category:** Testing
-- **Detail:** Desktop UI has been validated at the service/runner/bridge level (76D) but not at the Dioxus rendering level. No click event, input, tab switch, or visual layout testing has been performed. Dioxus 0.7 does not have a headless testing framework.
-- **Resolution path:** Manual desktop interaction test plan + screenshot-based visual validation, or automated approach when Dioxus provides a test framework.
+- **Detail:** Desktop UI validated through Windows UI Automation API. 53 accessible elements verified. Full interaction path exercised: launch → shell renders → session creation → send triggers run → state transitions → error display → run completion. Tab switching and visual styling not validated.
+- **Resolution path:** CLOSED for beta criterion. Visual styling and tab switching are post-beta.

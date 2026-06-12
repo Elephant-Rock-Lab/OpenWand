@@ -4,7 +4,7 @@
 0.1.0-alpha
 
 ## Status
-**Wave 72C complete. Real-Provider Validation Test Infrastructure.**
+**Wave 72C complete. Real-Provider Validation Against Published RC.**
 
 Previous lock: Wave 72B — `7d48c78` — `wave-72b-lock`
 

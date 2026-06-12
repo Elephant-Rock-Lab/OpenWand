@@ -20,12 +20,12 @@ re-accepted with documented rationale. **Post-beta** items may remain open.
 | BC-4 | App clippy warnings resolved or accepted | Code quality | No | 57 cosmetic warnings |
 | BC-5 | Dependency posture re-evaluated | Dependencies | No | 15 transitive warnings |
 | BC-6 | Documentation current through 76A–76D | Documentation | **YES** | ⬜ Stale (this wave) |
-| BC-7 | Beta release notes written | Documentation | **YES** | ⬌ Not started |
+| BC-7 | Beta release notes written | Documentation | **YES** | ✅ RELEASE_NOTES_BETA.md (77D) |
 | BC-8 | Windows TOCTOU closure path revisited | Security | No | Documented, v0.2.0 |
 | BC-9 | Multi-provider matrix expanded | Testing | No | 2 local models tested |
 | BC-10 | Non-Windows platform testing | Testing | No | Not done |
 
-**Beta-blocking count:** 7 of 10 resolved. **1 of 10 deferred.** **1 of 10 at beta wave.** (BC-7 beta release notes at beta declaration wave. BC-10 non-Windows deferred.)
+**Beta-blocking count:** 9 of 10 resolved. **1 of 10 deferred.** (BC-10 non-Windows platform testing.)
 
 ---
 
@@ -152,9 +152,11 @@ notes written at beta declaration time.
 - Mark BC-3 resolved
 
 ### Phase 4: Beta Declaration (77D)
-- Write beta release notes
-- Verify all beta-blocking criteria met
-- Tag and publish v0.1.0-beta
+- Draft beta release notes (RELEASE_NOTES_BETA.md)
+- Record artifact identity and checksum
+- Reconcile all beta entry criteria
+- 9/10 resolved, 1 deferred (BC-10 non-Windows)
+- Tag v0.1.0-beta
 
 ---
 

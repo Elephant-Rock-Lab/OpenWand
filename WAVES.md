@@ -291,3 +291,5 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 77A | Beta Gap Ledger and Roadmap Reset | `wave-77a-lock` | 2,272 | `docs/BETA_GAP_LEDGER.md` |
 | 77B | Hosted Provider Validation (Z.AI) | `wave-77b-lock` | 2,272 | `docs/HOSTED_PROVIDER_VALIDATION.md` |
 | 77C | Desktop UX Validation | `wave-77c-lock` | 2,272 | `docs/DESKTOP_UX_VALIDATION.md` |
+| 77D | v0.1.0-beta Declaration Preparation | `wave-77d-lock` | 2,271 | `RELEASE_NOTES_BETA.md` |
+| **v0.1.0-beta** | **Beta Release** | **`v0.1.0-beta`** | **2,271 + 161 int** | **`RELEASE_NOTES_BETA.md`** |

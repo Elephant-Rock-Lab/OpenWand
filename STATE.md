@@ -1,13 +1,13 @@
 # OpenWand — Project State
 
 ## Version
-0.1.0-alpha
+0.1.0-beta
 
 ## Status
-**Wave 77C complete. Desktop UX Validation.**
+**Wave 77D complete. v0.1.0-beta Declaration Preparation.**
 
-Release: v0.1.0-alpha — `967dc96` — `v0.1.0-alpha`
-Post-alpha: `b833033` (`wave-77b-lock`) → `HEAD` (77C)
+Release: v0.1.0-beta — `49f85bd` — `v0.1.0-beta`
+Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 ## Workspace Structure
 ```
@@ -47,14 +47,14 @@ cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
 cargo audit
 ```
 
-**Post-alpha baseline (Wave 76D):** 2,272 lib + 28 integration tests, 0 failures.
+**Post-beta baseline (Wave 77D):** 2,271 lib + 161 integration tests, 0 failures.
 - openwand-core: 45
-- openwand-session: 49 + 14 integration
+- openwand-session: 49 + 122 integration
 - openwand-tools: 111
-- openwand-app: 957 + 14 integration (8 CLI surface + 6 desktop interaction)
+- openwand-app: 957 + 39 integration
 
-**Not yet clean:** `openwand-app` test-module clippy warnings (57 style lints in
-`#[cfg(test)]` helpers) remain accepted as cosmetic. Zero affect production code.
+**Not yet clean:** `openwand-app` non-test-path warnings (~25) and test-module clippy
+warnings remain accepted as cosmetic.
 
 ## Post-Alpha Stabilization Arc
 

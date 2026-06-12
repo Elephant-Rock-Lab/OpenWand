@@ -4,10 +4,12 @@
 0.1.0-beta
 
 ## Status
-**Wave 77D complete. v0.1.0-beta Declaration Preparation.**
+**v0.1.0-beta declared.** Public beta for external validation and broader testing.
 
-Release: v0.1.0-beta — `49f85bd` — `v0.1.0-beta`
+Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
+
+Not stable. Not production-ready. Accepted residuals documented.
 
 ## Workspace Structure
 ```

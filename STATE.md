@@ -4,7 +4,7 @@
 0.1.0-beta
 
 ## Status
-**v0.1.0-beta declared.** Public beta for external validation and broader testing.
+**Wave 78A complete. v0.2.0 Roadmap and Architecture Reset.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`

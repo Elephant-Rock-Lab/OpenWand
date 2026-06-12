@@ -293,3 +293,11 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 77C | Desktop UX Validation | `wave-77c-lock` | 2,272 | `docs/DESKTOP_UX_VALIDATION.md` |
 | 77D | v0.1.0-beta Declaration Preparation | `wave-77d-lock` | 2,271 | `RELEASE_NOTES_BETA.md` |
 | **v0.1.0-beta** | **Beta Release** | **`v0.1.0-beta`** | **2,271 + 161 int** | **`RELEASE_NOTES_BETA.md`** |
+
+---
+
+## Phase: v0.2.0 Roadmap
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 78A | v0.2.0 Roadmap and Architecture Reset | `wave-78a-lock` | 2,271 | `docs/V020_ROADMAP.md` |

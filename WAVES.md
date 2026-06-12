@@ -301,3 +301,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | Wave | Title | Tag | Tests | Lock Doc |
 |------|-------|-----|------:|----------|
 | 78A | v0.2.0 Roadmap and Architecture Reset | `wave-78a-lock` | 2,271 | `docs/V020_ROADMAP.md` |
+| 78B | NtCreateFile API Audit | `wave-78b-lock` | 2,271 | `docs/NTCREATEFILE_API_AUDIT.md` |

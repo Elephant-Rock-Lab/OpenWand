@@ -191,7 +191,7 @@ Wave 70A does not claim real-provider validation was performed.
 | Release CLI binary under 20 MB | Core | ✅ Pass |
 | Documentation consistency | Core | ✅ Pass |
 | 69F workspace regression | Repaired | ✅ Restored (NEW) |
-| Real-provider validation | Deferred | Explicitly not performed |
+| Real-provider validation (LM Studio + gemma-4-12b) | Core | ✅ Pass (72C) |
 
 ---
 

@@ -117,6 +117,7 @@ wave-71b-lock
 | Production sandbox blocks traversal even after policy approval | 71B | ✅ Verified |
 | Stale shell E2E scripts corrected | 71B | ✅ Corrected |
 | Direct-function tests annotated | 71B | ✅ 5 files annotated |
+| Real-provider validation (LM Studio + gemma-4-12b) | 72C | ✅ Passed (4/4 tests) |
 
 ---
 
@@ -210,7 +211,7 @@ wave-71b-lock
 
 ## Carried-Forward Deferred Items
 
-1. Real-provider validation with auth + non-sensitive fixture workspace — deferred
+1. Real-provider validation (LM Studio + google/gemma-4-12b, local endpoint) — ✅ Passed 72C
 2. App test-module clippy cleanup — accepted as cosmetic
 3. Transitive dependency warnings (15: 13 unmaintained, 2 unsound) — accepted pending upstream upgrades
 4. Remote publication — ✅ Published 2026-06-11

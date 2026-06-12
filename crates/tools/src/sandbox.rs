@@ -373,10 +373,14 @@ impl WorkspaceWriteHandle {
             self.unix_create_and_write(&resolved, content)
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
-            // Fallback: current behavior (final-component protection only)
-            // Create parent directories first (handle does this on Unix)
+            self.windows_create_and_write(&resolved, content).await
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            // True fallback for unsupported platforms
             if let Some(parent) = resolved.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(WriteSafeError::Io)?;
@@ -404,7 +408,12 @@ impl WorkspaceWriteHandle {
             self.unix_overwrite_existing(&resolved, content)
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            self.windows_overwrite_existing(&resolved, content).await
+        }
+
+        #[cfg(not(any(unix, windows)))]
         {
             write_file_no_follow(&resolved, content).await
                 .map_err(WriteSafeError::Io)
@@ -612,6 +621,127 @@ impl WorkspaceWriteHandle {
     }
 }
 
+// ── Windows per-component reparse point hardening (Wave 73C) ──────────
+//
+// Windows does not have openat(). Instead, we walk the path component by
+// component and check each for reparse point (symlink/junction) status
+// using symlink_metadata(). This re-validates at each step rather than
+// trusting the initial resolve_workspace_path() validation alone.
+//
+// The race window is per-component (symlink_metadata → create_dir → write)
+// rather than full-path (resolve_workspace_path → create_dir_all → write).
+// This is a significant improvement but does not fully eliminate the TOCTOU
+// race on Windows — the window between symlink_metadata and the next I/O
+// operation at each component is still nonzero.
+
+#[cfg(windows)]
+impl WorkspaceWriteHandle {
+    /// Windows: walk path components, checking each for reparse points.
+    /// Creates intermediate directories one at a time with per-step verification.
+    async fn windows_create_and_write(
+        &self,
+        resolved: &Path,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        let rel = resolved.strip_prefix(&self.workspace)
+            .map_err(|_| WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Resolved path is not under workspace",
+            )))?;
+
+        let components: Vec<&std::ffi::OsStr> = rel.iter().collect();
+        if components.is_empty() {
+            return Err(WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot write to workspace root",
+            )));
+        }
+
+        // Walk intermediate directories (all except the last component)
+        let mut current = self.workspace.clone();
+        let dir_components = &components[..components.len() - 1];
+
+        for comp in dir_components {
+            current.push(comp);
+
+            match std::fs::symlink_metadata(&current) {
+                Ok(meta) => {
+                    // Component exists — verify it's not a reparse point
+                    if meta.file_type().is_symlink() {
+                        return Err(WriteSafeError::SymlinkDetected {
+                            component: comp.to_string_lossy().into_owned(),
+                        });
+                    }
+                    if !meta.is_dir() {
+                        return Err(WriteSafeError::Io(std::io::Error::new(
+                            std::io::ErrorKind::NotADirectory,
+                            format!("Component '{}' is not a directory", comp.to_string_lossy()),
+                        )));
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // Component doesn't exist — create it
+                    std::fs::create_dir(&current)
+                        .map_err(WriteSafeError::Io)?;
+
+                    // Re-verify: check for race (adversary replaced dir with symlink)
+                    match std::fs::symlink_metadata(&current) {
+                        Ok(meta) if meta.file_type().is_symlink() => {
+                            return Err(WriteSafeError::SymlinkDetected {
+                                component: comp.to_string_lossy().into_owned(),
+                            });
+                        }
+                        Ok(_) => {} // Good — regular directory
+                        Err(e) => {
+                            return Err(WriteSafeError::Io(e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(WriteSafeError::Io(e));
+                }
+            }
+        }
+
+        // Final component: write with no-follow (72B hardening)
+        write_file_no_follow(resolved, content).await
+            .map_err(WriteSafeError::Io)
+    }
+
+    /// Windows: overwrite existing file with per-component verification.
+    async fn windows_overwrite_existing(
+        &self,
+        resolved: &Path,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        // Verify all intermediate components are not reparse points
+        let rel = resolved.strip_prefix(&self.workspace)
+            .map_err(|_| WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Resolved path is not under workspace",
+            )))?;
+
+        let components: Vec<&std::ffi::OsStr> = rel.iter().collect();
+        if components.len() > 1 {
+            let mut current = self.workspace.clone();
+            for comp in &components[..components.len() - 1] {
+                current.push(comp);
+                if let Ok(meta) = std::fs::symlink_metadata(&current)
+                    && meta.file_type().is_symlink()
+                {
+                    return Err(WriteSafeError::SymlinkDetected {
+                        component: comp.to_string_lossy().into_owned(),
+                    });
+                }
+            }
+        }
+
+        // Write with no-follow on final component
+        write_file_no_follow(resolved, content).await
+            .map_err(WriteSafeError::Io)
+    }
+}
+
 impl Drop for WorkspaceWriteHandle {
     fn drop(&mut self) {
         #[cfg(unix)]
@@ -792,6 +922,115 @@ mod handle_tests {
             ws.path().join("honest_dir/file.txt")
         ).unwrap();
         assert_eq!("legit", contents);
+    }
+
+    // ── Windows per-component reparse point tests ──────────────────
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_create_and_write_creates_intermediate_dirs() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("a/b/c/file.txt", "deep").await.unwrap();
+        let contents = std::fs::read_to_string(
+            ws.path().join("a/b/c/file.txt")
+        ).unwrap();
+        assert_eq!("deep", contents);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_create_and_write_single_component() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("file.txt", "hello").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("file.txt")).unwrap();
+        assert_eq!("hello", contents);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_create_and_write_overwrites_existing() {
+        let ws = setup_workspace();
+        std::fs::write(ws.path().join("exists.txt"), "original").unwrap();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("exists.txt", "replaced").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("exists.txt")).unwrap();
+        assert_eq!("replaced", contents);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_overwrite_existing_works() {
+        let ws = setup_workspace();
+        std::fs::write(ws.path().join("patch.txt"), "original").unwrap();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.overwrite_existing("patch.txt", "patched").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("patch.txt")).unwrap();
+        assert_eq!("patched", contents);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_create_and_write_detects_symlink_intermediate() {
+        let ws = setup_workspace();
+        let outside = tempfile::tempdir().unwrap();
+
+        // Attempt to create a directory symlink (requires admin/developer mode)
+        let link_result = std::os::windows::fs::symlink_dir(
+            outside.path(),
+            ws.path().join("link_dir"),
+        );
+
+        if let Ok(()) = link_result {
+            let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+            let result = handle.create_and_write("link_dir/file.txt", "evil").await;
+            match result {
+                Err(WriteSafeError::SymlinkDetected { component }) => {
+                    assert_eq!("link_dir", component);
+                }
+                Err(e) => {
+                    panic!("Expected SymlinkDetected, got: {:?}", e);
+                }
+                Ok(()) => {
+                    panic!("Write should have been blocked — symlink at intermediate component");
+                }
+            }
+        } else {
+            eprintln!("SKIP: Cannot create directory symlink (requires admin/developer mode)");
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_create_and_write_detects_symlink_final() {
+        let ws = setup_workspace();
+        let outside = tempfile::tempdir().unwrap();
+
+        // Attempt to create a file symlink (may require admin/developer mode)
+        let link_result = std::os::windows::fs::symlink_file(
+            outside.path().join("secret.txt"),
+            ws.path().join("link_file.txt"),
+        );
+
+        if let Ok(()) = link_result {
+            let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+            let result = handle.create_and_write("link_file.txt", "evil").await;
+            // Final component detection depends on FILE_FLAG_NO_REPARSE_POINT behavior
+            // Either SymlinkDetected or Io error is acceptable — but NOT Ok with escape
+            if let Ok(()) = result {
+                // Verify the write stayed inside workspace
+                let target = ws.path().join("link_file.txt");
+                if target.exists() {
+                    let canonical = target.canonicalize().unwrap();
+                    let canonical_ws = ws.path().canonicalize().unwrap();
+                    assert!(canonical.starts_with(&canonical_ws),
+                        "Write escaped workspace!");
+                }
+            }
+        } else {
+            eprintln!("SKIP: Cannot create file symlink (requires admin/developer mode)");
+        }
     }
 }
 

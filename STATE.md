@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 73B complete. Unix Handle-Relative Write Hardening.**
+**Wave 73C complete. Windows Handle-Relative Write Hardening.**
 
-Previous lock: Wave 73A — `58af252` — `wave-73a-lock`
+Previous lock: Wave 73B — `79dc307` — `wave-73b-lock`
 
 ## Workspace Structure
 ```

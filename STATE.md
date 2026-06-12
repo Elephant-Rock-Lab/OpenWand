@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 72A complete. Public RC Publication.**
+**Wave 72B complete. Post-RC TOCTOU Hardening.**
 
-Previous lock: Wave 71C — `82b7488` — `wave-71c-lock`
+Previous lock: Wave 72A — `b8bdf26` — `wave-72a-lock`
 
 ## Workspace Structure
 ```

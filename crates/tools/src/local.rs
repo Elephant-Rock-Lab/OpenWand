@@ -635,8 +635,8 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
         None
     };
 
-    // Write the file
-    match tokio::fs::write(&full_path, content).await {
+    // Write the file (TOCTOU-hardened: no-follow on final component)
+    match crate::sandbox::write_file_no_follow(&full_path, content).await {
         Ok(()) => {
             let postimage_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
             let mut msg = format!(

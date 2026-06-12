@@ -178,6 +178,72 @@ pub fn is_path_in_workspace(resolved: &Path, canonical_workspace: &Path) -> bool
     }
 }
 
+/// Write a file without following symlinks at the final path component.
+///
+/// This is the TOCTOU hardening: after `resolve_workspace_path()` validates
+/// the path at check time, `write_file_no_follow()` ensures the write does
+/// not follow a symlink that an adversary placed between validation and use.
+///
+/// Platform strategy:
+/// - **Windows**: Opens with `FILE_FLAG_NO_REPARSE_POINT` (0x00200000) which
+///   prevents following reparse points (symlinks) on the final component.
+/// - **Unix**: Opens with `O_NOFOLLOW` which fails if the final component
+///   is a symlink.
+///
+/// Note: This hardens the **final component** race. A race on intermediate
+/// directory components (parent replaced with symlink between validation and
+/// `create_dir_all`) is NOT fully closed here. Closing that requires
+/// handle-relative directory traversal (dirfd/openat), which is a deeper
+/// platform-specific change.
+pub async fn write_file_no_follow(path: &Path, content: &str) -> std::io::Result<()> {
+    use std::io::Write;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // O_NOFOLLOW: fail if the final path component is a symlink.
+        // Linux: 0x20000, macOS: 0x0100, FreeBSD: 0x0100
+        #[cfg(target_os = "linux")]
+        const O_NOFOLLOW: i32 = 0x20000;
+        #[cfg(target_os = "macos")]
+        const O_NOFOLLOW: i32 = 0x0100;
+        #[cfg(target_os = "freebsd")]
+        const O_NOFOLLOW: i32 = 0x0100;
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+        const O_NOFOLLOW: i32 = 0; // fallback: no hardening on other Unix
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .custom_flags(O_NOFOLLOW)
+            .open(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_NO_REPARSE_POINT = 0x00200000
+        // Prevents following reparse points (symlinks) on the target.
+        const FILE_FLAG_NO_REPARSE_POINT: u32 = 0x00200000;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .custom_flags(FILE_FLAG_NO_REPARSE_POINT)
+            .open(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        // Fallback: standard write (no TOCTOU hardening on other platforms)
+        tokio::fs::write(path, content).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,5 +508,37 @@ mod tests {
         let canonical_ws = ws.path().canonicalize().unwrap();
         // Returns joined path so handler can produce "not found" error
         assert!(resolved.starts_with(&canonical_ws));
+    }
+
+    // ── TOCTOU hardening (Wave 72B) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn write_file_no_follow_creates_file() {
+        let ws = setup_workspace();
+        let target = ws.path().join("safe_write.txt");
+        super::write_file_no_follow(&target, "hello from no-follow").await.unwrap();
+        let contents = std::fs::read_to_string(&target).unwrap();
+        assert_eq!("hello from no-follow", contents);
+    }
+
+    #[tokio::test]
+    async fn write_file_no_follow_overwrites_existing() {
+        let ws = setup_workspace();
+        let target = ws.path().join("overwrite.txt");
+        std::fs::write(&target, "original").unwrap();
+        super::write_file_no_follow(&target, "replaced").await.unwrap();
+        let contents = std::fs::read_to_string(&target).unwrap();
+        assert_eq!("replaced", contents);
+    }
+
+    #[tokio::test]
+    async fn write_file_no_follow_creates_parent_dirs_then_writes() {
+        let ws = setup_workspace();
+        let subdir = ws.path().join("deep").join("nested");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let target = subdir.join("file.txt");
+        super::write_file_no_follow(&target, "deep write").await.unwrap();
+        let contents = std::fs::read_to_string(&target).unwrap();
+        assert_eq!("deep write", contents);
     }
 }

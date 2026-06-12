@@ -95,10 +95,11 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **Resolution path:** User decides when and how to publish.
 
 ### DEFERRED-008: Sandbox TOCTOU boundary
-- **Status:** Accepted residual risk
+- **Status:** Partially closed (Wave 72B) — final-component hardening implemented
 - **Category:** Filesystem security
 - **Threat model:** A local concurrent filesystem adversary (a separate process running on the same machine) replaces a validated directory with a symlink between the time `resolve_workspace_path()` canonicalizes and validates the path and the time `std::fs::write()` (or `create_dir_all()`) follows the path to write. This is a TOCTOU (time-of-check/time-of-use) race.
 - **What is fixed:** Direct path traversal (`../../../etc/passwd`), static symlink escapes, Windows drive/UNC prefixes, and parent directory (`..`) components are all rejected at validation time. Production-path E2E test proves `../../../etc/escape.txt` is blocked even when policy approves the write.
-- **What remains:** Handle-relative filesystem operations (e.g., Windows `CreateFile` with `FILE_FLAG_NO_REPARSE_POINT`, Linux `O_NOFOLLOW`) would close the TOCTOU gap by ensuring the write target cannot be replaced between validation and use. This requires platform-specific unsafe code or a native crate.
-- **Risk acceptance rationale:** The adversary model requires local concurrent filesystem access on the same machine as OpenWand, with timing precision to win the race window. This is not a model-driven or network-accessible attack. The existing sandbox blocks all static path manipulations.
-- **Resolution path:** Handle-relative writes in a future wave, or explicit documentation that OpenWand assumes a non-adversarial local filesystem.
+- **What was hardened (72B):** `write_file_no_follow()` uses `FILE_FLAG_NO_REPARSE_POINT` on Windows and `O_NOFOLLOW` on Unix to prevent following symlinks at the **final path component** during write. This closes the race where an adversary replaces the file target with a symlink between validation and write.
+- **What remains:** Intermediate directory component races (parent replaced with symlink between validation and `create_dir_all`) are NOT fully closed. Closing that requires handle-relative directory traversal (dirfd/openat on Unix, directory handles on Windows), which is a deeper platform-specific change.
+- **Risk acceptance rationale:** The remaining race requires local concurrent filesystem access with timing precision to win the race window on an intermediate directory component. This is not a model-driven or network-accessible attack. The existing sandbox blocks all static path manipulations, and the final-component hardening blocks the most likely race target.
+- **Resolution path:** Handle-relative directory traversal in a future wave, or explicit documentation that OpenWand assumes a non-adversarial local filesystem.

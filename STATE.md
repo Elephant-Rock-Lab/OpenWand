@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 74A complete. Final Release Preparation.**
+**Wave 74B complete. Final Release External Audit Pass.**
 
-Previous lock: Wave 73C — `de6434f` — `wave-73c-lock`
+Previous lock: Wave 74A — `c40bea3` — `wave-74a-lock`
 
 ## Workspace Structure
 ```

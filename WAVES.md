@@ -275,3 +275,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 73B | Unix Handle-Relative Write Hardening | `wave-73b-lock` | 1,171 | `crates/tools/src/sandbox.rs`, `crates/tools/src/local.rs` |
 | 73C | Windows Per-Component Reparse Point Hardening | `wave-73c-lock` | 1,177 | `crates/tools/src/sandbox.rs` |
 | 74A | Final Release Preparation and Truthful Release Notes | `wave-74a-lock` | 2,266 | `RELEASE_NOTES.md`, `docs/` |
+| 74B | Final Release External Audit Pass | `wave-74b-lock` | 2,266 | `docs/FINAL_AUDIT_REPORT.md` |

@@ -24,11 +24,11 @@ pending user review of release notes.
 | Field | Value |
 |-------|-------|
 | Remote | https://github.com/Octo-Lex/OpenWand |
-| Remote master | `9e0b0cd` (`wave-72c-lock`) |
+| Remote master | `c40bea3` (`wave-74a-lock`) — verified |
 | Local/remote sync | ✅ 0 ahead, 0 behind |
-| Total tags | 63 (34 RC-era: wave-52a-lock through wave-72c-lock) |
+| Total tags | 68 (39 RC-era: wave-52a-lock through wave-74a-lock) |
 | Publication date | 2026-06-11 |
-| RC posture | Public release candidate for external review |
+| RC posture | Final release preparation — pending user declaration |
 
 ---
 
@@ -59,7 +59,7 @@ pending user review of release notes.
 - No secrets stored. No sensitive workspace used.
 - Remote/hosted providers (OpenAI API, Anthropic, etc.) were not tested.
 - Model behavior is non-deterministic; results from a single run.
-- Intermediate-directory TOCTOU residual remains separately tracked.
+- Windows per-component micro-race residual tracked as DEFERRED-008 (substantially hardened, not fully eliminated).
 
 ---
 
@@ -87,10 +87,18 @@ use statements at module level.
 | Session integration (real file effect) | 2 | ✅ Pass |
 | Session integration (post effect) | 2 | ✅ Pass |
 | Session integration (real provider, ignored) | 4 | ✅ Pass (with env vars) |
-| Tools | 96 | ✅ Pass |
+| Tools | 111 | ✅ Pass |
 | App lib | 957 | ✅ Pass |
 | App CLI surface | 8 | ✅ Pass |
-| **Total** | **1,166** | **0 failures** |
+| Workflow | 728 | ✅ Pass |
+| Trace | 41 | ✅ Pass |
+| Store | 3 | ✅ Pass |
+| Memory | 57 | ✅ Pass |
+| LLM | 13 | ✅ Pass |
+| Policy | 12 | ✅ Pass |
+| Skills | 4 | ✅ Pass |
+| Goals | 19 | ✅ Pass |
+| **Total** | **2,266 lib + 22 integration** | **0 failures** |
 
 ---
 
@@ -114,7 +122,7 @@ use statements at module level.
 **Test file:** `crates/session/tests/approval_production_path.rs`
 
 Uses `CompositeToolExecutor::local_only(batch2_local_tools())` — the full production path:
-file_write_handler → JSON schema validation → `resolve_workspace_path()` → `write_file_no_follow()`.
+`file_write_handler → JSON schema validation → WorkspaceWriteHandle → resolve_workspace_path() → platform-specific write (Unix: openat+O_NOFOLLOW, Windows: symlink_metadata+write_file_no_follow)`.
 
 | Test | Proves | Result |
 |------|--------|--------|
@@ -226,7 +234,7 @@ tool executor.
 - Remote/hosted provider endpoints (OpenAI API, Anthropic, etc.)
 - Models other than google/gemma-4-12b
 - Desktop UI functional correctness (process lifecycle only)
-- Concurrent filesystem adversary (intermediate-directory TOCTOU)
+- Windows per-component micro-race (intermediate-directory TOCTOU)
 - Multi-user or multi-session scenarios
 - Non-Windows platforms
 

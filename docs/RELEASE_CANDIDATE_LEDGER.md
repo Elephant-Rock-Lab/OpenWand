@@ -166,9 +166,17 @@ This is final release preparation — not yet a final release declaration.
 |-------|----------:|------------------:|
 | openwand-core | 45 | — |
 | openwand-session | 49 | 14 |
-| openwand-tools | 96 | — |
+| openwand-tools | 111 | — |
 | openwand-app | 957 | 8 |
-| **Total** | **1,152** | **22** |
+| openwand-workflow | 728 | — |
+| openwand-trace | 41 | — |
+| openwand-store | 3 | — |
+| openwand-memory | 57 | — |
+| openwand-llm | 13 | — |
+| openwand-policy | 12 | — |
+| openwand-skills | 4 | — |
+| openwand-goals | 19 | — |
+| **Total** | **2,266** | **22** |
 
 Session integration tests: 3 production-path + 2 real-file-effect + 2 post-effect + 4 real-provider (ignored without env vars) + 3 other.
 App integration tests: 8 binary CLI surface tests.
@@ -177,7 +185,7 @@ App integration tests: 8 binary CLI surface tests.
 
 ## Tag Sequence
 
-**38 tags** from `wave-52a-lock` through `wave-73c-lock`:
+**39 tags** from `wave-52a-lock` through `wave-74a-lock`:
 
 | Range | Count | Waves |
 |-------|------:|-------|
@@ -189,7 +197,8 @@ App integration tests: 8 binary CLI surface tests.
 | 71A–71C | 3 | CLI surface truth + E2E honesty + reconciliation |
 | 72A–72D | 4 | Publication + TOCTOU + real-provider + ledger |
 | 73A–73C | 3 | TOCTOU design + Unix hardening + Windows hardening |
-| **Total** | **38** | |
+| 74A | 1 | Final release preparation |
+| **Total** | **39** | |
 
 ---
 

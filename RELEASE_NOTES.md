@@ -152,7 +152,8 @@ This release does **not** claim:
 | TOCTOU hardening | 72B–73C | Final-component, Unix handle-relative, Windows per-component |
 | Real-provider validation | 72C | LM Studio + gemma-4-12b, 4/4 PASS |
 | Ledger refresh | 72D | RC docs reconciled, decision point |
-| **Total** | **38 waves locked** | |
+| Final release prep | 74A | Release notes, audit, document reconciliation |
+| **Total** | **39 waves locked** | | |
 
 ---
 

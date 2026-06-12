@@ -4,7 +4,7 @@
 0.1.0-alpha
 
 ## Status
-**Wave 76A complete. Post-Alpha Feedback and Issue Intake.**
+**Wave 76B complete. Windows TOCTOU Residual Hardening Feasibility.**
 
 Release: v0.1.0-alpha — `967dc96` — `v0.1.0-alpha`
 

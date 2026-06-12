@@ -244,6 +244,557 @@ pub async fn write_file_no_follow(path: &Path, content: &str) -> std::io::Result
     }
 }
 
+// ── Handle-relative write hardening (Wave 73B) ─────────────────────
+//
+// On Unix, opens the workspace root as a directory file descriptor,
+// then walks each path component using openat() with O_NOFOLLOW.
+// This eliminates the TOCTOU race where an adversary replaces an
+// intermediate directory with a symlink between validation and write.
+//
+// On Windows and other platforms, falls back to current behavior
+// (resolve_workspace_path + write_file_no_follow).
+
+/// Error from safe write operations.
+#[derive(Debug)]
+pub enum WriteSafeError {
+    /// A path component is a symlink — TOCTOU race detected or attempted.
+    SymlinkDetected { component: String },
+    /// IO error (permission denied, disk full, etc.)
+    Io(std::io::Error),
+    /// Path validation failed.
+    Validation(PathContainmentError),
+}
+
+impl std::fmt::Display for WriteSafeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WriteSafeError::SymlinkDetected { component } => {
+                write!(f, "Symlink detected at intermediate component: {}", component)
+            }
+            WriteSafeError::Io(e) => write!(f, "IO error: {}", e),
+            WriteSafeError::Validation(e) => write!(f, "Validation error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for WriteSafeError {}
+
+impl From<std::io::Error> for WriteSafeError {
+    fn from(e: std::io::Error) -> Self {
+        WriteSafeError::Io(e)
+    }
+}
+
+impl From<PathContainmentError> for WriteSafeError {
+    fn from(e: PathContainmentError) -> Self {
+        WriteSafeError::Validation(e)
+    }
+}
+
+/// Workspace write handle — opens the workspace root once, then performs
+/// handle-relative path traversal for writes.
+///
+/// On Unix (Tier 1: Linux, macOS, FreeBSD): uses `openat` + `O_NOFOLLOW`
+/// per component. Intermediate directory symlinks are detected and rejected.
+///
+/// On Windows and other platforms: falls back to `resolve_workspace_path`
+/// + `write_file_no_follow` (72B final-component protection only).
+pub struct WorkspaceWriteHandle {
+    workspace: PathBuf,
+    #[cfg(unix)]
+    root_fd: Option<std::os::unix::io::RawFd>,
+}
+
+impl WorkspaceWriteHandle {
+    /// Open the workspace root for handle-relative operations.
+    pub fn open(workspace: &Path) -> Result<Self, WriteSafeError> {
+        let canonical = workspace
+            .canonicalize()
+            .map_err(WriteSafeError::Io)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let dir = std::fs::File::open(&canonical)
+                .map_err(WriteSafeError::Io)?;
+            // Verify it's a directory
+            let meta = dir.metadata().map_err(WriteSafeError::Io)?;
+            if !meta.is_dir() {
+                return Err(WriteSafeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotADirectory,
+                    "Workspace root is not a directory",
+                )));
+            }
+            let fd = dir.as_raw_fd();
+            // Duplicate the fd so dropping `dir` doesn't close it
+            let dup_fd = unsafe { libc::dup(fd) };
+            if dup_fd < 0 {
+                return Err(WriteSafeError::Io(std::io::Error::last_os_error()));
+            }
+            Ok(WorkspaceWriteHandle {
+                workspace: canonical,
+                root_fd: Some(dup_fd),
+            })
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Verify it's a directory
+            let meta = std::fs::metadata(&canonical)
+                .map_err(WriteSafeError::Io)?;
+            if !meta.is_dir() {
+                return Err(WriteSafeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotADirectory,
+                    "Workspace root is not a directory",
+                )));
+            }
+            Ok(WorkspaceWriteHandle {
+                workspace: canonical,
+            })
+        }
+    }
+
+    /// Create intermediate directories (no-follow at each step on Unix) and
+    /// write the file at the given relative path.
+    pub async fn create_and_write(
+        &self,
+        relative_path: &str,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        // Pre-validate via existing sandbox (keeps all current protections)
+        let resolved = resolve_workspace_path(
+            &self.workspace,
+            relative_path,
+            PathAccessMode::WriteTarget,
+        )?;
+
+        #[cfg(unix)]
+        {
+            self.unix_create_and_write(&resolved, content)
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Fallback: current behavior (final-component protection only)
+            // Create parent directories first (handle does this on Unix)
+            if let Some(parent) = resolved.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(WriteSafeError::Io)?;
+            }
+            write_file_no_follow(&resolved, content).await
+                .map_err(WriteSafeError::Io)
+        }
+    }
+
+    /// Overwrite an existing file at the given relative path.
+    pub async fn overwrite_existing(
+        &self,
+        relative_path: &str,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        // Pre-validate via existing sandbox
+        let resolved = resolve_workspace_path(
+            &self.workspace,
+            relative_path,
+            PathAccessMode::PatchExisting,
+        )?;
+
+        #[cfg(unix)]
+        {
+            self.unix_overwrite_existing(&resolved, content)
+        }
+
+        #[cfg(not(unix))]
+        {
+            write_file_no_follow(&resolved, content).await
+                .map_err(WriteSafeError::Io)
+        }
+    }
+}
+
+#[cfg(unix)]
+impl WorkspaceWriteHandle {
+    /// Unix: walk path components relative to root_fd using openat + O_NOFOLLOW.
+    fn unix_create_and_write(
+        &self,
+        resolved: &Path,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        use std::os::unix::io::{AsRawFd, FromRawFd};
+
+        let root_fd = self.root_fd.ok_or_else(|| {
+            WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "WorkspaceWriteHandle not properly initialized",
+            ))
+        })?;
+
+        // Get the relative path from workspace to resolved target
+        let rel = resolved.strip_prefix(&self.workspace)
+            .map_err(|_| WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Resolved path is not under workspace",
+            )))?;
+
+        let components: Vec<&OsStr> = rel.iter().collect();
+        if components.is_empty() {
+            return Err(WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot write to workspace root",
+            )));
+        }
+
+        // Platform-specific O_NOFOLLOW
+        #[cfg(target_os = "linux")]
+        const O_NOFOLLOW: i32 = 0x20000;
+        #[cfg(target_os = "macos")]
+        const O_NOFOLLOW: i32 = 0x0100;
+        #[cfg(target_os = "freebsd")]
+        const O_NOFOLLOW: i32 = 0x0100;
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+        const O_NOFOLLOW: i32 = 0;
+
+        let mut current_fd = root_fd;
+        let mut opened_fds: Vec<i32> = Vec::new(); // track fds to close (not root_fd)
+
+        // Walk intermediate directories
+        let dir_components = &components[..components.len() - 1];
+        for (i, comp) in dir_components.iter().enumerate() {
+            let c_str = std::ffi::CString::new(comp.to_string_lossy().into_owned())
+                .map_err(|_| WriteSafeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Path component contains null byte",
+                )))?;
+
+            // Try to open existing directory, no-follow
+            let fd = unsafe {
+                libc::openat(
+                    current_fd,
+                    c_str.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | O_NOFOLLOW,
+                )
+            };
+
+            if fd >= 0 {
+                opened_fds.push(fd);
+                current_fd = fd;
+            } else {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    // Directory doesn't exist: create it
+                    let mkdir_res = unsafe {
+                        libc::mkdirat(current_fd, c_str.as_ptr(), 0o755)
+                    };
+                    if mkdir_res < 0 {
+                        Self::close_fds(&opened_fds);
+                        return Err(WriteSafeError::Io(std::io::Error::last_os_error()));
+                    }
+                    // Re-open the directory we just created, no-follow
+                    let new_fd = unsafe {
+                        libc::openat(
+                            current_fd,
+                            c_str.as_ptr(),
+                            libc::O_RDONLY | libc::O_DIRECTORY | O_NOFOLLOW,
+                        )
+                    };
+                    if new_fd < 0 {
+                        let open_err = std::io::Error::last_os_error();
+                        // ELOOP means it's a symlink — race detected
+                        if open_err.raw_os_error() == Some(libc::ELOOP) {
+                            Self::close_fds(&opened_fds);
+                            return Err(WriteSafeError::SymlinkDetected {
+                                component: comp.to_string_lossy().into_owned(),
+                            });
+                        }
+                        Self::close_fds(&opened_fds);
+                        return Err(WriteSafeError::Io(open_err));
+                    }
+                    opened_fds.push(new_fd);
+                    current_fd = new_fd;
+                } else if err.raw_os_error() == Some(libc::ELOOP) {
+                    // Symlink detected at this component
+                    Self::close_fds(&opened_fds);
+                    return Err(WriteSafeError::SymlinkDetected {
+                        component: comp.to_string_lossy().into_owned(),
+                    });
+                } else {
+                    Self::close_fds(&opened_fds);
+                    return Err(WriteSafeError::Io(err));
+                }
+            }
+
+            // Verify the fd is still a directory (not replaced after open)
+            let mut stat_buf: libc::stat = unsafe { std::mem::zeroed() };
+            let fstat_res = unsafe { libc::fstat(current_fd, &mut stat_buf) };
+            if fstat_res < 0 {
+                Self::close_fds(&opened_fds);
+                return Err(WriteSafeError::Io(std::io::Error::last_os_error()));
+            }
+            if stat_buf.st_mode & libc::S_IFMT != libc::S_IFDIR {
+                Self::close_fds(&opened_fds);
+                return Err(WriteSafeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotADirectory,
+                    format!("Component '{}' is not a directory", comp.to_string_lossy()),
+                )));
+            }
+
+            let _ = i; // suppress unused warning on last iteration
+        }
+
+        // Open final component for writing, no-follow
+        let filename = components.last().unwrap();
+        let filename_cstr = std::ffi::CString::new(filename.to_string_lossy().into_owned())
+            .map_err(|_| WriteSafeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Filename contains null byte",
+            )))?;
+
+        let file_fd = unsafe {
+            libc::openat(
+                current_fd,
+                filename_cstr.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC | O_NOFOLLOW,
+                0o644,
+            )
+        };
+
+        if file_fd < 0 {
+            let err = std::io::Error::last_os_error();
+            Self::close_fds(&opened_fds);
+            if err.raw_os_error() == Some(libc::ELOOP) {
+                return Err(WriteSafeError::SymlinkDetected {
+                    component: filename.to_string_lossy().into_owned(),
+                });
+            }
+            return Err(WriteSafeError::Io(err));
+        }
+
+        // Write content via fd
+        let content_bytes = content.as_bytes();
+        let mut written: usize = 0;
+        while written < content_bytes.len() {
+            let n = unsafe {
+                libc::write(
+                    file_fd,
+                    content_bytes[written..].as_ptr() as *const libc::c_void,
+                    content_bytes.len() - written,
+                )
+            };
+            if n < 0 {
+                unsafe { libc::close(file_fd) };
+                Self::close_fds(&opened_fds);
+                return Err(WriteSafeError::Io(std::io::Error::last_os_error()));
+            }
+            written += n as usize;
+        }
+
+        // Close file and intermediate fds
+        unsafe { libc::close(file_fd) };
+        Self::close_fds(&opened_fds);
+        Ok(())
+    }
+
+    /// Unix: overwrite existing file using handle-relative traversal.
+    fn unix_overwrite_existing(
+        &self,
+        resolved: &Path,
+        content: &str,
+    ) -> Result<(), WriteSafeError> {
+        // Overwrite uses the same traversal but the file must exist
+        // (PatchExisting validation already checked this)
+        self.unix_create_and_write(resolved, content)
+    }
+
+    fn close_fds(fds: &[i32]) {
+        for &fd in fds {
+            unsafe { libc::close(fd) };
+        }
+    }
+}
+
+impl Drop for WorkspaceWriteHandle {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        {
+            if let Some(fd) = self.root_fd.take() {
+                unsafe { libc::close(fd) };
+            }
+        }
+    }
+}
+
+// SAFETY: The handle contains a file descriptor that is not shared across threads
+// during active use. The fd is only accessed within individual method calls.
+unsafe impl Send for WorkspaceWriteHandle {}
+unsafe impl Sync for WorkspaceWriteHandle {}
+
+#[cfg(test)]
+mod handle_tests {
+    use super::*;
+
+    fn setup_workspace() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn handle_opens_workspace_root() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path());
+        assert!(handle.is_ok(), "Failed to open handle: {:?}", handle.err());
+    }
+
+    #[test]
+    fn handle_rejects_nonexistent_workspace() {
+        let handle = WorkspaceWriteHandle::open(Path::new("/nonexistent/path/to/workspace"));
+        assert!(handle.is_err());
+    }
+
+    #[test]
+    fn handle_rejects_file_as_workspace() {
+        let ws = setup_workspace();
+        let file_path = ws.path().join("not_a_dir.txt");
+        std::fs::write(&file_path, "test").unwrap();
+        let handle = WorkspaceWriteHandle::open(&file_path);
+        assert!(handle.is_err());
+    }
+
+    #[tokio::test]
+    async fn create_and_write_single_component() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("file.txt", "hello").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("file.txt")).unwrap();
+        assert_eq!("hello", contents);
+    }
+
+    #[tokio::test]
+    async fn create_and_write_creates_intermediate_dirs() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("a/b/c/file.txt", "deep").await.unwrap();
+        let contents = std::fs::read_to_string(
+            ws.path().join("a/b/c/file.txt")
+        ).unwrap();
+        assert_eq!("deep", contents);
+        // Verify intermediate directories were created
+        assert!(ws.path().join("a").is_dir());
+        assert!(ws.path().join("a/b").is_dir());
+        assert!(ws.path().join("a/b/c").is_dir());
+    }
+
+    #[tokio::test]
+    async fn create_and_write_overwrites_existing() {
+        let ws = setup_workspace();
+        std::fs::write(ws.path().join("exists.txt"), "original").unwrap();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("exists.txt", "replaced").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("exists.txt")).unwrap();
+        assert_eq!("replaced", contents);
+    }
+
+    #[tokio::test]
+    async fn overwrite_existing_works() {
+        let ws = setup_workspace();
+        std::fs::write(ws.path().join("patch.txt"), "original").unwrap();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.overwrite_existing("patch.txt", "patched").await.unwrap();
+        let contents = std::fs::read_to_string(ws.path().join("patch.txt")).unwrap();
+        assert_eq!("patched", contents);
+    }
+
+    #[tokio::test]
+    async fn handle_rejects_absolute_path() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        let result = handle.create_and_write("/etc/passwd", "evil").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn handle_rejects_parent_traversal() {
+        let ws = setup_workspace();
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        let result = handle.create_and_write("../../../etc/passwd", "evil").await;
+        assert!(result.is_err());
+    }
+
+    // ── Symlink detection tests (Unix only) ──────────────────────────
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn create_and_write_detects_intermediate_symlink() {
+        let ws = setup_workspace();
+        let outside = tempfile::tempdir().unwrap();
+
+        // Create: workspace/link_dir -> outside
+        std::os::unix::fs::symlink(
+            outside.path(),
+            ws.path().join("link_dir"),
+        ).unwrap();
+
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        let result = handle.create_and_write("link_dir/file.txt", "evil").await;
+
+        match result {
+            Err(WriteSafeError::SymlinkDetected { component }) => {
+                assert_eq!("link_dir", component);
+            }
+            Err(e) => {
+                // On some platforms the error may manifest differently
+                // but it MUST NOT succeed
+                panic!("Expected SymlinkDetected, got: {:?}", e);
+            }
+            Ok(()) => {
+                panic!("Write should have been blocked — symlink at intermediate component");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn create_and_write_detects_final_component_symlink() {
+        let ws = setup_workspace();
+        let outside = tempfile::tempdir().unwrap();
+
+        // Create: workspace/link_file -> outside/secret.txt
+        std::os::unix::fs::symlink(
+            outside.path().join("secret.txt"),
+            ws.path().join("link_file.txt"),
+        ).unwrap();
+
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        let result = handle.create_and_write("link_file.txt", "evil").await;
+
+        match result {
+            Err(WriteSafeError::SymlinkDetected { component }) => {
+                assert_eq!("link_file.txt", component);
+            }
+            Err(e) => {
+                // May also fail with ELOOP at final component
+                panic!("Expected SymlinkDetected, got: {:?}", e);
+            }
+            Ok(()) => {
+                panic!("Write should have been blocked — symlink at final component");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn create_and_write_works_in_honest_directory() {
+        let ws = setup_workspace();
+        std::fs::create_dir_all(ws.path().join("honest_dir")).unwrap();
+
+        let handle = WorkspaceWriteHandle::open(ws.path()).unwrap();
+        handle.create_and_write("honest_dir/file.txt", "legit").await.unwrap();
+
+        let contents = std::fs::read_to_string(
+            ws.path().join("honest_dir/file.txt")
+        ).unwrap();
+        assert_eq!("legit", contents);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

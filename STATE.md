@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 73A complete. Intermediate-Directory TOCTOU Hardening Design.**
+**Wave 73B complete. Unix Handle-Relative Write Hardening.**
 
-Previous lock: Wave 72D — `de1cb7f` — `wave-72d-lock`
+Previous lock: Wave 73A — `58af252` — `wave-73a-lock`
 
 ## Workspace Structure
 ```

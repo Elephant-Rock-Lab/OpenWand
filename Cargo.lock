@@ -4155,6 +4155,7 @@ dependencies = [
  "blake3",
  "chrono",
  "ignore",
+ "libc",
  "openwand-core",
  "openwand-mcp-pool",
  "serde",

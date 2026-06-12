@@ -272,3 +272,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 72C | Real-Provider Validation Against Published RC | `wave-72c-lock` | 1,162 | `crates/session/tests/real_provider_validation.rs` |
 | 72D | Final RC Ledger Refresh and Release/Hardening Decision | `wave-72d-lock` | 1,166 | `docs/RC_VALIDATION_REPORT.md`, `docs/RELEASE_CANDIDATE_LEDGER.md` |
 | 73A | Intermediate-Directory TOCTOU Hardening Design | `wave-73a-lock` | 1,166 | `docs/TOCTOU_HARDENING_DESIGN.md` |
+| 73B | Unix Handle-Relative Write Hardening | `wave-73b-lock` | 1,171 | `crates/tools/src/sandbox.rs`, `crates/tools/src/local.rs` |

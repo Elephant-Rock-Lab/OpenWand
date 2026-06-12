@@ -601,17 +601,6 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
         );
     }
 
-    // Create parent directories if needed
-    if let Some(parent) = full_path.parent()
-        && let Err(e) = tokio::fs::create_dir_all(parent).await {
-            return ToolResult::error(
-                call_id,
-                tool_name,
-                format!("Failed to create parent directory: {e}"),
-                start.elapsed().as_millis() as u64,
-            );
-        }
-
     // Record preimage if file exists (for rollback)
     let preimage_info = if full_path.exists() {
         match tokio::fs::read(&full_path).await {
@@ -635,8 +624,25 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
         None
     };
 
-    // Write the file (TOCTOU-hardened: no-follow on final component)
-    match crate::sandbox::write_file_no_follow(&full_path, content).await {
+    // Create parent directories and write using handle-relative traversal
+    // On Unix: openat + O_NOFOLLOW per component (closes intermediate-dir TOCTOU)
+    // On Windows/other: falls back to create_dir_all + write_file_no_follow (72B hardening)
+    let write_result = {
+        let ws = std::path::Path::new(&ctx.working_directory);
+        match crate::sandbox::WorkspaceWriteHandle::open(ws) {
+            Ok(handle) => handle.create_and_write(path_val, content).await,
+            Err(_) => {
+                // Handle open failed (e.g. workspace disappeared) — fall back
+                if let Some(parent) = full_path.parent() {
+                    let _ = tokio::fs::create_dir_all(parent).await;
+                }
+                crate::sandbox::write_file_no_follow(&full_path, content).await
+                    .map_err(crate::sandbox::WriteSafeError::Io)
+            }
+        }
+    };
+
+    match write_result {
         Ok(()) => {
             let postimage_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
             let mut msg = format!(

@@ -280,3 +280,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 76A | Post-Alpha Feedback and Issue Intake | `wave-76a-lock` | 2,266 | `.github/ISSUE_TEMPLATE/`, `docs/POST_ALPHA_TRIAGE.md` |
 | 76B | Windows TOCTOU Residual Hardening Feasibility | `wave-76b-lock` | 2,266 | `docs/WINDOWS_TOCTOU_FEASIBILITY.md` |
 | 76C | Multi-Provider Validation Matrix | `wave-76c-lock` | 2,266 | `docs/PROVIDER_VALIDATION_MATRIX.md` |
+| 76D | Desktop Interaction E2E | `wave-76d-lock` | 2,272 | `crates/app/tests/desktop_interaction_e2e.rs` |

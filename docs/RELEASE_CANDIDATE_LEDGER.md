@@ -1,18 +1,20 @@
 # Release Candidate Readiness Ledger
 
-**Wave:** 74A
+**Release:** v0.1.0-alpha
 **Date:** 2026-06-12
-**Commit:** `de6434f` (`wave-73c-lock`, latest)
+**Commit:** `b9a2138` (`wave-74b-lock`, release baseline)
+**Release tag:** `v0.1.0-alpha`
 **Test baseline:** 2,266 lib tests + 22 integration, 0 failures
 
 ---
 
 ## Determination
 
-**PASS — FINAL RELEASE PREP.** Public RC published, real-provider validated,
-TOCTOU hardening arc complete (Unix fully closed, Windows substantially hardened).
-All emergency blockers resolved. Production-path approval E2E verified.
-CLI surface truthful. Final release notes prepared with accepted residuals.
+**v0.1.0-ALPHA RELEASED.** First public alpha for evaluation and external review.
+All release blockers resolved. TOCTOU fully closed on Unix, substantially
+hardened on Windows. Real-provider validated. Production-path approval E2E
+verified. CLI surface truthful. Final audit passed: 0 overclaims, 0 blockers.
+Accepted residuals documented in RELEASE_NOTES.md.
 This is final release preparation — not yet a final release declaration.
 
 ---
@@ -41,11 +43,11 @@ This is final release preparation — not yet a final release declaration.
 | Field | Value |
 |-------|-------|
 | Remote | https://github.com/Octo-Lex/OpenWand |
-| Remote master | `de6434f` (`wave-73c-lock`) — verified |
+| Remote master | `b9a2138` (`wave-74b-lock`, v0.1.0-alpha) — verified |
 | Local/remote sync | ✅ 0 ahead, 0 behind |
-| Total tags | 67 (38 RC-era: wave-52a-lock through wave-73c-lock) |
-| Publication date | 2026-06-11 |
-| Status | Release candidate for external review — not a final release |
+| Total tags | 69 (40 RC-era + v0.1.0-alpha) |
+| Publication date | 2026-06-12 |
+| Status | v0.1.0-alpha — first public alpha release |
 
 ---
 
@@ -216,19 +218,17 @@ App integration tests: 8 binary CLI surface tests.
 
 ## Next Decision Point
 
-The project has completed its hardening arc. All release blockers are resolved.
-TOCTOU is fully closed on Unix and substantially hardened on Windows.
+v0.1.0-alpha is released. Remaining work is post-alpha iteration:
 
 | Option | Description |
 |--------|-------------|
-| A. **Final release** | Declare v0.1.0-alpha, publish release notes, create GitHub release |
-| B. External audit | Run one more external review pass against 74A release notes |
-| C. App clippy cleanup | Suppress test-module warnings before release |
-| D. Dependency refresh | Attempt Dioxus/Loro version bump |
+| A. External feedback | Collect and triage external review feedback |
+| B. v0.1.1-alpha | Windows NT API TOCTOU closure, clippy cleanup, dep refresh |
+| C. v0.2.0-alpha | New feature work (placeholder UI surfaces, hosted providers) |
+| D. v0.1.0 stable | Promote alpha to stable after feedback period |
 
 ---
 
-*After 74A, the project is ready for final release declaration. All release blockers
-resolved. TOCTOU fully closed on Unix, substantially hardened on Windows. Real-provider
-validated. Production-path E2E verified. Final release declaration remains pending
-by user decision. This document does not constitute a final release claim.*
+*v0.1.0-alpha released 2026-06-12. First public alpha for evaluation and external
+review. Accepted residuals documented. Not production-ready. Not fully secure.
+See RELEASE_NOTES.md for full details.*

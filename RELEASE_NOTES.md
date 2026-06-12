@@ -1,7 +1,31 @@
 # OpenWand v0.1.0-alpha — Release Notes
 
 **Date:** 2026-06-12
-**Status:** Release candidate for final release review — not yet a final release declaration.
+**Release commit:** `b9a2138` (`wave-74b-lock`)
+**Release tag:** `v0.1.0-alpha`
+**Classification:** First public alpha release for evaluation and external review.
+
+---
+
+## Alpha Notice
+
+This is an **alpha** release. It is not production-ready, not fully secure, and
+not validated across all providers or platforms. It is published for evaluation
+and external review. See Accepted Residuals below.
+
+---
+
+## Artifact Identity
+
+| Field | Value |
+|-------|-------|
+| Binary | `target/release/openwand.exe` |
+| Size | 17,840,640 bytes (17.0 MB) |
+| SHA-256 | `9B5611A9440B5A6028984DE50EB015CE521A8BC4A05FBC496B45F90A4D915A93` |
+| Toolchain | `rustc 1.95.0 (59807616e 2026-04-14)` |
+| Target | `x86_64-pc-windows-msvc` |
+| Profile | `release` (optimized) |
+| Feature | `--features desktop` |
 
 ---
 
@@ -11,8 +35,8 @@ OpenWand is a 10-phase agent loop with trace-first mutation, tool execution with
 sandboxed filesystem access, capability-context governance, and a desktop workflow
 visibility UI.
 
-This document covers the changes from the initial public RC publication (Wave 72A)
-through the current release-prep state (Wave 73C).
+This document covers the full development arc from initial desktop UI surfaces
+(Wave 52A) through the current alpha release (Wave 74B, 39 waves locked).
 
 ---
 
@@ -153,7 +177,8 @@ This release does **not** claim:
 | Real-provider validation | 72C | LM Studio + gemma-4-12b, 4/4 PASS |
 | Ledger refresh | 72D | RC docs reconciled, decision point |
 | Final release prep | 74A | Release notes, audit, document reconciliation |
-| **Total** | **39 waves locked** | | |
+| External audit | 74B | Audit pass: 9 staleness findings fixed, 0 overclaims, 0 blockers |
+| **Total** | **40 waves locked** | | | |
 
 ---
 

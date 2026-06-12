@@ -1,21 +1,19 @@
-# RC Validation Report — Wave 74A
+# RC Validation Report — v0.1.0-alpha
 
 **Date:** 2026-06-12
-**Baseline commit:** `de6434f` (`wave-73c-lock`, latest)
+**Release commit:** `b9a2138` (`wave-74b-lock`)
+**Release tag:** `v0.1.0-alpha`
 **Previous report:** Wave 72D (commit `de1cb7f`)
 **Validator:** Craft Agent (automated)
-**Classification:** Final release preparation — not yet a final release declaration.
+**Classification:** v0.1.0-alpha — first public alpha release for evaluation and external review.
 
 ---
 
 ## Determination
 
-**PASS — FINAL RELEASE PREP.** Public RC published and validated against a real
-local provider. TOCTOU hardening arc complete: Unix intermediate-directory race
-fully closed, Windows substantially hardened. All emergency blockers resolved.
-Production-path approval E2E verified. CLI surface truthful. Final release
-notes prepared with accepted residuals documented. Final release declaration
-pending user review of release notes.
+**v0.1.0-ALPHA RELEASED.** All release blockers resolved. TOCTOU hardening arc
+complete. Final audit passed with 0 overclaims and 0 blockers. Accepted residuals
+documented in RELEASE_NOTES.md. Alpha release — not production-ready.
 
 ---
 

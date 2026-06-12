@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 74B complete. Final Release External Audit Pass.**
+**v0.1.0-alpha released. First public alpha.**
 
-Previous lock: Wave 74A — `c40bea3` — `wave-74a-lock`
+Release commit: `b9a2138` — `v0.1.0-alpha` — `wave-74b-lock`
 
 ## Workspace Structure
 ```

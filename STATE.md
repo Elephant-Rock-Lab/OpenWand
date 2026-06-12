@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 73C complete. Windows Handle-Relative Write Hardening.**
+**Wave 74A complete. Final Release Preparation.**
 
-Previous lock: Wave 73B — `79dc307` — `wave-73b-lock`
+Previous lock: Wave 73C — `de6434f` — `wave-73c-lock`
 
 ## Workspace Structure
 ```

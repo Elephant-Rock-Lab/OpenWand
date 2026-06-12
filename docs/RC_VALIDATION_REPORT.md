@@ -1,20 +1,21 @@
-# RC Validation Report — Wave 72D
+# RC Validation Report — Wave 74A
 
 **Date:** 2026-06-12
-**Baseline commit:** `9e0b0cd` (`wave-72c-lock`, latest)
-**Previous report:** Wave 71C (commit `10f7e3b`)
+**Baseline commit:** `de6434f` (`wave-73c-lock`, latest)
+**Previous report:** Wave 72D (commit `de1cb7f`)
 **Validator:** Craft Agent (automated)
-**Classification:** Release candidate for external review — not a final release.
+**Classification:** Final release preparation — not yet a final release declaration.
 
 ---
 
 ## Determination
 
-**PASS — REAL-PROVIDER VALIDATED.** Public RC published. Real-provider validation
-passed against LM Studio + google/gemma-4-12b on a non-sensitive fixture workspace.
-All emergency blockers resolved. Production-path approval E2E verified with
-sandbox/schema/executor. Final-component TOCTOU hardened. CLI surface truthful.
-Final release declaration not made.
+**PASS — FINAL RELEASE PREP.** Public RC published and validated against a real
+local provider. TOCTOU hardening arc complete: Unix intermediate-directory race
+fully closed, Windows substantially hardened. All emergency blockers resolved.
+Production-path approval E2E verified. CLI surface truthful. Final release
+notes prepared with accepted residuals documented. Final release declaration
+pending user review of release notes.
 
 ---
 
@@ -184,7 +185,9 @@ tool executor.
 | Static symlink escapes | ✅ Blocked at validation time |
 | Windows drive/UNC prefixes | ✅ Blocked at validation time |
 | Final-component symlink (write) | ✅ Hardened 72B — `FILE_FLAG_NO_REPARSE_POINT` / `O_NOFOLLOW` |
-| Intermediate directory race | ⚠️ Not closed — requires handle-relative traversal (dirfd/openat) |
+| Unix intermediate directory race | ✅ **Fully closed 73B** — `openat` + `O_NOFOLLOW` per component |
+| Windows intermediate directory race | ✅ **Substantially hardened 73C** — per-component `symlink_metadata` + re-verify |
+| Windows per-component micro-race | ⚠️ Reduced residual — requires NT API to fully close |
 
 ---
 
@@ -212,7 +215,9 @@ tool executor.
 |---|------|--------|----------|
 | 1 | App test-module clippy cleanup | Accepted cosmetic | Code quality |
 | 2 | Transitive dependency warnings (15) | Accepted pending upstream | Dependencies |
-| 3 | Intermediate-directory TOCTOU | Reduced residual (72B), tracked as DEFERRED-008 | Security |
+| 3 | Windows per-component TOCTOU micro-race | Reduced residual (73C), requires NT API | Security |
+| 4 | Remote/hosted provider validation | Not tested (only local LM Studio) | Testing |
+| 5 | Desktop UI functional correctness | Process lifecycle only | Testing |
 
 ---
 

@@ -274,3 +274,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 73A | Intermediate-Directory TOCTOU Hardening Design | `wave-73a-lock` | 1,166 | `docs/TOCTOU_HARDENING_DESIGN.md` |
 | 73B | Unix Handle-Relative Write Hardening | `wave-73b-lock` | 1,171 | `crates/tools/src/sandbox.rs`, `crates/tools/src/local.rs` |
 | 73C | Windows Per-Component Reparse Point Hardening | `wave-73c-lock` | 1,177 | `crates/tools/src/sandbox.rs` |
+| 74A | Final Release Preparation and Truthful Release Notes | `wave-74a-lock` | 2,266 | `RELEASE_NOTES.md`, `docs/` |

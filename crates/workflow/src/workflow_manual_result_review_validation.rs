@@ -407,7 +407,9 @@ mod tests {
         // Extract lines between the validate function start and the #[cfg(test)] marker.
         let lines: Vec<&str> = src.lines().collect();
         let validate_start = lines.iter().position(|l| l.contains("pub fn validate_manual_result_review")).unwrap();
-        let test_start = lines.iter().position(|l| l.trim() == "#[cfg(test)]").unwrap();
+        let test_start = lines[validate_start..].iter().position(|l| l.trim() == "#[cfg(test)]")
+            .map(|i| validate_start + i)
+            .unwrap();
         let fn_body: String = lines[validate_start..test_start].join("\n");
         assert!(!fn_body.contains("prior_review"), "Validation should not reference prior reviews");
         assert!(!fn_body.contains("existing_review"), "Validation should not check existing reviews");

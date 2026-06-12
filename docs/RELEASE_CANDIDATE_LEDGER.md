@@ -1,18 +1,19 @@
 # Release Candidate Readiness Ledger
 
-**Wave:** 72D
+**Wave:** 74A
 **Date:** 2026-06-12
-**Commit:** `9e0b0cd` (`wave-72c-lock`, latest)
-**Test baseline:** 1,166 tests (1,152 lib + 14 integration), 0 failures
+**Commit:** `de6434f` (`wave-73c-lock`, latest)
+**Test baseline:** 2,266 lib tests + 22 integration, 0 failures
 
 ---
 
 ## Determination
 
-**PASS — REAL-PROVIDER VALIDATED.** Public RC published and validated against a real
-local OpenAI-compatible provider. All emergency blockers resolved. Final-component TOCTOU
-hardened. Production-path approval E2E verified with sandbox/schema/executor. CLI surface
-truthful. This is a release candidate for external review — not a final release declaration.
+**PASS — FINAL RELEASE PREP.** Public RC published, real-provider validated,
+TOCTOU hardening arc complete (Unix fully closed, Windows substantially hardened).
+All emergency blockers resolved. Production-path approval E2E verified.
+CLI surface truthful. Final release notes prepared with accepted residuals.
+This is final release preparation — not yet a final release declaration.
 
 ---
 
@@ -40,9 +41,9 @@ truthful. This is a release candidate for external review — not a final releas
 | Field | Value |
 |-------|-------|
 | Remote | https://github.com/Octo-Lex/OpenWand |
-| Remote master | `9e0b0cd` (`wave-72c-lock`) — verified |
+| Remote master | `de6434f` (`wave-73c-lock`) — verified |
 | Local/remote sync | ✅ 0 ahead, 0 behind |
-| Total tags | 63 (34 RC-era: wave-52a-lock through wave-72c-lock) |
+| Total tags | 67 (38 RC-era: wave-52a-lock through wave-73c-lock) |
 | Publication date | 2026-06-11 |
 | Status | Release candidate for external review — not a final release |
 
@@ -103,6 +104,8 @@ truthful. This is a release candidate for external review — not a final releas
 | Cargo audit | 70A | ✅ 0 vulnerabilities |
 | Real-provider validation | 72C | ✅ Passed (4/4 tests) |
 | Final-component TOCTOU | 72B | ✅ Hardened |
+| Unix intermediate-directory TOCTOU | 73B | ✅ Fully closed (openat + O_NOFOLLOW) |
+| Windows intermediate-directory TOCTOU | 73C | ✅ Substantially hardened (per-component reparse point check) |
 
 ---
 
@@ -129,7 +132,9 @@ truthful. This is a release candidate for external review — not a final releas
 |---|------|--------|-----------------|
 | 1 | App test-module clippy cleanup | Accepted cosmetic | Crate-level `#![allow(...)]` or separate test-support crate |
 | 2 | Transitive dependency warnings (15) | Accepted pending upstream | Re-evaluate when Dioxus/Loro release updates |
-| 3 | Intermediate-directory TOCTOU (DEFERRED-008) | Reduced residual (72B) | Handle-relative directory traversal (dirfd/openat) |
+| 3 | Windows per-component TOCTOU micro-race (DEFERRED-008) | Reduced residual (73C) | Undocumented `NtCreateFile` with `RootDirectory` handle |
+| 4 | Remote/hosted provider validation | Not tested | Configure and test against OpenAI/Anthropic API |
+| 5 | Desktop UI functional correctness | Process lifecycle only | Manual or automated UI testing |
 
 ---
 
@@ -172,7 +177,7 @@ App integration tests: 8 binary CLI surface tests.
 
 ## Tag Sequence
 
-**34 tags** from `wave-52a-lock` through `wave-72c-lock`:
+**38 tags** from `wave-52a-lock` through `wave-73c-lock`:
 
 | Range | Count | Waves |
 |-------|------:|-------|
@@ -182,8 +187,9 @@ App integration tests: 8 binary CLI surface tests.
 | 69A–69G | 7 | Release-blocker remediation + hardening |
 | 70A–70D | 4 | RC validation + packaging |
 | 71A–71C | 3 | CLI surface truth + E2E honesty + reconciliation |
-| 72A–72C | 3 | Publication + TOCTOU hardening + real-provider validation |
-| **Total** | **34** | |
+| 72A–72D | 4 | Publication + TOCTOU + real-provider + ledger |
+| 73A–73C | 3 | TOCTOU design + Unix hardening + Windows hardening |
+| **Total** | **38** | |
 
 ---
 
@@ -201,19 +207,19 @@ App integration tests: 8 binary CLI surface tests.
 
 ## Next Decision Point
 
-The RC is **published and validated under one real local provider.** Remaining work is
-hardening and release polish, not hidden contradiction blockers.
+The project has completed its hardening arc. All release blockers are resolved.
+TOCTOU is fully closed on Unix and substantially hardened on Windows.
 
-| Option | Description | Risk |
-|--------|-------------|------|
-| A. Final release prep | Prepare version bump, changelog, release notes | Intermediate TOCTOU stays as known gap |
-| B. Intermediate-directory TOCTOU | Handle-relative directory traversal | Significant platform-specific work |
-| C. App clippy cleanup | Suppress or refactor test-module warnings | Cosmetic only |
-| D. Dependency-warning upgrade path | Update Dioxus/Loro transitive deps | Upstream-dependent, may not be possible |
+| Option | Description |
+|--------|-------------|
+| A. **Final release** | Declare v0.1.0-alpha, publish release notes, create GitHub release |
+| B. External audit | Run one more external review pass against 74A release notes |
+| C. App clippy cleanup | Suppress test-module warnings before release |
+| D. Dependency refresh | Attempt Dioxus/Loro version bump |
 
 ---
 
-*After 72D, the public RC is published, real-provider validated under a local model,
-TOCTOU-hardened at the final component, and all release blockers are resolved. Final
-release declaration remains pending by user decision. This document does not constitute
-a final release claim.*
+*After 74A, the project is ready for final release declaration. All release blockers
+resolved. TOCTOU fully closed on Unix, substantially hardened on Windows. Real-provider
+validated. Production-path E2E verified. Final release declaration remains pending
+by user decision. This document does not constitute a final release claim.*

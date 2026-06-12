@@ -4,9 +4,9 @@
 0.1.0-alpha
 
 ## Status
-**Wave 72D complete. Final RC Ledger Refresh.**
+**Wave 73A complete. Intermediate-Directory TOCTOU Hardening Design.**
 
-Previous lock: Wave 72C — `9e0b0cd` — `wave-72c-lock`
+Previous lock: Wave 72D — `de1cb7f` — `wave-72d-lock`
 
 ## Workspace Structure
 ```

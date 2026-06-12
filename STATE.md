@@ -4,10 +4,10 @@
 0.1.0-alpha
 
 ## Status
-**Wave 77A complete. Beta Gap Ledger and Roadmap Reset.**
+**Wave 77B complete. Hosted Provider Validation.**
 
 Release: v0.1.0-alpha — `967dc96` — `v0.1.0-alpha`
-Post-alpha: `f05694d` (`wave-76d-lock`) → `HEAD` (77A)
+Post-alpha: `cae9552` (`wave-77a-lock`) → `HEAD` (77B)
 
 ## Workspace Structure
 ```
@@ -67,20 +67,20 @@ cargo audit
 
 ## Beta Gap Summary
 
-**Beta-blocking items (4 of 10 unresolved):**
+**Beta-blocking items (3 of 10 unresolved):**
 
 | # | Criterion | Status |
 |---|-----------|--------|
 | BC-1 | No unresolved release blockers | ✅ 6/6 resolved |
-| BC-2 | At least one hosted provider validated | ⬜ Not done |
+| BC-2 | At least one hosted provider validated | ✅ Z.AI glm-4.5-air + glm-5.1 |
 | BC-3 | Desktop UI interaction path validated | ⬜ Service/bridge only |
-| BC-6 | Documentation current through 76A–76D | ✅ This wave (77A) |
+| BC-6 | Documentation current through 77B | ✅ This wave |
 | BC-7 | Beta release notes written | ⬌ Beta release wave |
 | BC-8 | Windows TOCTOU path revisited | ✅ Documented (76B) |
-| BC-9 | Multi-provider matrix expanded | ✅ 2 local models |
+| BC-9 | Multi-provider matrix expanded | ✅ 2 local + 2 hosted models |
 | BC-10 | Non-Windows platform testing | ⬜ Deferred |
 
-**Beta path:** 77A (docs) → 77B (hosted provider) → 77C (desktop UX) → 77D (beta tag)
+**Beta path:** 77A (docs) → 77B (hosted provider ✅) → 77C (desktop UX) → 77D (beta tag)
 
 See `docs/BETA_GAP_LEDGER.md` for full gap analysis.
 

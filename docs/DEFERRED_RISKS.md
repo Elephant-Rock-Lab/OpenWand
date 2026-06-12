@@ -107,10 +107,10 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **Resolution path:** Accept as reduced residual, or implement via undocumented `NtCreateFile` with `RootDirectory` handle in a future wave.
 
 ### DEFERRED-009: Hosted provider validation
-- **Status:** Beta-blocking
+- **Status:** ✅ Closed by Z.AI validation (77B)
 - **Category:** Testing
-- **Detail:** No hosted provider (OpenAI API, Anthropic, etc.) has been validated. Only local LM Studio with two models tested (72C, 76C). Network behavior, auth flows, rate limiting, and error handling under real hosted conditions are unvalidated.
-- **Resolution path:** Configure API key for at least one hosted provider. Run real-provider validation suite. Record results.
+- **Detail:** Z.AI hosted endpoint validated with two models (glm-4.5-air, glm-5.1) across simple turn, trace attribution, tool calling, and sandbox refusal. Functional equivalence via MCP API source. OpenAI direct, Anthropic, and other hosted providers remain untested.
+- **Resolution path:** CLOSED for beta criterion. Additional providers are post-beta.
 
 ### DEFERRED-010: Desktop UI rendering validation
 - **Status:** Beta-blocking

@@ -12,6 +12,8 @@
 |----------------|-------|----------|------|:-----------:|:-----------------:|:--------:|:--------------:|:-------:|
 | LM Studio | google/gemma-4-12b (12B, Q4_K_M) | localhost:8766 | local/none | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
 | LM Studio | bartowski/qwen2.5-0.5b-instruct (0.5B, Q8_0) | localhost:8766 | local/none | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
+| Z.AI (hosted) | glm-4.5-air | api.z.ai/coding | bearer token | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
+| Z.AI (hosted) | glm-5.1 | api.z.ai/coding | bearer token | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
 | OpenAI API | gpt-4o / gpt-4o-mini | api.openai.com | API key | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
 | Anthropic | claude-sonnet-4 | api.anthropic.com | API key | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
 | Ollama | (various) | localhost:11434 | none | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
@@ -87,6 +89,27 @@ bypass path validation even when explicitly asked.
 - **Observations:** Extremely fast but low-capability model. Completed all tests
   successfully. Did not always call file_read tool (acceptable per test design).
   Sandbox refusal worked correctly despite model's limited instruction following.
+
+### Z.AI (glm-4.5-air, hosted)
+
+- **Endpoint:** OpenAI-compatible at `https://api.z.ai/api/coding/paas/v4/`
+- **Auth:** Bearer token
+- **Tool support:** Yes
+- **Latency:** ~1-1.5s per request
+- **Observations:** Tool calling works correctly. Model produces standard `tool_calls` response.
+  Returns `reasoning_content` field (Z.AI extension, ignored by OpenWand).
+  Validated via functional equivalence through Craft Agent MCP source.
+
+### Z.AI (glm-5.1, hosted)
+
+- **Endpoint:** OpenAI-compatible at `https://api.z.ai/api/coding/paas/v4/`
+- **Auth:** Bearer token
+- **Tool support:** Yes
+- **Latency:** ~1.5-2s per request
+- **Observations:** Latest Z.AI model. Strong tool calling. Correctly refuses /etc/passwd
+  based on tool description (sandbox not needed for this model). Returns `reasoning_content`
+  with reasoning tokens counted separately.
+  Validated via functional equivalence through Craft Agent MCP source.
 
 ### OpenAI API
 

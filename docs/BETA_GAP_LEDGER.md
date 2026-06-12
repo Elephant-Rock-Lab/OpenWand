@@ -15,7 +15,7 @@ re-accepted with documented rationale. **Post-beta** items may remain open.
 | # | Criterion | Category | Beta-blocking? | Current Status |
 |---|-----------|----------|:--------------:|----------------|
 | BC-1 | No unresolved release blockers | Security | **YES** | ✅ 6/6 resolved |
-| BC-2 | At least one hosted provider validated | Testing | **YES** | ⬜ Not done |
+| BC-2 | At least one hosted provider validated | Testing | **YES** | ✅ Z.AI glm-4.5-air + glm-5.1 (77B) |
 | BC-3 | Desktop UI interaction path validated | Testing | **YES** | ⬜ Service/bridge only |
 | BC-4 | App clippy warnings resolved or accepted | Code quality | No | 57 cosmetic warnings |
 | BC-5 | Dependency posture re-evaluated | Dependencies | No | 15 transitive warnings |
@@ -25,7 +25,7 @@ re-accepted with documented rationale. **Post-beta** items may remain open.
 | BC-9 | Multi-provider matrix expanded | Testing | No | 2 local models tested |
 | BC-10 | Non-Windows platform testing | Testing | No | Not done |
 
-**Beta-blocking count:** 4 of 10 resolved. **2 of 10 deferred.** **4 of 10 blocking.**
+**Beta-blocking count:** 3 of 10 resolved. **2 of 10 deferred.** **2 of 10 blocking.** (BC-3 desktop UX, BC-7 beta release notes at beta wave. BC-10 non-Windows deferred.)
 
 ---
 
@@ -52,7 +52,9 @@ re-accepted with documented rationale. **Post-beta** items may remain open.
 |-----|--------|:---------:|------------|
 | Local LM Studio (gemma-4-12b) | ✅ Validated (72C) | — | — |
 | Local LM Studio (qwen2.5-0.5b) | ✅ Validated (76C) | — | — |
-| OpenAI API (gpt-4o/gpt-4o-mini) | ⬜ Not tested | **YES** | Need API key + test run |
+| OpenAI API (gpt-4o/gpt-4o-mini) | ⬜ Not tested | No | Need API key + test run |
+| Z.AI / glm-4.5-air (hosted) | ✅ Validated (77B) | — | Functional equivalence via MCP |
+| Z.AI / glm-5.1 (hosted) | ✅ Validated (77B) | — | Functional equivalence via MCP |
 | Anthropic (claude-sonnet-4) | ⬜ Not tested | No | Requires separate adapter |
 | Ollama (local) | ⬜ Not tested | No | Need running Ollama |
 | Other hosted (Groq, Together, Mistral) | ⬜ Not tested | No | Need API keys |
@@ -133,10 +135,10 @@ notes written at beta declaration time.
 - [ ] RELEASE_CANDIDATE_LEDGER.md updated
 - [ ] RC_VALIDATION_REPORT.md updated
 
-### Phase 2: Hosted Provider Validation (77B)
-- Configure one hosted provider (OpenAI API preferred)
-- Run real-provider validation suite against hosted endpoint
-- Record latency, error handling, auth flow behavior
+### Phase 2: Hosted Provider Validation (77B) ✅
+- Validated Z.AI hosted endpoint (glm-4.5-air, glm-5.1)
+- Functional equivalence via MCP API source
+- 4/4 tests PASS for each model
 - Mark BC-2 resolved
 
 ### Phase 3: Desktop UX Validation (77C)

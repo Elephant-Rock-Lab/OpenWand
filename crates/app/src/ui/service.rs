@@ -506,4 +506,149 @@ impl UiSessionService {
             }
         }
     }
+
+    /// Export evidence audit packet from the desktop UI.
+    ///
+    /// This is the authority boundary for desktop-requested evidence export.
+    /// The desktop constructs an `EvidenceExportRequest` with a workflow
+    /// execution ID and desired output path. This method:
+    /// 1. Validates the DTO
+    /// 2. Resolves the output path against an allowed export root
+    /// 3. Delegates to `export_audit_packet()` (existing exporter)
+    /// 4. Computes SHA-256 checksum ONLY on the returned artifact path
+    /// 5. Parses the exported JSON for record count and honesty flags
+    ///
+    /// The service may read ONLY the artifact path produced by the delegated
+    /// export operation. It does not expose general file-read authority.
+    /// The desktop UI does not read evidence files, assemble packets, or
+    /// write export artifacts.
+    pub fn export_evidence(
+        request: &crate::ui::evidence_export_request::EvidenceExportRequest,
+        store_root: &std::path::Path,
+        export_root: &std::path::Path,
+    ) -> crate::ui::evidence_export_request::EvidenceExportState {
+        use crate::ui::evidence_export_request::EvidenceExportState;
+
+        // Validate DTO before any delegation
+        if let Err(e) = request.validate() {
+            return EvidenceExportState::Failed { error: e };
+        }
+
+        // Resolve and validate output path against export_root
+        let output_path = std::path::Path::new(&request.output_path);
+
+        // If output_path is relative, resolve it under export_root
+        let resolved_output = if output_path.is_absolute() {
+            output_path.to_path_buf()
+        } else {
+            export_root.join(output_path)
+        };
+
+        // Create export root if it doesn't exist (before canonicalization)
+        if !export_root.exists() {
+            if let Err(e) = std::fs::create_dir_all(export_root) {
+                return EvidenceExportState::Failed {
+                    error: format!("Failed to create export root: {e}"),
+                };
+            }
+        }
+
+        // Canonicalize export_root after ensuring it exists
+        let export_root_canon = export_root.canonicalize()
+            .unwrap_or_else(|_| export_root.to_path_buf());
+
+        // Canonicalize the resolved output parent
+        let resolved_canon = match resolved_output.canonicalize() {
+            Ok(p) => p,
+            Err(_) => {
+                // File doesn't exist yet — canonicalize parent and append filename
+                match resolved_output.parent() {
+                    Some(parent) => match parent.canonicalize() {
+                        Ok(canon_parent) => canon_parent.join(
+                            resolved_output.file_name().unwrap_or_default(),
+                        ),
+                        Err(_) => resolved_output.clone(),
+                    },
+                    None => resolved_output.clone(),
+                }
+            }
+        };
+
+        // Path containment check: reject traversal/symlink escape
+        if !resolved_canon.starts_with(&export_root_canon) {
+            return EvidenceExportState::Failed {
+                error: format!(
+                    "Output path escapes export root: {} not within {}",
+                    resolved_canon.display(),
+                    export_root_canon.display()
+                ),
+            };
+        }
+
+        // Delegate to existing exporter
+        let workflow_execution_id = openwand_workflow::workflow_run::WorkflowExecutionId(
+            request.workflow_execution_id.clone(),
+        );
+
+        let artifact_path = match crate::workflow_evidence_chain_inspector::export_audit_packet(
+            store_root,
+            &workflow_execution_id,
+            &resolved_canon,
+        ) {
+            Ok(path) => path,
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("not found") || msg.contains("no workflow") || msg.contains("No such") {
+                    return EvidenceExportState::Unavailable {
+                        reason: format!("No evidence found for workflow run: {msg}"),
+                    };
+                }
+                return EvidenceExportState::Failed {
+                    error: format!("Export failed: {msg}"),
+                };
+            }
+        };
+
+        // Compute SHA-256 checksum ONLY on the returned artifact path
+        let packet_hash = match std::fs::read(&artifact_path) {
+            Ok(bytes) => {
+                // Use blake3 which is already a dependency
+                let hash = blake3::hash(&bytes);
+                hash.to_hex()[..16].to_string()
+            }
+            Err(e) => {
+                return EvidenceExportState::Failed {
+                    error: format!("Failed to read exported artifact for checksum: {e}"),
+                };
+            }
+        };
+
+        // Parse exported JSON for record count and honesty flags
+        let (record_count, certifies_external_truth, verifies_artifacts) =
+            match std::fs::read_to_string(&artifact_path) {
+                Ok(json) => {
+                    let parsed: serde_json::Value = serde_json::from_str(&json)
+                        .unwrap_or(serde_json::json!({}));
+                    let count = parsed.get("records")
+                        .and_then(|r| r.as_array())
+                        .map(|r| r.len());
+                    let certifies = parsed.get("certifies_external_truth")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let verifies = parsed.get("verifies_artifacts")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    (count, certifies, verifies)
+                }
+                Err(_) => (None, false, false),
+            };
+
+        EvidenceExportState::Exported {
+            artifact_path: artifact_path.display().to_string(),
+            record_count,
+            packet_hash,
+            certifies_external_truth,
+            verifies_artifacts,
+        }
+    }
 }

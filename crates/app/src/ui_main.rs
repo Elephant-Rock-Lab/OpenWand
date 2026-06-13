@@ -21,6 +21,9 @@ use openwand_app::ui::workflow_run_request::{WorkflowRunRequest, WorkflowRunRequ
 use openwand_app::ui::approval_resolution_request::{
     ApprovalDecisionDto, ApprovalResolutionRequest, ApprovalResolutionState,
 };
+use openwand_app::ui::evidence_export_request::{
+    EvidenceExportRequest, EvidenceExportState,
+};
 use openwand_app::settings;
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
@@ -503,6 +506,13 @@ fn render_inspector_pane() -> Element {
                 }
                 // Workflow run initiation (Wave 88A — delegated authority)
                 { render_workflow_run_initiation(service.clone(), &proposal_state, &readiness_state) }
+                // Evidence export (Wave 88C — delegated export)
+                {
+                    let exec_id = WORKFLOW_RUN_REQUEST_STATE
+                        .read()
+                        .execution_id_opt();
+                    render_evidence_export(exec_id.as_deref())
+                }
             }
         },
         None => render_inspector_empty_state(),
@@ -790,6 +800,115 @@ fn render_approval_resolution(
     }
 }
 
+// ── Evidence Export (Wave 88C) ─────────────────────────────
+/// Renders the evidence export UI in the inspector pane.
+/// Shows an "Export Evidence" button when a workflow execution ID
+/// is available from the workflow run request state.
+/// The UI delegates through UiSessionService::export_evidence(),
+/// never reading evidence files or assembling packets directly.
+#[cfg(feature = "desktop")]
+fn render_evidence_export(
+    workflow_execution_id: Option<&str>,
+) -> Element {
+    use openwand_app::ui::design_tokens::*;
+
+    let export_state = EVIDENCE_EXPORT_STATE.read().clone();
+
+    let section_style = format!(
+        "padding: {} {}; border-top: 1px solid {}; margin-top: {};",
+        spacing::SPACE_MD, spacing::SPACE_SM, colors::BORDER_LIGHT, spacing::SPACE_MD,
+    );
+    let label_style = format!(
+        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+        typo::TEXT_BASE, colors::TEXT_STRONG, spacing::SPACE_SM,
+    );
+
+    let status_text = export_state.status_label().to_string();
+    let status_color = match &*export_state {
+        EvidenceExportState::Exported { .. } => colors::STATUS_SUCCESS,
+        EvidenceExportState::Failed { .. } => colors::STATUS_ERROR,
+        EvidenceExportState::Unavailable { .. } => colors::TEXT_MUTED,
+        EvidenceExportState::Pending => colors::TEXT_MUTED,
+        EvidenceExportState::Idle => colors::TEXT_FAINT,
+    };
+
+    let can_export = workflow_execution_id.is_some() && !export_state.is_terminal() && !export_state.is_pending();
+
+    let btn_style = format!(
+        "padding: {} {}; background: {}; color: white; border: none; border-radius: {}; cursor: {}; font-size: {};",
+        spacing::SPACE_SM, spacing::SPACE_LG, colors::PRIMARY, radius::RADIUS_SM,
+        if can_export { "pointer" } else { "not-allowed" }, typo::TEXT_SM,
+    );
+
+    let detail = match &*export_state {
+        EvidenceExportState::Exported { artifact_path, record_count, packet_hash, certifies_external_truth, verifies_artifacts } => {
+            format!("{} — {} records — hash: {} — certifies: {} verifies: {}",
+                artifact_path,
+                record_count.map(|c| c.to_string()).unwrap_or_else(|| "?".into()),
+                packet_hash,
+                certifies_external_truth,
+                verifies_artifacts,
+            )
+        }
+        EvidenceExportState::Failed { error } => format!("Error: {}", error),
+        EvidenceExportState::Unavailable { reason } => format!("Unavailable: {}", reason),
+        _ => String::new(),
+    };
+
+    rsx! {
+        div { style: "{section_style}",
+            div { style: "{label_style}", "Evidence Export" }
+
+            if let Some(exec_id) = workflow_execution_id {
+                if can_export {
+                    button {
+                        style: "{btn_style}",
+                        onclick: move |_| {
+                            *EVIDENCE_EXPORT_STATE.write() = EvidenceExportState::Pending;
+                            let exec_id = exec_id.to_string();
+                            spawn(async move {
+                                let working_dir = CURRENT_SESSION
+                                    .read()
+                                    .as_ref()
+                                    .and_then(|s| s.working_directory.clone())
+                                    .unwrap_or_else(|| ".".to_string());
+                                let store_root = std::path::PathBuf::from(&working_dir);
+                                let export_root = store_root.join("exports");
+                                let req = EvidenceExportRequest {
+                                    workflow_execution_id: exec_id,
+                                    output_path: format!("audit_packet_{}.json", chrono::Utc::now().timestamp()),
+                                    requested_by: "desktop".into(),
+                                    idempotency_key: format!("desktop_export_{}", chrono::Utc::now().timestamp()),
+                                };
+                                let result = UiSessionService::export_evidence(&req, &store_root, &export_root);
+                                *EVIDENCE_EXPORT_STATE.write() = result;
+                            });
+                        },
+                        "Export Evidence"
+                    }
+                } else if export_state.is_pending() {
+                    div { style: "font-size: {typo::TEXT_SM}; color: {colors::TEXT_MUTED};",
+                        "Exporting..."
+                    }
+                }
+            } else {
+                div { style: "font-size: {typo::TEXT_SM}; color: {colors::TEXT_FAINT};",
+                    "Initiate a workflow run to enable evidence export"
+                }
+            }
+
+            div { style: "margin-top: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM}; color: {status_color};",
+                "{status_text}"
+            }
+            if !detail.is_empty() {
+                div { style: "margin-top: {spacing::SPACE_XS}; font-size: {typo::TEXT_XS}; color: {colors::TEXT_MUTED};",
+                    "{detail}"
+                }
+            }
+        }
+    }
+}
+
 // ── Detail Pane ───────────────────────────────────────────
 
 fn render_detail_pane(service: Arc<UiSessionService>, memory: Arc<SqliteMemoryStore>) -> Element {
@@ -992,6 +1111,7 @@ static RECONCILIATION_STATE: GlobalSignal<Option<openwand_app::ui::workflow_reco
 static LOOP_CONTROLLER_STATE: GlobalSignal<Option<openwand_app::ui::workflow_loop_controller_state::WorkflowLoopControllerUiState>> = Signal::global(|| None);
 static WORKFLOW_RUN_REQUEST_STATE: GlobalSignal<openwand_app::ui::workflow_run_request::WorkflowRunRequestState> = Signal::global(WorkflowRunRequestState::default);
 static APPROVAL_RESOLUTION_STATE: GlobalSignal<openwand_app::ui::approval_resolution_request::ApprovalResolutionState> = Signal::global(ApprovalResolutionState::default);
+static EVIDENCE_EXPORT_STATE: GlobalSignal<openwand_app::ui::evidence_export_request::EvidenceExportState> = Signal::global(EvidenceExportState::default);
 
 // ── Send Handler ──────────────────────────────────────────
 

@@ -84,3 +84,4 @@ pub mod desktop_bootstrap;
 pub mod inspector_shell;
 pub mod session_shell;
 pub mod approval_resolution_request;
+pub mod evidence_export_request;

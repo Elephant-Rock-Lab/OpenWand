@@ -83,6 +83,14 @@ impl WorkflowRunRequestState {
             Self::Failed { .. } => "Workflow run request failed",
         }
     }
+
+    /// Extract the execution_id if this state is Created.
+    pub fn execution_id_opt(&self) -> Option<String> {
+        match self {
+            Self::Created { execution_id, .. } => Some(execution_id.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

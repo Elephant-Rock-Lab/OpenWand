@@ -1,14 +1,14 @@
 # OpenWand — Project State
 
 ## Version
-0.2.0-rc.1
+0.2.0
 
 ## Status
-**v0.2.0-rc.1 external review: PASS WITH CAVEATS. All claims verified. No overclaims. Eligible for v0.2.0 stable.**
+**v0.2.0 stable declared. All blockers closed, 0 vulnerabilities, 3,917 tests. Not production-ready.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: v0.2.0 stable declaration (after human external review) or post-v0.2 work.
+Next: Post-v0.2 work (provider expansion, non-Windows validation, upstream dependency tracking).
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

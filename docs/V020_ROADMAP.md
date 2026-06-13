@@ -251,7 +251,8 @@ VB-2 (provider expansion) deferred to post-v0.2 compatibility hardening.**
 
 ---
 
-*This roadmap defined v0.2.0 priorities. v0.2.0-beta declared 2026-06-13 at commit
-478741d. All blockers closed. Classified as beta due to cargo audit not run.
+*This roadmap defined v0.2.0 priorities. v0.2.0 declared stable 2026-06-13 at commit
+77cd139. All blockers closed. 0 vulnerabilities. 3,917 tests passing.
+Not production-ready, not formal security review, not fully cross-platform validated.
 Post-v0.2 items: Anthropic/Ollama/direct OpenAI validation, non-Windows platform
-testing, dependency audit, stable-release declaration.*
+testing, upstream dependency tracking.*

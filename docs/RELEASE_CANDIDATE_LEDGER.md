@@ -280,4 +280,6 @@ Beta gap ledger created (77A). v0.1.0-beta declared 2026-06-12.
 v0.2.0-beta declared 2026-06-13. All v0.2.0 blockers closed.
 cargo audit not run → classified as beta, not stable.
 v0.2.0-rc.1 declared 2026-06-13. Dependency audit: 0 vulnerabilities, 15 warnings.
-Pending external review for v0.2.0 stable.*
+v0.2.0 declared stable 2026-06-13. Automated external review: PASS WITH CAVEATS.
+All blockers closed, 0 vulnerabilities, 3,917 tests passing.
+Not production-ready. Not formal security review.*

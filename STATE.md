@@ -6,7 +6,7 @@
 ## Status
 **v0.3.0 stable. All blockers resolved. Live workflow wiring across 5 surfaces. Linux desktop compilation and Unix sandbox validation passed.**
 
-Release: v0.3.0 — `2a418a1` — `v0.3.0`
+Release: v0.3.0 — tag `v0.3.0`
 
 Binary: 18,941,440 bytes (~18.0 MB), SHA-256 `A5B594A33495E8AE61FB96C77F66042247AEBA768A8E59580F4C6995431FAAC5`
 

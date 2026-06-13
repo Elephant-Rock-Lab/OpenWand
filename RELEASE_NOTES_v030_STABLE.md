@@ -4,7 +4,7 @@
 **Classification:** Stable release — feature-complete for v0.3.0 milestone
 **Binary:** `openwand-ui.exe` — 18,941,440 bytes (~18.0 MB)
 **SHA-256:** `A5B594A33495E8AE61FB96C77F66042247AEBA768A8E59580F4C6995431FAAC5`
-**Commit:** `2a418a1`
+**Commit:** `484b114` (tag `v0.3.0`)
 **Predecessor:** v0.2.0 (`ca325e2`)
 
 ---

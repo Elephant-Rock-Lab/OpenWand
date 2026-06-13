@@ -55,6 +55,15 @@ enum Commands {
         session_id: String,
     },
 
+    /// Verify operation correspondence against trace evidence
+    #[command(name = "operation-replay")]
+    OperationReplay {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        operations: String,
+    },
+
     #[command(name = "audit-check")]
     AuditCheck {
         /// Session ID to audit
@@ -1032,6 +1041,7 @@ async fn main() -> Result<()> {
         Commands::Run { message } => cmd_run(&cli, message).await,
         Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
+        Commands::OperationReplay { session, operations } => cmd_operation_replay(&cli, &session, &operations).await,
         Commands::AuditCheck { session_id } => cmd_audit_check(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
@@ -1396,6 +1406,73 @@ async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
     std::process::exit(exit_code);
 }
 
+
+const OP_REPLAY_EXIT_PASS: i32 = 0;
+const OP_REPLAY_EXIT_FAIL: i32 = 2;
+const OP_REPLAY_EXIT_INCONCLUSIVE: i32 = 3;
+const OP_REPLAY_EXIT_UNSUPPORTED: i32 = 4;
+
+async fn cmd_operation_replay(_cli: &Cli, session_id: &str, operations_file: &str) -> Result<()> {
+    use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
+    use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
+    use openwand_app::operation_audit::{DesktopOperation, OperationReplayVerifier, ReplayResult};
+    let ops_content = match std::fs::read_to_string(operations_file) {
+        Ok(c) => c,
+        Err(e) => { eprintln!("error: cannot read operations file: {e}"); std::process::exit(1); }
+    };
+    #[derive(serde::Deserialize)]
+    struct OpsFile { operations: Vec<OpDesc> }
+    #[derive(serde::Deserialize)]
+    #[serde(tag = "type")]
+    enum OpDesc {
+        #[serde(rename = "workflow_initiation")] WorkflowInitiation { workflow_execution_id: String },
+        #[serde(rename = "approval_resolution")] ApprovalResolution { approval_request_id: String, tool_call_id: Option<String> },
+        #[serde(rename = "evidence_export")] EvidenceExport { workflow_execution_id: String, artifact_path: Option<String>, artifact_hash: Option<String> },
+    }
+    let ops_file: OpsFile = match serde_json::from_str(&ops_content) {
+        Ok(f) => f, Err(e) => { eprintln!("error: malformed JSON: {e}"); std::process::exit(1); }
+    };
+    if ops_file.operations.is_empty() { eprintln!("error: zero operations"); std::process::exit(1); }
+    let ops: Vec<DesktopOperation> = ops_file.operations.into_iter().map(|d| match d {
+        OpDesc::WorkflowInitiation { workflow_execution_id } => DesktopOperation::WorkflowInitiation { workflow_execution_id },
+        OpDesc::ApprovalResolution { approval_request_id, tool_call_id } => DesktopOperation::ApprovalResolution { approval_request_id, tool_call_id },
+        OpDesc::EvidenceExport { workflow_execution_id, artifact_path, artifact_hash } => DesktopOperation::EvidenceExport { workflow_execution_id, artifact_path, artifact_hash },
+    }).collect();
+    let db_path = dirs::data_dir().map(|d| d.join("openwand").join("openwand.db")).unwrap_or_else(|| std::path::PathBuf::from("openwand.db"));
+    if !db_path.exists() { eprintln!("error: trace DB not found"); std::process::exit(1); }
+    let store = match SqliteStore::open(SqliteStoreConfig::file(&db_path)).await { Ok(s) => s, Err(e) => { eprintln!("error: {e}"); std::process::exit(1); } };
+    let stream_id = TraceStreamId { scope: TraceStreamScope::Session, id: session_id.to_string() };
+    let mut all_entries = Vec::new();
+    let mut cursor: Option<openwand_trace::TraceId> = None;
+    loop {
+        let q = TraceQuery { stream_id: Some(stream_id.clone()), limit: Some(500), cursor, ..Default::default() };
+        let page = match store.scan(q).await { Ok(p) => p, Err(e) => { eprintln!("error: {e}"); std::process::exit(1); } };
+        let pl = page.entries.len();
+        all_entries.extend(page.entries);
+        cursor = page.next_cursor;
+        if cursor.is_none() || pl == 0 { break; }
+    }
+    let report = OperationReplayVerifier::verify(&ops, &all_entries);
+    println!("Operation Replay Report");
+    println!("=======================");
+    println!("Session:    {}", session_id);
+    println!("Result:     {:?}", report.result);
+    println!("Operations: {}", report.operations_checked);
+    println!("Entries:    {}", all_entries.len());
+    println!();
+    if !report.findings.is_empty() {
+        println!("Findings ({}):", report.findings.len());
+        for f in &report.findings { println!("  [{:?}] {:?} - {}", f.severity, f.check, f.detail); }
+    } else { println!("No findings."); }
+    let code = match report.result {
+        ReplayResult::Pass => { println!("
+Note: Pass verifies correspondence where trace evidence exists."); OP_REPLAY_EXIT_PASS }
+        ReplayResult::Fail => OP_REPLAY_EXIT_FAIL,
+        ReplayResult::Inconclusive => OP_REPLAY_EXIT_INCONCLUSIVE,
+        ReplayResult::Unsupported => OP_REPLAY_EXIT_UNSUPPORTED,
+    };
+    std::process::exit(code);
+}
 
 async fn cmd_audit_check(_cli: &Cli, _session_id: &str) -> Result<()> {
     eprintln!("error: the 'audit-check' command is not yet implemented.");

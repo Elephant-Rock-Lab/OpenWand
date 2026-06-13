@@ -45,26 +45,39 @@ fn cli_explain_exits_nonzero_with_not_implemented() {
 }
 
 #[test]
-fn cli_trace_verify_exits_nonzero_with_not_implemented() {
+fn cli_trace_verify_reports_result_or_fails_on_missing_db() {
+    // trace-verify is now REAL (Wave 92B). It should either:
+    // - exit 0 (Pass) if trace DB exists and verification passes
+    // - exit 1 (operational error) if trace DB doesn't exist
+    // - exit 2 (Fail) if trace integrity fails
+    // It must NOT claim to be unimplemented.
     let output = Command::new(openwand_bin())
         .args(["trace-verify", "test-session"])
         .output()
         .expect("Failed to run openwand");
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{}{}", stdout, stderr);
+
+    // Must NOT say "not yet implemented"
     assert!(
-        !output.status.success(),
-        "trace-verify should exit non-zero, got exit {:?}",
-        output.status.code()
+        !combined.contains("not yet implemented"),
+        "trace-verify is real now, must not say unimplemented: {}",
+        combined
     );
+
+    // Must NOT claim to be a stub
     assert!(
-        stderr.contains("not yet implemented"),
-        "stderr should say not yet implemented, got: {}",
-        stderr
+        !combined.contains("planned for a future release"),
+        "trace-verify is real now"
     );
+
+    // Exit code should be one of the documented codes
+    let code = output.status.code().unwrap_or(-1);
     assert!(
-        stderr.contains("trace-verify"),
-        "stderr should mention 'trace-verify', got: {}",
-        stderr
+        code == 0 || code == 1 || code == 2 || code == 3 || code == 4,
+        "trace-verify should exit with documented code (0-4), got {}",
+        code
     );
 }
 
@@ -113,21 +126,35 @@ fn cli_explain_does_not_claim_verification() {
 }
 
 #[test]
-fn cli_trace_verify_does_not_claim_verification() {
+fn cli_trace_verify_does_not_claim_full_immutability() {
+    // trace-verify is now REAL. It should print an honest note about
+    // what Pass means (chain continuity, not hash recomputation).
     let output = Command::new(openwand_bin())
         .args(["trace-verify", "test-session"])
         .output()
         .expect("Failed to run openwand");
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
+
+    // On Pass, should include the honest note about limitations
+    let code = output.status.code().unwrap_or(-1);
+    if code == 0 {
+        assert!(
+            stdout.contains("chain continuity") || stdout.contains("ordering"),
+            "on Pass, should mention what was verified: {}",
+            stdout
+        );
+        assert!(
+            !stdout.contains("full immutability") && !stdout.contains("cryptographic immutability"),
+            "must not claim full cryptographic immutability"
+        );
+    }
+
+    // Must not claim backend-specific hash correctness
     assert!(
-        !combined.contains("Trace Verification"),
-        "must not print fake trace verification banner"
-    );
-    assert!(
-        !combined.contains("verified"),
-        "must not claim verification"
+        !combined.contains("hash correctness verified"),
+        "must not claim hash correctness verification"
     );
 }
 

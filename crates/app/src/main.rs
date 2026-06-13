@@ -1265,16 +1265,132 @@ async fn cmd_explain(_cli: &Cli, _session_id: &str) -> Result<()> {
 }
 
 
-// ── Subcommand: trace-verify ───────────────────────────────────────────────
+// ── Subcommand: trace-verify ─────────────────────────────────
 
-async fn cmd_trace_verify(_cli: &Cli, _session_id: &str) -> Result<()> {
-    eprintln!("error: the 'trace-verify' command is not yet implemented.");
-    eprintln!("       Trace integrity verification is planned for a future release.");
-    std::process::exit(1);
+/// Exit codes for trace verification (distinct from operational errors):
+/// 0 = Pass, 1 = operational error, 2 = Fail (integrity), 3 = Inconclusive, 4 = Unsupported
+const TRACE_VERIFY_EXIT_PASS: i32 = 0;
+const TRACE_VERIFY_EXIT_OPERATIONAL_ERROR: i32 = 1;
+const TRACE_VERIFY_EXIT_FAIL: i32 = 2;
+const TRACE_VERIFY_EXIT_INCONCLUSIVE: i32 = 3;
+const TRACE_VERIFY_EXIT_UNSUPPORTED: i32 = 4;
+
+async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
+    use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
+    use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
+    use openwand_trace::verifier::{TraceVerifier, VerificationResult};
+
+    // Determine DB path
+    let db_path = dirs::data_dir()
+        .map(|d| d.join("openwand").join("openwand.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("openwand.db"));
+
+    if !db_path.exists() {
+        eprintln!("error: trace database not found at {}", db_path.display());
+        std::process::exit(TRACE_VERIFY_EXIT_OPERATIONAL_ERROR);
+    }
+
+    // Open trace store
+    let store = match SqliteStore::open(SqliteStoreConfig::file(&db_path)).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to open trace store: {e}");
+            std::process::exit(TRACE_VERIFY_EXIT_OPERATIONAL_ERROR);
+        }
+    };
+
+    // Load all entries for this session stream
+    let stream_id = TraceStreamId {
+        scope: TraceStreamScope::Session,
+        id: session_id.to_string(),
+    };
+
+    let mut all_entries = Vec::new();
+    let mut cursor: Option<openwand_trace::TraceId> = None;
+
+    loop {
+        let mut query = TraceQuery {
+            stream_id: Some(stream_id.clone()),
+            limit: Some(500),
+            ..Default::default()
+        };
+        query.cursor = cursor;
+
+        let page = match store.scan(query).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: failed to scan trace entries: {e}");
+                std::process::exit(TRACE_VERIFY_EXIT_OPERATIONAL_ERROR);
+            }
+        };
+
+        let page_len = page.entries.len();
+        all_entries.extend(page.entries);
+
+        cursor = page.next_cursor;
+        if cursor.is_none() || page_len == 0 {
+            break;
+        }
+    }
+
+    // Also load global stream entries if they exist
+    let global_stream = TraceStreamId {
+        scope: TraceStreamScope::Global,
+        id: "global".to_string(),
+    };
+    let global_query = TraceQuery {
+        stream_id: Some(global_stream),
+        limit: Some(10000),
+        ..Default::default()
+    };
+    if let Ok(global_page) = store.scan(global_query).await {
+        all_entries.extend(global_page.entries);
+    }
+
+    // Run verifier
+    let report = TraceVerifier::verify(&all_entries);
+
+    // Print structured findings
+    println!("Trace Verification Report");
+    println!("=========================");
+    println!("Session:    {}", session_id);
+    println!("Result:     {:?}", report.result);
+    println!("Entries:    {}", report.entries_checked);
+    println!("Streams:    {}", report.streams_checked);
+    println!();
+
+    if !report.findings.is_empty() {
+        println!("Findings ({}):", report.findings.len());
+        for finding in &report.findings {
+            println!("  [{:?}] {:?} - {}", finding.severity, finding.check, finding.detail);
+            if let Some(ref sid) = finding.stream_id {
+                println!("    stream: {}", sid);
+            }
+            if let Some(ref eid) = finding.entry_id {
+                println!("    entry:  {}", eid);
+            }
+        }
+    } else {
+        println!("No findings. All supported checks pass.");
+    }
+
+    // Exit with distinct status
+    let exit_code = match report.result {
+        VerificationResult::Pass => {
+            println!("\nNote: Pass verifies chain continuity and ordering. It does not");
+            println!("prove backend-specific hash correctness.");
+            TRACE_VERIFY_EXIT_PASS
+        }
+        VerificationResult::Fail => TRACE_VERIFY_EXIT_FAIL,
+        VerificationResult::Inconclusive => TRACE_VERIFY_EXIT_INCONCLUSIVE,
+        VerificationResult::Unsupported => TRACE_VERIFY_EXIT_UNSUPPORTED,
+    };
+
+    std::process::exit(exit_code);
 }
 
 
-// ── Subcommand: session-rebuild ────────────────────────────────────────────
+// ── Subcommand: session-rebuild ──────────────────────────────
 
 async fn cmd_session_rebuild(_cli: &Cli, _session_id: &str) -> Result<()> {
     eprintln!("error: the 'session-rebuild' command is not yet implemented.");

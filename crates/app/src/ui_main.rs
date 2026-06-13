@@ -24,6 +24,7 @@ use openwand_app::ui::approval_resolution_request::{
 use openwand_app::ui::evidence_export_request::{
     EvidenceExportRequest, EvidenceExportState,
 };
+use openwand_app::ui::inspector_refresh_state::InspectorRefreshState;
 use openwand_app::settings;
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
@@ -455,6 +456,36 @@ fn render_inspector_pane() -> Element {
     match inspector_state {
         Some(state) => rsx! {
             div { style: "flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto;",
+                // Refresh bar (Wave 89A) — manual refresh + honest state display
+                {
+                    let refresh_state = INSPECTOR_REFRESH_STATE.read();
+                    let refresh_label = refresh_state.status_label().to_string();
+                    let refresh_detail = match &*refresh_state {
+                        InspectorRefreshState::Live { sections_attempted, sections_loaded, .. } => {
+                            format!("{} / {} sections loaded", sections_loaded, sections_attempted)
+                        }
+                        InspectorRefreshState::Unavailable { reason } => reason.clone(),
+                        InspectorRefreshState::Stale { reason, .. } => reason.clone(),
+                        InspectorRefreshState::Failed { error, .. } => error.clone(),
+                        _ => String::new(),
+                    };
+                    rsx! {
+                        div { style: "display: flex; justify-content: space-between; align-items: center; padding: 6px 16px; background: #f5f5f5; border-bottom: 1px solid #eee;",
+                            span { style: "font-size: 11px; color: #888;", "{refresh_label}"
+                                if !refresh_detail.is_empty() {
+                                    span { style: "margin-left: 8px; color: #aaa;", "— {refresh_detail}" }
+                                }
+                            }
+                            button {
+                                style: "padding: 3px 10px; font-size: 11px; background: #4a90d9; color: white; border: none; border-radius: 3px; cursor: pointer;",
+                                onclick: move |_| {
+                                    refresh_inspector();
+                                },
+                                "Refresh"
+                            }
+                        }
+                    }
+                }
                 { render_evidence_chain_inspector(&state) }
                 { render_audit_packet_review_distribution_panel(&reviews, &distributions) }
                 { render_manual_result_ladder_panel(&ladder_results, &ladder_reviews, &ladder_readiness, &ladder_gates, &ladder_preds, &wfx_id) }
@@ -517,6 +548,111 @@ fn render_inspector_pane() -> Element {
         },
         None => render_inspector_empty_state(),
     }
+}
+
+// ── Inspector Refresh (Wave 89A) ──────────────────────────
+/// Refresh inspector state after a desktop operation or manual request.
+///
+/// This function is READ-ONLY. It calls InspectorSignals::load_inspector_shell(),
+/// which uses existing by_workflow_run loaders to re-read data from disk.
+/// It does NOT initiate, approve, export, execute, mutate, or append trace.
+///
+/// Workflow execution ID resolution order (patch 1: no session_id fallback):
+///   1. SELECTED_WORKFLOW_EXECUTION_ID signal (if set)
+///   2. WORKFLOW_RUN_REQUEST_STATE.Created.execution_id (if set)
+///   3. Unavailable { reason: "No workflow run selected" }
+#[cfg(feature = "desktop")]
+fn refresh_inspector() {
+    use openwand_app::ui::inspector_refresh_state::InspectorRefreshState;
+
+    // Resolve workflow execution ID — NO session_id fallback (non-negotiable)
+    let wfx_id = SELECTED_WORKFLOW_EXECUTION_ID
+        .read()
+        .clone()
+        .or_else(|| {
+            WORKFLOW_RUN_REQUEST_STATE
+                .read()
+                .execution_id_opt()
+        });
+
+    let wfx_id = match wfx_id {
+        Some(id) => id,
+        None => {
+            *INSPECTOR_REFRESH_STATE.write() = InspectorRefreshState::Unavailable {
+                reason: "No workflow run selected".into(),
+            };
+            return;
+        }
+    };
+
+    // Capture wfx_id at refresh start for stale detection
+    let captured_wfx_id = wfx_id.clone();
+    *INSPECTOR_REFRESH_STATE.write() = InspectorRefreshState::Loading {
+        workflow_execution_id: wfx_id.clone(),
+    };
+
+    let path = db_path();
+    let wfx = openwand_workflow::workflow_run::WorkflowExecutionId(wfx_id.clone());
+
+    // Build inspector signals and load (existing read-only path)
+    let sigs = openwand_app::ui::inspector_shell::InspectorSignals {
+        inspector_state: &INSPECTOR_STATE,
+        review_rows: &REVIEW_ROWS,
+        distribution_rows: &DISTRIBUTION_ROWS,
+        ladder_result_rows: &LADDER_RESULT_ROWS,
+        ladder_review_rows: &LADDER_REVIEW_ROWS,
+        ladder_readiness_rows: &LADDER_READINESS_ROWS,
+        ladder_gate_rows: &LADDER_GATE_ROWS,
+        ladder_predicates: &LADDER_PREDICATES,
+        routing_route_row: &ROUTING_ROUTE_ROW,
+        routing_session_row: &ROUTING_SESSION_ROW,
+        routing_route_predicates: &ROUTING_ROUTE_PREDICATES,
+        routing_route_prompt: &ROUTING_ROUTE_PROMPT,
+        routing_readiness_state: &ROUTING_READINESS_STATE,
+        routing_next_action_state: &ROUTING_NEXT_ACTION_ROUTING_STATE,
+        routing_review_row: &ROUTING_REVIEW_ROW,
+        execution_timeline_state: &EXECUTION_TIMELINE_STATE,
+        proposal_state: &PROPOSAL_STATE,
+        readiness_state: &READINESS_STATE,
+        outcome_state: &OUTCOME_STATE,
+        reconciliation_state: &RECONCILIATION_STATE,
+        loop_controller_state: &LOOP_CONTROLLER_STATE,
+    };
+
+    sigs.load_inspector_shell(&path, &wfx);
+
+    // Check if selection changed during refresh (stale detection)
+    let current_selection = SELECTED_WORKFLOW_EXECUTION_ID
+        .read()
+        .clone()
+        .or_else(|| WORKFLOW_RUN_REQUEST_STATE.read().execution_id_opt());
+
+    if current_selection.as_deref() != Some(&captured_wfx_id) {
+        *INSPECTOR_REFRESH_STATE.write() = InspectorRefreshState::Stale {
+            workflow_execution_id: captured_wfx_id,
+            reason: "Selection changed during refresh".into(),
+        };
+        return;
+    }
+
+    // Count sections loaded (honest reporting)
+    let sections_attempted = 7usize; // evidence, audit, ladder, routing, execution, proposal+readiness, outcome+recon+loop
+    let sections_loaded = [
+        INSPECTOR_STATE.read().is_some(),
+        !REVIEW_ROWS.read().is_empty() || !DISTRIBUTION_ROWS.read().is_empty(),
+        !LADDER_RESULT_ROWS.read().is_empty(),
+        ROUTING_ROUTE_ROW.read().is_some(),
+        EXECUTION_TIMELINE_STATE.read().is_some(),
+        PROPOSAL_STATE.read().is_some(),
+        OUTCOME_STATE.read().is_some() || RECONCILIATION_STATE.read().is_some(),
+    ].iter().filter(|&&x| x).count();
+
+    *INSPECTOR_REFRESH_STATE.write() = InspectorRefreshState::Live {
+        workflow_execution_id: captured_wfx_id,
+        refreshed_at: chrono::Utc::now().to_rfc3339(),
+        sections_attempted,
+        sections_loaded,
+    };
 }
 
 // ── Workflow Run Initiation (Wave 88A) ─────────────────────────────────
@@ -617,6 +753,12 @@ fn render_workflow_run_initiation(
                             let store_root = std::path::PathBuf::from(&working_dir);
                             let result = svc.request_workflow_run(&req, &store_root);
                             *WORKFLOW_RUN_REQUEST_STATE.write() = result;
+                            // Refresh inspector after operation (Wave 89A)
+                            // Only refresh if run was created — sets wfx_id for future refreshes
+                            if let Some(exec_id) = WORKFLOW_RUN_REQUEST_STATE.read().execution_id_opt() {
+                                *SELECTED_WORKFLOW_EXECUTION_ID.write() = Some(exec_id);
+                            }
+                            refresh_inspector();
                         });
                     },
                     "Initiate Workflow Run"
@@ -760,6 +902,8 @@ fn render_approval_resolution(
                                     &req,
                                 ).await;
                                 *APPROVAL_RESOLUTION_STATE.write() = result;
+                                // Refresh inspector after approval resolution (Wave 89A)
+                                refresh_inspector();
                             });
                         },
                         "Approve"
@@ -784,6 +928,8 @@ fn render_approval_resolution(
                                     &req,
                                 ).await;
                                 *APPROVAL_RESOLUTION_STATE.write() = result;
+                                // Refresh inspector after approval resolution (Wave 89A)
+                                refresh_inspector();
                             });
                         },
                         "Reject"
@@ -1112,6 +1258,12 @@ static LOOP_CONTROLLER_STATE: GlobalSignal<Option<openwand_app::ui::workflow_loo
 static WORKFLOW_RUN_REQUEST_STATE: GlobalSignal<openwand_app::ui::workflow_run_request::WorkflowRunRequestState> = Signal::global(WorkflowRunRequestState::default);
 static APPROVAL_RESOLUTION_STATE: GlobalSignal<openwand_app::ui::approval_resolution_request::ApprovalResolutionState> = Signal::global(ApprovalResolutionState::default);
 static EVIDENCE_EXPORT_STATE: GlobalSignal<openwand_app::ui::evidence_export_request::EvidenceExportState> = Signal::global(EvidenceExportState::default);
+static INSPECTOR_REFRESH_STATE: GlobalSignal<InspectorRefreshState> = Signal::global(InspectorRefreshState::default);
+
+/// Tracks the selected workflow execution ID for inspector refresh.
+/// Set when a workflow run is successfully created (88A) or selected manually.
+/// Never derived from session_id — only from workflow execution context.
+static SELECTED_WORKFLOW_EXECUTION_ID: GlobalSignal<Option<String>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

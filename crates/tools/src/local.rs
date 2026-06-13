@@ -669,7 +669,6 @@ async fn file_write_handler(args: serde_json::Value, ctx: ToolCallContext) -> To
 // ---------------------------------------------------------------------------
 // Test helpers (shared across test modules)
 // ---------------------------------------------------------------------------
-
 #[cfg(test)]
 fn test_context(dir: &tempfile::TempDir) -> ToolCallContext {
     ToolCallContext {

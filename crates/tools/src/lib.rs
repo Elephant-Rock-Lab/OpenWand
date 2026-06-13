@@ -15,6 +15,12 @@ pub mod normalize;
 pub mod result;
 pub mod sandbox;
 
+/// Windows NtCreateFile handle-relative file write helpers.
+/// Isolated module with documented safety invariants.
+#[cfg(windows)]
+#[allow(dead_code)] // Used by sandbox.rs Windows impl
+mod sandbox_ntapi;
+
 pub use composite::*;
 pub use descriptor::*;
 pub use effect::*;

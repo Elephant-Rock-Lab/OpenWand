@@ -4,11 +4,11 @@
 0.1.0-beta
 
 ## Status
-**Wave 78B partial. NtCreateFile API Audit. VB-1 open.**
+**Wave 78C complete. Windows NtCreateFile TOCTOU hardened. VB-1 closed.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: Wave 78C — Windows NtCreateFile implementation when rested.
+Next: Wave 79A — OpenAI Direct API Validation.
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

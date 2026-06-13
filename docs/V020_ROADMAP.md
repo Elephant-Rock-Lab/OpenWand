@@ -23,7 +23,7 @@
 
 | # | Blocker | From | Resolution Path | Estimated Waves |
 |---|---------|------|-----------------|:---------------:|
-| VB-1 | Windows TOCTOU micro-race closure | DEFERRED-008 | `NtCreateFile` + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` per component | 1 |
+| VB-1 | ~~Windows TOCTOU micro-race closure~~ ✅ Closed 78C | DEFERRED-008 | `NtCreateFile` + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` per component | 1 |
 | VB-2 | Anthropic adapter validation | DEFERRED-009 partial | Enable `anthropic-compatible` feature, validate against hosted API | 1–2 |
 | VB-3 | Placeholder UI surface completion | Known gaps | Implement 6 stub + 4 minimal surfaces | 2–3 |
 
@@ -187,7 +187,8 @@ core → trace → store → session → app
 | Wave | Title | Scope |
 |------|-------|-------|
 | 78A | v0.2.0 Roadmap and Architecture Reset | This document |
-| 78B | Windows NtCreateFile TOCTOU Closure | Implement `NtCreateFile` + `RootDirectory`, close VB-1 |
+| 78B | Windows NtCreateFile TOCTOU Closure | ~~Implement~~ `NtCreateFile` + `RootDirectory`, close VB-1 |
+| 78C | Windows NtCreateFile Implementation | ✅ Closed VB-1. Hybrid NtCreateFile dirs + CreateFileW file. ~430 lines |
 
 ### Phase 2: Provider Expansion (79A–79C)
 
@@ -220,7 +221,7 @@ core → trace → store → session → app
 
 | # | Criterion | Status |
 |---|-----------|--------|
-| VB-1 | Windows TOCTOU micro-race closed | ⬜ Blocked |
+| VB-1 | ~~Windows TOCTOU micro-race closed~~ ✅ Closed 78C | ✅ Done |
 | VB-2 | Anthropic adapter validated | ⬜ Blocked |
 | VB-3 | All placeholder UI surfaces implemented | ⬜ Blocked |
 

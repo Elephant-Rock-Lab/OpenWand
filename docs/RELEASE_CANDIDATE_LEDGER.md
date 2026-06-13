@@ -276,4 +276,6 @@ Beta-readiness roadmap:
 ---
 
 *v0.1.0-alpha released 2026-06-12. Post-alpha stabilization complete (76A–76D).
-Beta gap ledger created (77A). Beta-blocking items identified. Not yet beta-ready.*
+Beta gap ledger created (77A). v0.1.0-beta declared 2026-06-12.
+v0.2.0-beta declared 2026-06-13. All v0.2.0 blockers closed.
+cargo audit not run → classified as beta, not stable.*

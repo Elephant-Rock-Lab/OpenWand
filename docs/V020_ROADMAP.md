@@ -235,21 +235,23 @@ VB-2 (provider expansion) deferred to post-v0.2 compatibility hardening.**
 
 ## Metrics Comparison
 
-| Metric | v0.1.0-alpha | v0.1.0-beta | v0.2.0 Target |
+| Metric | v0.1.0-alpha | v0.1.0-beta | v0.2.0-beta |
 |--------|:-----------:|:-----------:|:------------:|
-| Test count | 2,266 + 22 | 2,271 + 161 | 2,400+ |
+| Test count | 2,266 + 22 | 2,271 + 161 | 2,279 + 1,638 |
 | Provider families validated | 1 (local) | 2 (local + hosted) | 2 (sufficient) |
 | Models validated | 1 | 4 | 5 |
 | Placeholder surfaces | 10 | 10 | 0 |
-| Platforms tested | 1 (Windows) | 1 (Windows) | 1-3 |
+| Platforms tested | 1 (Windows) | 1 (Windows) | 1 (Windows) |
 | Windows TOCTOU status | Reduced residual | Reduced residual | Fully closed |
-| Anthropic support | Adapter exists | Adapter exists | Adapter exists (unvalidated) |
+| Anthropic support | Adapter exists | Adapter exists | Post-v0.2 |
 | Desktop UX validation | Process lifecycle | UI Automation | UI Automation |
+| Binary size | 17,840,640 | 18,030,080 | 17,847,296 |
+| cargo audit | Not run | Not run | Not run |
+| Production clippy | N/A | N/A | 0 actionable |
 
 ---
 
-*This roadmap defines v0.2.0 priorities and candidate waves. It does not commit to
-specific wave content or ordering. Actual implementation may differ based on
-available credentials, platform access, and emerging priorities. It adds no feature
-behavior, no new authority, no policy change, no prompt change, and no stable-release
-claim.*
+*This roadmap defined v0.2.0 priorities. v0.2.0-beta declared 2026-06-13 at commit
+478741d. All blockers closed. Classified as beta due to cargo audit not run.
+Post-v0.2 items: Anthropic/Ollama/direct OpenAI validation, non-Windows platform
+testing, dependency audit, stable-release declaration.*

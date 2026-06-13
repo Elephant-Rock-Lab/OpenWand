@@ -1,14 +1,14 @@
 # OpenWand — Project State
 
 ## Version
-0.1.0-beta
+0.2.0-beta
 
 ## Status
-**Wave 81A complete. Code quality refreshed, clippy reduced from 390→0 actionable production warnings. All v0.2.0 blockers resolved.**
+**v0.2.0-beta declared. All blockers closed. See RELEASE_NOTES_v020_BETA.md.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: Wave 81B — v0.2.0-beta Declaration.
+Next: Post-v0.2 compatibility hardening (provider expansion, non-Windows validation).
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

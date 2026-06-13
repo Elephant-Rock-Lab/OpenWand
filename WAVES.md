@@ -303,3 +303,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 78A | v0.2.0 Roadmap and Architecture Reset | `wave-78a-lock` | 2,271 | `docs/V020_ROADMAP.md` |
 | 78B | NtCreateFile API Audit | `wave-78b-lock` | 2,271 | `docs/NTCREATEFILE_API_AUDIT.md` |
 | 78C | Windows NtCreateFile TOCTOU Implementation | `wave-78c-lock` | 2,466 | `crates/tools/src/sandbox_ntapi.rs` |
+| 79A | Hosted OpenAI-Compatible API Validation | `wave-79a-lock` | 2,466 | `docs/PROVIDER_VALIDATION_MATRIX.md` |

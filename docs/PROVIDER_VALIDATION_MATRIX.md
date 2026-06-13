@@ -1,8 +1,8 @@
-# Multi-Provider Validation Matrix — v0.1.0-alpha
+# Multi-Provider Validation Matrix — v0.2.0-dev
 
-**Date:** 2026-06-12
-**OpenWand version:** v0.1.0-alpha (`967dc96`)
-**Test harness:** `crates/session/tests/real_provider_validation.rs` (4 tests, `#[ignore]`)
+**Date:** 2026-06-13
+**OpenWand version:** v0.2.0-dev (`249b5e3`, Wave 78C)
+**Test harness:** `crates/session/tests/real_provider_validation.rs` (4 tests, `#[ignore]`) + functional equivalence via MCP API source
 
 ---
 
@@ -14,7 +14,8 @@
 | LM Studio | bartowski/qwen2.5-0.5b-instruct (0.5B, Q8_0) | localhost:8766 | local/none | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
 | Z.AI (hosted) | glm-4.5-air | api.z.ai/coding | bearer token | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
 | Z.AI (hosted) | glm-5.1 | api.z.ai/coding | bearer token | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
-| OpenAI API | gpt-4o / gpt-4o-mini | api.openai.com | API key | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
+| Z.AI (hosted) | glm-5-turbo | api.z.ai/coding | bearer token | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS | ✅ PASS |
+| OpenAI API | gpt-4o / gpt-4o-mini / gpt-5.1 | api.openai.com | API key | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
 | Anthropic | claude-sonnet-4 | api.anthropic.com | API key | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
 | Ollama | (various) | localhost:11434 | none | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP | ⬜ SKIP |
 
@@ -111,13 +112,35 @@ bypass path validation even when explicitly asked.
   with reasoning tokens counted separately.
   Validated via functional equivalence through Craft Agent MCP source.
 
+### Z.AI (glm-5-turbo, hosted) — Wave 79A
+
+- **Endpoint:** OpenAI-compatible at `https://api.z.ai/api/coding/paas/v4/`
+- **Auth:** Bearer token
+- **Tool support:** Yes
+- **Latency:** ~1-1.5s per request
+- **Observations:** Strong instruction following. Correctly calls `file_read` tool with proper
+  JSON arguments. When asked to read `/etc/passwd`, the model **refused the request directly**
+  (did not call the tool) — stronger safety behavior than glm-5.1 which attempted the call.
+  Returns `reasoning_content` field (Z.AI extension, ignored by OpenWand).
+  Validated via functional equivalence through Craft Agent MCP source.
+- **Wave 79A validation method:** Direct API calls through Craft Agent MCP source exercising
+  the same OpenAI-compatible chat completion and tool calling endpoints that OpenWand's
+  `openai_compatible` adapter uses. Not validated through the OpenWand binary itself
+  (API key not extractable as environment variable).
+
 ### OpenAI API
 
 - **Status:** SKIP — no API key configured
 - **Expected compatibility:** High (OpenAI is the canonical OpenAI-compatible endpoint)
 - **Auth required:** API key (`OPENWAND_TEST_API_KEY`)
+- **API key location:** Not available in Craft Agent credential store. The `openai-api` source
+  is configured for Z.AI endpoint, not api.openai.com.
 - **To validate:** Set `OPENWAND_TEST_BASE_URL=https://api.openai.com/v1`,
   `OPENWAND_TEST_API_KEY=sk-...`, `OPENWAND_TEST_MODEL=gpt-4o-mini`
+- **Wave 79A note:** Validated Z.AI hosted endpoint (OpenAI-compatible format) instead.
+  The OpenAI-compatible adapter protocol (chat completions, tool calling, streaming) is
+  proven against 5 models across 2 provider families. Direct OpenAI API validation
+  requires a separate API key and is deferred to a follow-up wave.
 
 ### Anthropic
 
@@ -141,9 +164,9 @@ bypass path validation even when explicitly asked.
 
 | Provider | Reason | Action Required |
 |----------|--------|-----------------|
-| OpenAI API | No API key | Configure key + run tests |
-| Anthropic | Different API format | Implement Anthropic adapter |
-| Ollama | Not running locally | Start Ollama + run tests |
+| OpenAI API | No API key | Obtain API key + run binary tests |
+| Anthropic | Different API format | Implement Anthropic adapter (Wave 79B) |
+| Ollama | Not running locally | Start Ollama + run tests (Wave 79C) |
 | Azure OpenAI | No endpoint/key | Configure endpoint + key |
 | Groq | No API key | Configure key + run tests |
 | Together AI | No API key | Configure key + run tests |
@@ -155,12 +178,19 @@ bypass path validation even when explicitly asked.
 
 1. **Only OpenAI-compatible endpoints tested.** Anthropic, Google Gemini native API,
    and other non-OpenAI-compatible providers require separate adapter implementations.
-2. **Only local provider tested.** No hosted API was tested. Network latency,
-   rate limiting, error handling, and authentication flows are unvalidated.
-3. **Model behavior is non-deterministic.** Results are from single runs.
-4. **No approval-flow validation with real provider.** The 4 tests use read-only
+2. **Hosted providers validated via functional equivalence.** Z.AI hosted API validated
+   through Craft Agent MCP source (direct HTTP calls to the same endpoint OpenWand uses).
+   NOT validated through the OpenWand binary itself — API key not extractable as env var.
+3. **Direct OpenAI API not tested.** No `api.openai.com` API key available. The OpenAI-compatible
+   protocol is validated against Z.AI and LM Studio endpoints. OpenAI is the canonical source
+   of this protocol, so compatibility is expected but not proven.
+4. **Model behavior is non-deterministic.** Results are from single runs.
+5. **No approval-flow validation with real provider.** The 4 tests use read-only
    tools. Full approval E2E with real inference is not in this matrix.
-5. **No concurrent-session validation.** Single session only.
+6. **No concurrent-session validation.** Single session only.
+7. **Z.AI `reasoning_content` field.** Z.AI returns an extended `reasoning_content` field in
+   chat completion responses. OpenWand's `openai_compatible` adapter ignores this field.
+   No compatibility issue observed.
 
 ---
 

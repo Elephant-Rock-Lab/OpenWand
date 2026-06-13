@@ -1,8 +1,9 @@
 # v0.3.0 Roadmap — Post-v0.2 Reset
 
 **Created:** 2026-06-13 (Wave 83A)
-**Status:** Planning
+**Status:** Delivered (Wave 86B)
 **Predecessor:** v0.2.0 stable (`ca325e2`)
+**Release:** v0.3.0 stable (`2a418a1`)
 
 ---
 

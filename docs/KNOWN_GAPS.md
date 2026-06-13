@@ -36,7 +36,7 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 
 ---
 
-## Current Gaps (Updated Wave 83B — post-v0.2.0 stable)
+## Current Gaps (Updated Wave 86B — post-v0.3.0 stable)
 
 | # | Gap | Category | Status |
 |---|-----|----------|--------|
@@ -48,6 +48,10 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 | C6 | ~~23 commits ahead of origin/master~~ | Publication | ✅ Resolved — all published to remote |
 | C7 | ~~No concurrent mutation tests~~ | Testing | ✅ Closed 69G |
 | C8 | ~~69F workspace --all-targets regression~~ | Build | ✅ Closed 70B |
+| C9 | ~~Workflow UI surfaces are static, not wired to live data~~ | Feature | ✅ Closed 84A-84C — 5 surfaces live-wired |
+| C10 | ~~Non-Windows platform validation deferred~~ | Validation | ✅ Partially closed 85A — Linux compilation validated, GUI runtime deferred |
+| C11 | ~~Unix sandbox not tested on Linux~~ | Validation | ✅ Closed 85A — 3,934 tests on Linux, 0 failures |
+| C12 | macOS compilation/runtime not validated | Validation | Accepted — no macOS environment available |
 
 ---
 
@@ -55,6 +59,6 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 
 - Halt-era blockers: **All resolved (69A–69E).**
 - Pre-50A gaps: **All resolved.**
-- Current gaps: **6 closed, 4 accepted.**
-  - Closed: C1 (80A-80C), C6 (published), C7 (69G), C8 (70B)
-  - Accepted: C2 (cosmetic), C3 (stub crate), C4 (architecture), C5 (upstream deps)
+- Current gaps: **8 closed, 5 accepted.**
+  - Closed: C1 (80A-80C), C6 (published), C7 (69G), C8 (70B), C9 (84A-84C), C10 (85A partial), C11 (85A), C12 (accepted)
+  - Accepted: C2 (cosmetic), C3 (stub crate), C4 (architecture), C5 (upstream deps), C12 (macOS deferred)

@@ -5,6 +5,7 @@
 //! for path containment, independent of policy auto-allow decisions.
 
 use std::path::{Component, Path, PathBuf};
+#[cfg(unix)]
 use std::ffi::OsStr;
 
 /// How the resolved path will be used.

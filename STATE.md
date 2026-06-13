@@ -1,18 +1,16 @@
 # OpenWand — Project State
 
 ## Version
-0.2.0 (stable) — developing v0.3.0
+0.3.0 (stable)
 
 ## Status
-**v0.3.0 blockers VC-1/VC-2/VC-3 all resolved. Live workflow wiring complete on 5 surfaces. Linux desktop compilation and Unix sandbox validation passed.**
+**v0.3.0 stable. All blockers resolved. Live workflow wiring across 5 surfaces. Linux desktop compilation and Unix sandbox validation passed.**
 
-Release: v0.2.0 — `ca325e2` — `v0.2.0`
+Release: v0.3.0 — `2a418a1` — `v0.3.0`
 
-Current: Wave 85A — Linux environment gate and validation decision.
-Latest commit: `e760e3e` (wave-84c-lock)
-Binary: 17,847,296 bytes (~17.0 MB), SHA-256 `D5DDECF63E9EEE92B36CB12EFB4A80CDA6FE4E7B1A88CC335A06503386C602DC`
+Binary: 18,941,440 bytes (~18.0 MB), SHA-256 `A5B594A33495E8AE61FB96C77F66042247AEBA768A8E59580F4C6995431FAAC5`
 
-Stable for v0.2.0 milestone scope. Not production-ready. Not formal security review.
+Stable for v0.3.0 milestone scope. Not production-ready. Not formal security review.
 
 ## Workspace Structure
 ```
@@ -53,10 +51,11 @@ cargo audit
 
 **v0.2.0 stable baseline (Wave 82D):** 2,279 lib + 1,638 integration tests, 0 failures.
 
-**Current baseline (Wave 85A):** 3,939 tests on Windows, 3,934 tests on Linux (Ubuntu WSL2), 0 failures.
+**v0.3.0 stable baseline (Wave 86B):** 3,939 tests on Windows, 3,934 tests on Linux (Ubuntu WSL2), 0 failures.
 - Cross-platform validation complete
-- Linux desktop feature compilation: PASS
+- Linux desktop feature compilation: PASS (GUI runtime not validated)
 - Unix sandbox E2E: PASS (openat-based WorkspaceWriteHandle tested on Linux)
+- 5 live-wired workflow surfaces: proposal, readiness, outcome, reconciliation, loop controller
 
 **Clippy posture:** 0 actionable production warnings. 43 pedantic/test-only warnings accepted.
 

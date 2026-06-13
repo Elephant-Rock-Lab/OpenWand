@@ -315,3 +315,17 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 82C | v0.2.0-rc.1 External Review | `wave-82c-lock` | 3,917 | docs/V020_RC1_EXTERNAL_REVIEW.md |
 | 82D | v0.2.0 Stable Declaration | `wave-82d-lock` | 3,917 | RELEASE_NOTES_v020_STABLE.md |
 | 83A | Post-v0.2 Roadmap Reset | `wave-83a-lock` | 3,917 | docs/V030_ROADMAP.md |
+
+---
+
+## Phase: v0.3.0 Live Workflow Wiring
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 83B | README/Docs Staleness Sweep | `wave-83b-lock` | 3,917 | docs/KNOWN_GAPS.md |
+| 84A | Live Workflow Wiring I: Proposal + Readiness | `wave-84a-lock` | 3,924 | crates/app/tests/workflow_live_wiring.rs |
+| 84B | Live Workflow Wiring II: Action Outcome | `wave-84b-lock` | 3,931 | crates/app/tests/workflow_outcome_live_wiring.rs |
+| 84C | Live Workflow Wiring III: Reconciliation + Loop | `wave-84c-lock` | 3,939 | crates/app/tests/workflow_reconciliation_loop_live_wiring.rs |
+| 85A | Linux Environment Gate and Validation Decision | `wave-85a-lock` | 3,939 Win / 3,934 Linux | docs/V030_ROADMAP.md |
+| 86B | v0.3.0 Release Preparation | `wave-86b-lock` | 3,939 Win / 3,934 Linux | RELEASE_NOTES_v030_STABLE.md |
+| **v0.3.0** | **Stable Release** | **`v0.3.0`** | **3,939 Win / 3,934 Linux** | **RELEASE_NOTES_v030_STABLE.md** |

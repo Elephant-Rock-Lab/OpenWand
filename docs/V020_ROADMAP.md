@@ -24,7 +24,7 @@
 | # | Blocker | From | Resolution Path | Estimated Waves |
 |---|---------|------|-----------------|:---------------:|
 | VB-1 | ~~Windows TOCTOU micro-race closure~~ ✅ Closed 78C | DEFERRED-008 | `NtCreateFile` + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` per component | 1 |
-| VB-2 | Anthropic adapter validation | DEFERRED-009 partial | Enable `anthropic-compatible` feature, validate against hosted API | 1–2 |
+| VB-2 | ~~Anthropic adapter validation~~ → Post-v0.2 | DEFERRED-009 partial | Enable `anthropic-compatible` feature, validate against hosted API | Post-v0.2 |
 | VB-3 | Placeholder UI surface completion | Known gaps | Implement 6 stub + 4 minimal surfaces | 2–3 |
 
 ---
@@ -57,7 +57,7 @@
 
 ## Placeholder UI Surface Inventory
 
-### Stub Surfaces (3-line placeholders — 6 total)
+### Stub Surfaces (3-line placeholders - 6 total)
 
 | # | Surface | Workflow Capability | Complexity | Priority |
 |---|---------|---------------------|:----------:|:--------:|
@@ -68,7 +68,7 @@
 | 5 | `workflow_loop_controller_components` | Loop control dashboard | High | P1 |
 | 6 | `workflow_reconciliation_components` | Reconciliation gate | Medium | P1 |
 
-### Minimal Surfaces (6–16 lines — 4 total)
+### Minimal Surfaces (6-16 lines - 4 total)
 
 | # | Surface | Lines | Priority |
 |---|---------|------:|:--------:|
@@ -104,19 +104,23 @@
 
 | Provider | Action | Wave Candidate |
 |----------|--------|---------------|
-| Anthropic (claude-sonnet-4) | Enable feature, validate hosted | 79B |
-| OpenAI direct (gpt-4o-mini) | Configure key, run existing suite | 79A |
-| Ollama (local) | Start server, run existing suite | 79C |
+| Anthropic (claude-sonnet-4) | Enable feature, validate hosted | Post-v0.2 |
+| OpenAI direct (gpt-4o-mini) | Configure key, run existing suite | Post-v0.2 |
+| Ollama (local) | Start server, run existing suite | Post-v0.2 |
 
-### Provider Matrix Target for v0.2.0
+### Provider Matrix — Current State (v0.2.0)
 
 | Provider | Model | Type | Status |
 |----------|-------|------|--------|
 | LM Studio | gemma-4-12b, qwen2.5-0.5b | Local | ✅ Validated |
-| Z.AI | glm-4.5-air, glm-5.1 | Hosted | ✅ Validated |
-| OpenAI API | gpt-4o-mini | Hosted | Target |
-| Anthropic | claude-sonnet-4 | Hosted | Target |
-| Ollama | (various) | Local | Target |
+| Z.AI | glm-4.5-air, glm-5.1, glm-5-turbo | Hosted | ✅ Validated |
+| OpenAI API | gpt-4o-mini | Hosted | Post-v0.2 |
+| Anthropic | claude-sonnet-4 | Hosted | Post-v0.2 |
+| Ollama | (various) | Local | Post-v0.2 |
+
+**Provider validation closed for v0.2.0.** OpenAI-compatible adapter proven across
+2 provider families, 5 models, local + hosted endpoints. Further provider expansion
+is post-v0.2 compatibility hardening, not a release blocker.
 
 ---
 
@@ -176,13 +180,13 @@ core → trace → store → session → app
 | `app` depends on `session` with `testing` feature in production | Medium | Gate behind `#[cfg(test)]` or separate dev-dep |
 | Anthropic adapter exists but is feature-gated and untested | Low | Enable and validate in v0.2.0 |
 | 739-line adapter file (anthropic_compatible.rs) | Low | May need modularization |
-| `workflow` has no downstream consumers | Low | By design — leaf crate |
+| `workflow` has no downstream consumers | Low | By design - leaf crate |
 
 ---
 
 ## Candidate Wave Sequence (v0.2.0)
 
-### Phase 1: Security (78A–78B)
+### Phase 1: Security (78A-78B)
 
 | Wave | Title | Scope |
 |------|-------|-------|
@@ -190,13 +194,12 @@ core → trace → store → session → app
 | 78B | Windows NtCreateFile TOCTOU Closure | ~~Implement~~ `NtCreateFile` + `RootDirectory`, close VB-1 |
 | 78C | Windows NtCreateFile Implementation | ✅ Closed VB-1. Hybrid NtCreateFile dirs + CreateFileW file. ~430 lines |
 
-### Phase 2: Provider Expansion (79A–79C)
+### Phase 2: Provider Scope Closure (79A–79B)
 
 | Wave | Title | Scope |
 |------|-------|-------|
-| 79A | OpenAI Direct API Validation | Configure key, run real-provider suite |
-| 79B | Anthropic Adapter Validation | Enable feature, validate against claude-sonnet-4 |
-| 79C | Ollama Local Validation | Start server, run existing suite |
+| 79A | Hosted OpenAI-Compatible API Validation | Validate glm-5-turbo via Z.AI, expand matrix |
+| 79B | Provider Scope Closure and Product Surface Pivot | Close provider arc, demote VB-2, pivot to surfaces |
 
 ### Phase 3: Desktop Productization (80A–80C)
 
@@ -206,14 +209,14 @@ core → trace → store → session → app
 | 80B | Placeholder Surfaces II (action outcome, continuation, loop controller) | Implement 3 surfaces |
 | 80C | Placeholder Surfaces III (command composer, command review) | Implement 2 high-complexity surfaces |
 
-### Phase 4: Quality and Validation (81A–81B)
+### Phase 4: Quality and Validation (81A-81B)
 
 | Wave | Title | Scope |
 |------|-------|-------|
 | 81A | Code Quality and Dependency Refresh | App clippy cleanup, cargo audit refresh |
 | 81B | v0.2.0-beta Declaration | Release notes, artifact identity, tag |
 
-**Estimated total:** 9 waves (78A–81B).
+**Estimated total:** 8 waves (78A–81B).
 
 ---
 
@@ -222,10 +225,11 @@ core → trace → store → session → app
 | # | Criterion | Status |
 |---|-----------|--------|
 | VB-1 | ~~Windows TOCTOU micro-race closed~~ ✅ Closed 78C | ✅ Done |
-| VB-2 | Anthropic adapter validated | ⬜ Blocked |
+| ~~VB-2~~ | ~~Anthropic adapter validated~~ → Post-v0.2 | ✅ Demoted |
 | VB-3 | All placeholder UI surfaces implemented | ⬜ Blocked |
 
-**v0.2.0 release requires all 3 blockers resolved.**
+**v0.2.0 release requires VB-3 resolved. VB-2 (provider expansion) demoted to post-v0.2
+compatibility hardening — OpenAI-compatible path proven across local + hosted providers.**
 
 ---
 
@@ -234,12 +238,12 @@ core → trace → store → session → app
 | Metric | v0.1.0-alpha | v0.1.0-beta | v0.2.0 Target |
 |--------|:-----------:|:-----------:|:------------:|
 | Test count | 2,266 + 22 | 2,271 + 161 | 2,400+ |
-| Provider families validated | 1 (local) | 2 (local + hosted) | 4–5 |
-| Models validated | 1 | 4 | 6+ |
+| Provider families validated | 1 (local) | 2 (local + hosted) | 2 (sufficient) |
+| Models validated | 1 | 4 | 5 |
 | Placeholder surfaces | 10 | 10 | 0 |
-| Platforms tested | 1 (Windows) | 1 (Windows) | 1–3 |
+| Platforms tested | 1 (Windows) | 1 (Windows) | 1-3 |
 | Windows TOCTOU status | Reduced residual | Reduced residual | Fully closed |
-| Anthropic support | Adapter exists | Adapter exists | Validated |
+| Anthropic support | Adapter exists | Adapter exists | Adapter exists (unvalidated) |
 | Desktop UX validation | Process lifecycle | UI Automation | UI Automation |
 
 ---

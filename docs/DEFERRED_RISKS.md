@@ -5,9 +5,9 @@ Wave 69F introduced this ledger. Wave 69G closes or reclassifies items.
 ## Cargo Audit Results (DEFERRED-002 — closed by recording)
 
 **Run date:** 2026-06-11
-**Result:** 0 vulnerabilities, 16 warnings
+**Result:** 0 vulnerabilities, 15 warnings
 
-### Unmaintained advisories (14)
+### Unmaintained advisories (13)
 
 | Advisory | Crate | Dependency Path | Direct? | Desktop-only? |
 |----------|-------|----------------|---------|---------------|
@@ -58,7 +58,7 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 ### DEFERRED-002: cargo audit dependency warnings
 - **Status:** Closed by recording
 - **Category:** Dependency
-- **Detail:** 16 warnings (14 unmaintained + 2 unsound), all transitive via Dioxus desktop stack or Loro CRDT. Zero direct dependency issues. Zero vulnerabilities.
+- **Detail:** 15 warnings (13 unmaintained + 2 unsound), all transitive via Dioxus desktop stack or Loro CRDT. Zero direct dependency issues. Zero vulnerabilities. Re-verified Wave 82A.
 - **Resolution path:** Re-evaluate when Dioxus/Loro release updates with newer transitive deps.
 
 ### DEFERRED-003: unsafe-env-test claim correction

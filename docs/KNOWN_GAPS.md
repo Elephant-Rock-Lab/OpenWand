@@ -36,18 +36,18 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 
 ---
 
-## Current Gaps (Wave 69G)
+## Current Gaps (Updated Wave 83B — post-v0.2.0 stable)
 
 | # | Gap | Category | Status |
 |---|-----|----------|--------|
-| C1 | 9 placeholder UI surfaces (3-line stubs) | Feature | Accepted — not yet prioritized |
-| C2 | `openwand-app` 57 test-module clippy warnings | Cosmetic | Accepted (DEFERRED-001) |
-| C3 | `openwand-content` crate removed | Feature | Deferred — re-add when needed |
+| C1 | ~~9 placeholder UI surfaces (3-line stubs)~~ | Feature | ✅ Closed 80A-80C — all 10 surfaces implemented |
+| C2 | `openwand-app` 43 test-module clippy warnings | Cosmetic | Accepted (DEFERRED-001) — reduced from 57 in 81A |
+| C3 | `openwand-content` crate is a stub (add() only) | Feature | Accepted — README corrected 83A |
 | C4 | Trace store append-only is structural, not enforced by runtime verifier | Architecture | Accepted (claim corrected in README) |
-| C5 | 15 cargo audit warnings (all transitive, via Dioxus/Loro) | Dependency | Accepted (DEFERRED-002) |
-| C6 | 23 commits ahead of origin/master | Publication | Pending user decision (DEFERRED-007) |
-| C7 | No concurrent mutation tests for MutationHelper | Testing | Closed 69G — single-writer is architecturally enforced; 3 direct tests added |
-| C8 | 69F workspace --all-targets regression | Build | Closed 70B — #[cfg(test)] imports restored for workflow/memory crates |
+| C5 | 15 cargo audit warnings (all transitive, via Dioxus/Loro) | Dependency | Accepted (DEFERRED-002) — 0 vulnerabilities, verified 82A |
+| C6 | ~~23 commits ahead of origin/master~~ | Publication | ✅ Resolved — all published to remote |
+| C7 | ~~No concurrent mutation tests~~ | Testing | ✅ Closed 69G |
+| C8 | ~~69F workspace --all-targets regression~~ | Build | ✅ Closed 70B |
 
 ---
 
@@ -55,4 +55,6 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 
 - Halt-era blockers: **All resolved (69A–69E).**
 - Pre-50A gaps: **All resolved.**
-- Current gaps: **1 closed (C7), 6 accepted or pending.**
+- Current gaps: **6 closed, 4 accepted.**
+  - Closed: C1 (80A-80C), C6 (published), C7 (69G), C8 (70B)
+  - Accepted: C2 (cosmetic), C3 (stub crate), C4 (architecture), C5 (upstream deps)

@@ -197,13 +197,13 @@ Items 4 and 5 are the only alpha residuals that escalate to beta-blocking.
 
 ```text
 Alpha posture:    stable, published, accepted residuals documented
-Beta blockers:    4 of 10 resolved, 4 blocking, 2 deferred
-Beta path:        77A (docs) → 77B (hosted provider) → 77C (desktop UX) → 77D (beta tag)
-Post-beta path:   Windows TOCTOU closure, Anthropic adapter, feature completion
+Beta blockers:    9 of 10 resolved, 1 deferred (BC-10 non-Windows)
+v0.1.0-beta:      declared (Wave 77D)
+v0.2.0 stable:    declared (Wave 82D) — all blockers closed
+Post-v0.2 path:   live workflow wiring, Linux validation, provider expansion
 ```
 
 ---
 
-*This ledger records the gap between alpha and beta readiness. It does not claim
-beta readiness. It does not make stable-release claims. It preserves all alpha
-limitations and extends them with explicit beta criteria.*
+*This ledger recorded the gap between alpha and beta readiness. v0.1.0-beta and
+v0.2.0 stable have since been declared. See docs/V030_ROADMAP.md for current roadmap.*

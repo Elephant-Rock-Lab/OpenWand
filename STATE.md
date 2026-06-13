@@ -6,12 +6,12 @@
 ## Status
 **v0.2.0 stable. Post-v0.2 roadmap reset complete. v0.3.0 theme: live workflow wiring.**
 
-Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
+Release: v0.2.0 — `ca325e2` — `v0.2.0`
 
-Next: Wave 83B — README/docs staleness sweep, then Wave 84A — Live workflow wiring.
-Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
+Next: Wave 84A — Live workflow wiring.
+Binary: 17,847,296 bytes (~17.0 MB), SHA-256 `D5DDECF63E9EEE92B36CB12EFB4A80CDA6FE4E7B1A88CC335A06503386C602DC`
 
-Not stable. Not production-ready. Accepted residuals documented.
+Stable for v0.2.0 milestone scope. Not production-ready. Not formal security review.
 
 ## Workspace Structure
 ```
@@ -31,8 +31,7 @@ crates/
 └── app/        CLI binary + desktop UI + evaluation + coordination  (bin)
 ```
 
-Note: `openwand-content` removed from workspace at Wave 50A (scaffold since Wave 0,
-zero implementation). Will be re-added when syntect/mermaid/comrak rendering is needed.
+Note: `openwand-content` is a stub crate (add() only). Will be implemented when rich rendering is needed.
 
 ## Test Count
 
@@ -51,14 +50,17 @@ cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
 cargo audit
 ```
 
-**Post-beta baseline (Wave 77D):** 2,271 lib + 161 integration tests, 0 failures.
+**v0.2.0 stable baseline (Wave 82D):** 2,279 lib + 1,638 integration tests, 0 failures.
 - openwand-core: 45
-- openwand-session: 49 + 122 integration
+- openwand-session: 49 + integration
 - openwand-tools: 111
-- openwand-app: 957 + 39 integration
+- openwand-app: 970 + integration
+- openwand-workflow: 728
+- openwand-memory: 223
+- openwand-trace: 41
+- Total workspace: 3,917 tests, 0 failures
 
-**Not yet clean:** `openwand-app` non-test-path warnings (~25) and test-module clippy
-warnings remain accepted as cosmetic.
+**Clippy posture:** 0 actionable production warnings. 43 pedantic/test-only warnings accepted.
 
 ## Post-Alpha Stabilization Arc
 

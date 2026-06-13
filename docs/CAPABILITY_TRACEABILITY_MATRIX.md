@@ -1,6 +1,6 @@
 # OpenWand Capability-to-Code Traceability Matrix
 
-Generated from disk-verified reconnaissance at Wave 40. Baseline: 2824 tests, zero failures.
+Generated from disk-verified reconnaissance at Wave 40. Test baseline updated at Wave 83B: 3,917 tests, zero failures.
 
 ---
 
@@ -130,4 +130,4 @@ OpenWand records what it can prove.
 
 ## Test Baseline
 
-2824 tests, zero failures, across 14 workspace crates and 131 integration test files.
+3,917 tests, zero failures, across 14 workspace crates (v0.2.0 stable).

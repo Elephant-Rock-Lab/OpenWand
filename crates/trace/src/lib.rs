@@ -15,6 +15,7 @@ pub mod envelope;
 pub mod store;
 pub mod projector;
 pub mod error;
+pub mod verifier;
 
 #[cfg(feature = "testing")]
 pub mod testing;

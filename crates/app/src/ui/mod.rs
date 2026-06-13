@@ -36,6 +36,7 @@ pub mod workflow_action_routing_components;
 pub mod workflow_action_routing_state;
 pub mod workflow_action_outcome_components;
 pub mod workflow_action_outcome_state;
+pub mod workflow_run_request;
 pub mod workflow_reconciliation_components;
 pub mod workflow_reconciliation_state;
 pub mod workflow_continuation_components;

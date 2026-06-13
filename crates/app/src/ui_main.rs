@@ -17,6 +17,7 @@ use openwand_app::ui::memory_dto::UiFilteredMemoryPanel;
 use openwand_app::memory_coordinator::PromptInputProductionConfig;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
+use openwand_app::ui::workflow_run_request::{WorkflowRunRequest, WorkflowRunRequestState};
 use openwand_app::settings;
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
@@ -497,9 +498,138 @@ fn render_inspector_pane() -> Element {
                 if let Some(ref loop_ctrl) = loop_controller_state {
                     { render_loop_controller_panel(loop_ctrl) }
                 }
+                // Workflow run initiation (Wave 88A — delegated authority)
+                { render_workflow_run_initiation(service.clone(), &proposal_state, &readiness_state) }
             }
         },
         None => render_inspector_empty_state(),
+    }
+}
+
+// ── Workflow Run Initiation (Wave 88A) ─────────────────────────────────
+/// Renders the workflow run initiation button and request state.
+/// The button emits a request through UiSessionService::request_workflow_run().
+/// The UI never imports backend execution gates. Authority is delegated.
+#[cfg(feature = "desktop")]
+fn render_workflow_run_initiation(
+    service: Arc<UiSessionService>,
+    proposal_state: &Option<openwand_app::ui::workflow_proposal_state::WorkflowProposalUiState>,
+    readiness_state: &Option<openwand_app::ui::workflow_readiness_state::WorkflowReadinessUiState>,
+) -> Element {
+    use openwand_app::ui::design_tokens::*;
+    use dioxus::prelude::*;
+
+    let req_state = WORKFLOW_RUN_REQUEST_STATE.read().clone();
+
+    // Only show if both proposal and readiness data are loaded
+    let can_request = proposal_state.is_some() && readiness_state.is_some() && !req_state.is_terminal();
+
+    // Extract IDs for the request
+    let proposal_id = proposal_state.as_ref()
+        .and_then(|p| p.latest_proposal.as_ref())
+        .map(|p| p.proposal_id.clone());
+    let readiness_id = readiness_state.as_ref()
+        .and_then(|r| r.latest_readiness.as_ref())
+        .map(|r| r.readiness_id.clone());
+    let review_id = proposal_state.as_ref()
+        .and_then(|p| p.latest_review.as_ref())
+        .map(|r| r.review_id.clone());
+
+    let has_ids = proposal_id.is_some() && readiness_id.is_some() && review_id.is_some();
+
+    let section_style = format!(
+        "padding: {} {}; border-top: 1px solid {}; margin-top: {};",
+        spacing::SPACE_MD, spacing::SPACE_SM, colors::BORDER_LIGHT, spacing::SPACE_MD,
+    );
+    let label_style = format!(
+        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+        typo::TEXT_BASE, colors::TEXT_STRONG, spacing::SPACE_SM,
+    );
+
+    // Status text
+    let status_text = req_state.status_label().to_string();
+    let status_color = match &*req_state {
+        WorkflowRunRequestState::Created { .. } => colors::STATUS_SUCCESS,
+        WorkflowRunRequestState::Blocked { .. } => colors::STATUS_WARN,
+        WorkflowRunRequestState::Failed { .. } => colors::STATUS_ERROR,
+        WorkflowRunRequestState::Pending => colors::TEXT_MUTED,
+        WorkflowRunRequestState::Idle => colors::TEXT_FAINT,
+    };
+
+    let btn_style = format!(
+        "padding: {} {}; background: {}; color: white; border: none; border-radius: {}; cursor: {}; font-size: {};",
+        spacing::SPACE_SM, spacing::SPACE_LG, colors::PRIMARY, radius::RADIUS_SM, typo::TEXT_SM,
+    );
+    let btn_disabled_style = format!(
+        "padding: {} {}; background: {}; color: white; border: none; border-radius: {}; cursor: not-allowed; font-size: {};",
+        spacing::SPACE_SM, spacing::SPACE_LG, colors::DISABLED_BG, radius::RADIUS_SM, typo::TEXT_SM,
+    );
+
+    // Detail for terminal states
+    let detail_text = match &*req_state {
+        WorkflowRunRequestState::Created { execution_id, status, stage_count, predicates_passed, predicates_total } => {
+            format!("Run {} — {} — {} stages — {}/{} predicates passed", execution_id, status, stage_count, predicates_passed, predicates_total)
+        }
+        WorkflowRunRequestState::Blocked { reason } => format!("Blocked: {}", reason),
+        WorkflowRunRequestState::Failed { error } => format!("Error: {}", error),
+        _ => String::new(),
+    };
+
+    rsx! {
+        div { style: "{section_style}",
+            div { style: "{label_style}", "Workflow Run" }
+
+            if can_request && has_ids {
+                button {
+                    style: "{btn_style}",
+                    onclick: move |_| {
+                        *WORKFLOW_RUN_REQUEST_STATE.write() = WorkflowRunRequestState::Pending;
+                        let pid = proposal_id.clone().unwrap();
+                        let rid = readiness_id.clone().unwrap();
+                        let rvid = review_id.clone().unwrap();
+                        let svc = service.clone();
+                        spawn(async move {
+                            let req = WorkflowRunRequest {
+                                readiness_id: rid,
+                                proposal_id: pid,
+                                proposal_review_id: rvid,
+                                idempotency_key: format!("desktop_{}", chrono::Utc::now().timestamp()),
+                                requested_by: "desktop".into(),
+                            };
+                            let working_dir = CURRENT_SESSION
+                                .read()
+                                .as_ref()
+                                .and_then(|s| s.working_directory.clone())
+                                .unwrap_or_else(|| ".".to_string());
+                            let store_root = std::path::PathBuf::from(&working_dir);
+                            let result = svc.request_workflow_run(&req, &store_root);
+                            *WORKFLOW_RUN_REQUEST_STATE.write() = result;
+                        });
+                    },
+                    "Initiate Workflow Run"
+                }
+            } else if !has_ids && req_state.is_terminal() == false {
+                div { style: "font-size: {typo::TEXT_SM}; color: {colors::TEXT_FAINT};",
+                    "Load a workflow run with proposal and readiness data to initiate"
+                }
+            } else {
+                button {
+                    style: "{btn_disabled_style}",
+                    disabled: true,
+                    "Initiate Workflow Run"
+                }
+            }
+
+            // Status display
+n            div { style: "margin-top: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM}; color: {status_color};",
+                "{status_text}"
+            }
+            if !detail_text.is_empty() {
+                div { style: "margin-top: {spacing::SPACE_XS}; font-size: {typo::TEXT_XS}; color: {colors::TEXT_MUTED};",
+                    "{detail_text}"
+                }
+            }
+        }
     }
 }
 
@@ -700,6 +830,7 @@ static READINESS_STATE: GlobalSignal<Option<openwand_app::ui::workflow_readiness
 static OUTCOME_STATE: GlobalSignal<Option<openwand_app::ui::workflow_action_outcome_state::WorkflowActionOutcomeUiState>> = Signal::global(|| None);
 static RECONCILIATION_STATE: GlobalSignal<Option<openwand_app::ui::workflow_reconciliation_state::WorkflowReconciliationUiState>> = Signal::global(|| None);
 static LOOP_CONTROLLER_STATE: GlobalSignal<Option<openwand_app::ui::workflow_loop_controller_state::WorkflowLoopControllerUiState>> = Signal::global(|| None);
+static WORKFLOW_RUN_REQUEST_STATE: GlobalSignal<openwand_app::ui::workflow_run_request::WorkflowRunRequestState> = Signal::global(WorkflowRunRequestState::default);
 
 // ── Send Handler ──────────────────────────────────────────
 

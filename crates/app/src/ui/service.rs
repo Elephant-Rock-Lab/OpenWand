@@ -262,4 +262,158 @@ impl UiSessionService {
     ) -> Result<UiSessionView, UiServiceError> {
         self.open_session(session_id).await
     }
+
+    /// Request a workflow run initiation from the desktop UI.
+    ///
+    /// This is the authority boundary for desktop-initiated workflow runs.
+    /// The desktop constructs a `WorkflowRunRequest` with only record IDs.
+    /// This method loads the full records, extracts hashes, evaluates the
+    /// execution gate, advances stages, and saves the run.
+    ///
+    /// Authority: this method calls `evaluate_workflow_execution()` and
+    /// `save_workflow_run()` — the desktop UI code does NOT.
+    /// The evaluation gate enforces readiness, hash matching, and predicate
+    /// checks. The desktop cannot bypass these.
+    pub fn request_workflow_run(
+        &self,
+        request: &crate::ui::workflow_run_request::WorkflowRunRequest,
+        store_root: &std::path::Path,
+    ) -> crate::ui::workflow_run_request::WorkflowRunRequestState {
+        Self::evaluate_workflow_run_request(request, store_root)
+    }
+
+    /// Core evaluation logic — callable without a service instance.
+    /// Separated so tests can exercise the authority path without constructing
+    /// a full UiSessionService with store connections.
+    pub fn evaluate_workflow_run_request(
+        request: &crate::ui::workflow_run_request::WorkflowRunRequest,
+        store_root: &std::path::Path,
+    ) -> crate::ui::workflow_run_request::WorkflowRunRequestState {
+        use crate::ui::workflow_run_request::WorkflowRunRequestState;
+        use openwand_workflow::workflow_run::WorkflowExecutionRequest;
+        use openwand_workflow::workflow_execution_gate::{WorkflowExecutionContext, evaluate_workflow_execution};
+        use openwand_workflow::workflow_readiness::WorkflowReadinessId;
+        use openwand_workflow::workflow_proposal::WorkflowProposalId;
+        use openwand_workflow::workflow_proposal_review::WorkflowProposalReviewId;
+        use chrono::Utc;
+
+        // Load readiness record
+        let readiness = match crate::workflow_readiness::load_workflow_readiness(
+            store_root,
+            &WorkflowReadinessId(request.readiness_id.clone()),
+        ) {
+            Ok(r) => r,
+            Err(e) => return WorkflowRunRequestState::Failed {
+                error: format!("Failed to load readiness: {e}"),
+            },
+        };
+
+        // Load proposal record
+        let proposal = match crate::workflow_proposal::load_workflow_proposal(
+            store_root,
+            &WorkflowProposalId(request.proposal_id.clone()),
+        ) {
+            Ok(p) => p,
+            Err(e) => return WorkflowRunRequestState::Failed {
+                error: format!("Failed to load proposal: {e}"),
+            },
+        };
+
+        // Load proposal review record
+        let review = match crate::workflow_proposal::load_proposal_review(
+            store_root,
+            &WorkflowProposalReviewId(request.proposal_review_id.clone()),
+        ) {
+            Ok(r) => r,
+            Err(e) => return WorkflowRunRequestState::Failed {
+                error: format!("Failed to load review: {e}"),
+            },
+        };
+
+        // Load source task plan if available
+        let source_plan = crate::task_planning::load_task_plan(
+            store_root,
+            &proposal.source_task_plan_id,
+        ).ok();
+
+        // Load latest proposal review for idempotency check
+        let latest_review = crate::workflow_proposal::latest_proposal_review(store_root)
+            .ok().flatten()
+            .filter(|r| r.proposal_id == proposal.proposal_id);
+
+        // Build the execution request with hashes extracted from loaded records
+        let exec_request = WorkflowExecutionRequest {
+            readiness_id: readiness.readiness_id.clone(),
+            proposal_id: proposal.proposal_id.clone(),
+            proposal_review_id: review.review_id.clone(),
+            expected_readiness_hash: readiness.proposal_hash.clone(),
+            expected_proposal_hash: proposal.proposal_hash.clone(),
+            requested_by: request.requested_by.clone(),
+            requested_at: Utc::now(),
+            idempotency_key: request.idempotency_key.clone(),
+        };
+
+        // Build evaluation context from loaded records
+        let context = WorkflowExecutionContext {
+            readiness: Some(readiness),
+            proposal: Some(proposal),
+            proposal_review: Some(review.clone()),
+            latest_proposal_review: latest_review,
+            source_task_plan: source_plan,
+            source_task_plan_review: None,
+            latest_source_task_plan_review: None,
+            provider_config_available: true,
+            session_runtime_available: true,
+            existing_runs: vec![],
+        };
+
+        // Evaluate the execution gate
+        let mut record = evaluate_workflow_execution(&exec_request, &context);
+
+        // Advance stages through lifecycle if suspended
+        if record.status == openwand_workflow::workflow_run::WorkflowRunStatus::Suspended
+            && let Some(ref proposal) = context.proposal {
+                let (stages, events, action_requests) =
+                    openwand_workflow::workflow_run_lifecycle::advance_stages(proposal);
+                record.stages = stages;
+                record.lifecycle_events = events;
+                record.action_requests = action_requests;
+            }
+
+        // Check if blocked
+        if matches!(record.status, openwand_workflow::workflow_run::WorkflowRunStatus::Blocked) {
+            let failed_predicates: Vec<_> = record.predicates.iter()
+                .filter(|p| !p.passed)
+                .collect();
+            let reason = if failed_predicates.is_empty() {
+                "Blocked by execution gate".to_string()
+            } else {
+                failed_predicates.iter()
+                    .map(|p| format!("{:?}: {}", p.predicate, p.reason))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            return WorkflowRunRequestState::Blocked { reason };
+        }
+
+        // Save the run record
+        let execution_id = record.execution_id.0.clone();
+        let status = format!("{:?}", record.status).to_lowercase();
+        let stage_count = record.stages.len();
+        let predicates_passed = record.predicates.iter().filter(|p| p.passed).count();
+        let predicates_total = record.predicates.len();
+
+        match crate::workflow_execution::save_workflow_run(store_root, &record) {
+            Ok(_) => WorkflowRunRequestState::Created {
+                execution_id,
+                status,
+                stage_count,
+                predicates_passed,
+                predicates_total,
+            },
+            Err(e) => WorkflowRunRequestState::Failed {
+                error: format!("Failed to save workflow run: {e}"),
+            },
+        }
+    }
 }

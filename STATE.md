@@ -1,10 +1,10 @@
 # OpenWand — Project State
 
 ## Version
-0.3.0 (stable)
+0.3.0 (stable) — planning v0.4.0
 
 ## Status
-**v0.3.0 stable. All blockers resolved. Live workflow wiring across 5 surfaces. Linux desktop compilation and Unix sandbox validation passed.**
+**v0.3.0 stable released. v0.4.0 roadmap defined. Next arc: from observation to operation.**
 
 Release: v0.3.0 — tag `v0.3.0`
 

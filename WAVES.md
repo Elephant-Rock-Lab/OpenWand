@@ -308,3 +308,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 80A | Placeholder Surfaces I (outcome, verification, continuation) | `wave-80a-lock` | 2,265 | `crates/app/src/ui/workflow_*_components.rs` |
 | 80B | Placeholder Surfaces II (proposal, readiness, command composer, command review) | `wave-80b-lock` | 2,265 | `crates/app/src/ui/workflow_*_components.rs` |
 | 80C | Placeholder Surfaces III (reconciliation, loop controller, external attestation) | `wave-80c-lock` | 2,279 | `crates/app/src/ui/workflow_*_components.rs` |
+| 81A | Code Quality and Dependency Refresh | `wave-81a-lock` | 3,917 | workspace-wide

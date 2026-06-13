@@ -6,7 +6,6 @@
 use openwand_core::mode::InteractionMode;
 use openwand_session::config::RunConfig;
 use openwand_session::testing::harness::SessionHarness;
-use openwand_session::ApprovalDecision;
 
 fn direct_config() -> RunConfig {
     RunConfig {

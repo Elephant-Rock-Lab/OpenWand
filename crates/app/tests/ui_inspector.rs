@@ -459,7 +459,7 @@ fn gate_tool_rows_show_decision_risk_tool() {
 fn memory_evidence_rows_show_included_excluded_reason() {
     let panel = make_panel();
     let (ctx, evidence) = load_memory_inspector(Some(&panel));
-    let mut state = LiveInspectorState { memory_context: ctx, memory_evidence: evidence, ..Default::default() };
+    let state = LiveInspectorState { memory_context: ctx, memory_evidence: evidence, ..Default::default() };
     let rows = memory_evidence_rows(&state);
     assert!(rows.len() >= 3, "Should have included, stale, and conflict rows");
     assert!(rows.iter().any(|r| r.status_display == "Included"));

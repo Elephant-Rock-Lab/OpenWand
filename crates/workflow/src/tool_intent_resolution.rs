@@ -129,7 +129,7 @@ mod tests {
         // Resolution output never contains tool_call, tool_name, tool_args, command
         assert!(!snap.reason.contains("tool_call"));
         assert!(!snap.reason.contains("tool_name"));
-        assert!(!snap.matched_capability_category.as_ref().map_or(false, |c| {
+        assert!(!snap.matched_capability_category.as_ref().is_some_and(|c| {
             FORBIDDEN_TOOL_NAMES.contains(&c.as_str())
         }));
     }

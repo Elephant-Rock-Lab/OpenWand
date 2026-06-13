@@ -100,7 +100,7 @@ async fn e2e_remember_x_appears_in_memory_and_is_retrieved_later() {
 
     // 4. Verify memory was accepted via store
     let records = memory_store.list_active_records().await.unwrap();
-    assert!(records.len() >= 1, "Memory should have >= 1 records");
+    assert!(!records.is_empty(), "Memory should have >= 1 records");
     assert!(
         records.iter().any(|r| r.claim.contains("Rust")),
         "Expected a record mentioning Rust"

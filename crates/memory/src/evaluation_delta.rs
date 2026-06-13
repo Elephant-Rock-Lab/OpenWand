@@ -171,7 +171,7 @@ pub fn approved_02s_deltas() -> Vec<ApprovedBehaviorChange> {
 mod tests {
     use super::*;
     use crate::evaluation::{
-        MemoryEvaluationFailure, MemoryEvaluationReport, PromptInputEvaluationSnapshot,
+        MemoryEvaluationReport, PromptInputEvaluationSnapshot,
         RepoConsistencySummarySnapshot,
     };
 

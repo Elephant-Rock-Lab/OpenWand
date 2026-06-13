@@ -25,7 +25,7 @@
 |---|---------|------|-----------------|:---------------:|
 | VB-1 | ~~Windows TOCTOU micro-race closure~~ ✅ Closed 78C | DEFERRED-008 | `NtCreateFile` + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` per component | 1 |
 | VB-2 | ~~Anthropic adapter validation~~ → Post-v0.2 | DEFERRED-009 partial | Enable `anthropic-compatible` feature, validate against hosted API | Post-v0.2 |
-| VB-3 | Placeholder UI surface completion | Known gaps | Implement 6 stub + 4 minimal surfaces | 2–3 |
+| VB-3 | ~~Placeholder UI surface completion~~ ✅ Closed 80C | Resolved | All 10 surfaces implemented (Waves 80A–80C) | Done |
 
 ---
 
@@ -228,8 +228,8 @@ core → trace → store → session → app
 | ~~VB-2~~ | ~~Anthropic adapter validated~~ → Post-v0.2 | ✅ Demoted |
 | VB-3 | All placeholder UI surfaces implemented | ✅ Closed 80C |
 
-**v0.2.0 release requires VB-3 resolved. VB-2 (provider expansion) demoted to post-v0.2
-compatibility hardening — OpenAI-compatible path proven across local + hosted providers.**
+**v0.2.0 blockers all resolved: VB-1 ✅ Closed (78C), VB-2 ✅ Demoted (79B), VB-3 ✅ Closed (80C).
+VB-2 (provider expansion) deferred to post-v0.2 compatibility hardening.**
 
 ---
 

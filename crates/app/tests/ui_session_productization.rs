@@ -516,7 +516,7 @@ fn ui_bridge_covers_all_current_agent_event_variants() {
     // All should translate to Some UiRunEvent (none should be None)
     for event in &test_events {
         // We can't call translate_event directly (private), so test via apply
-        let mut state = UiRunState::new_running();
+        let state = UiRunState::new_running();
         // We test indirectly: each event should cause some state change
         // (status, text, tool_events, pending_approval, etc.)
         drop(event); // just verify the variants compile

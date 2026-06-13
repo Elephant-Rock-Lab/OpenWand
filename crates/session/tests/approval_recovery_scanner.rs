@@ -6,7 +6,7 @@ use openwand_core::events::{OpenWandTraceEvent, ToolEvent};
 use openwand_core::ids::{GateId, ToolCallId, ApprovalRequestId};
 use openwand_core::snapshots::ApprovalContextSnapshot;
 use openwand_session::approval_recovery::{
-    build_recovery_index, ApprovalRecoveryConflict, ApprovalRecoveryIndex,
+    build_recovery_index, ApprovalRecoveryConflict,
 };
 use openwand_store::StoredEvent;
 use openwand_trace::entry::TraceEntry;

@@ -13,22 +13,30 @@
 use openwand_goals::manifest::{GoalDefinition, GoalId, GoalStatus};
 use openwand_goals::registry::{GoalRegistry, GoalValidationReport};
 use openwand_skills::manifest::{SkillContextKind, SkillDefinition, SkillId};
-use openwand_core::events::{CapabilityPromptOrderPosition, CapabilityManifestAuditState, TraceHashAlgorithm, InferenceEvent};
 use openwand_skills::registry::{SkillRegistry, SkillValidationReport};
 
 use crate::session_capability_prompt;
 use crate::ui::skills_goals_state::{
-    self, build_readiness_report, build_capability_preview, CapabilityPreviewMode,
+    self, build_readiness_report,
 };
+
+#[cfg(test)]
+use crate::ui::skills_goals_state::{CapabilityPreviewMode, build_capability_preview};
+#[cfg(test)]
+use openwand_core::events::inference::{InferenceEvent, CapabilityManifestAuditState, CapabilityPromptOrderPosition, TraceHashAlgorithm};
+#[cfg(test)]
+use openwand_memory::evaluation::ScenarioExecutionMode;
 
 // ── Fixture matrix (Patch 4) ────────────────────────────────────────────
 
+#[allow(dead_code)]
 struct Fixture {
     name: &'static str,
     skill_registry: SkillRegistry,
     goal_registry: GoalRegistry,
 }
 
+#[allow(dead_code)]
 fn valid_skill_valid_goal() -> Fixture {
     Fixture {
         name: "valid_skill_valid_goal",
@@ -64,6 +72,7 @@ fn valid_skill_valid_goal() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn disabled_skill_linked_by_goal() -> Fixture {
     Fixture {
         name: "disabled_skill_linked_by_goal",
@@ -99,6 +108,7 @@ fn disabled_skill_linked_by_goal() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn goal_missing_linked_skill() -> Fixture {
     Fixture {
         name: "goal_missing_linked_skill",
@@ -123,6 +133,7 @@ fn goal_missing_linked_skill() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn skill_without_allowed_context() -> Fixture {
     Fixture {
         name: "skill_without_allowed_context",
@@ -148,6 +159,7 @@ fn skill_without_allowed_context() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn goal_without_success_criteria() -> Fixture {
     Fixture {
         name: "goal_without_success_criteria",
@@ -172,6 +184,7 @@ fn goal_without_success_criteria() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn missing_manifests() -> Fixture {
     let uid = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -186,6 +199,7 @@ fn missing_manifests() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn invalid_manifest() -> Fixture {
     let uid = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -203,6 +217,7 @@ fn invalid_manifest() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn fake_header_in_manifest_text() -> Fixture {
     Fixture {
         name: "fake_header_in_manifest_text",
@@ -228,6 +243,7 @@ fn fake_header_in_manifest_text() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn control_chars_in_manifest_text() -> Fixture {
     Fixture {
         name: "control_chars_in_manifest_text",
@@ -253,6 +269,7 @@ fn control_chars_in_manifest_text() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn oversized_manifest_text() -> Fixture {
     let long_name: String = "A".repeat(1000);
     Fixture {
@@ -279,6 +296,7 @@ fn oversized_manifest_text() -> Fixture {
     }
 }
 
+#[allow(dead_code)]
 fn all_fixtures() -> Vec<Fixture> {
     vec![
         valid_skill_valid_goal(),
@@ -295,6 +313,7 @@ fn all_fixtures() -> Vec<Fixture> {
 }
 
 // Helper: build block + report for a fixture
+#[allow(dead_code)]
 fn build_for_fixture(f: &Fixture) -> (openwand_session::config::CapabilityContextBlock, skills_goals_state::SkillGoalReadinessReport) {
     let block = session_capability_prompt::build_capability_prompt_inputs(&f.skill_registry, &f.goal_registry);
     let report = build_readiness_report(&f.skill_registry, &f.goal_registry);

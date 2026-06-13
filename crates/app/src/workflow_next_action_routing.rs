@@ -331,7 +331,7 @@ mod tests {
             }
         }
 
-        fn routing_ctx(&self) -> WorkflowNextActionRoutingContext {
+        fn routing_ctx(&self) -> WorkflowNextActionRoutingContext<'_> {
             WorkflowNextActionRoutingContext {
                 routing_readiness: Some(&self.readiness),
                 next_action_proposal: Some(&self.proposal),

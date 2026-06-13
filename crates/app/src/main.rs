@@ -9,7 +9,6 @@ use openwand_memory::MemoryExtractor;
 use openwand_session::config::{RunConfig, RunStopReason, RunSummary};
 use openwand_session::message::MessageContent;
 use openwand_session::runner::{ApprovalDecision, ApprovalResolution};
-use openwand_store::StoredEvent;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
@@ -1143,7 +1142,7 @@ async fn cmd_run(cli: &Cli, message: Option<String>) -> Result<()> {
         match approval_outcome {
             Some(ar) => {
                 let was_approved = matches!(ar.resolution, ApprovalResolution::Approve);
-                let tool_errored = ar.tool_result.as_ref().map_or(false, |r| r.is_error);
+                let tool_errored = ar.tool_result.as_ref().is_some_and(|r| r.is_error);
 
                 let reason = if !was_approved {
                     RunStopReason::ToolDenied

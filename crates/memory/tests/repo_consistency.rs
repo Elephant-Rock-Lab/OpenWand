@@ -196,7 +196,7 @@ async fn repo_consistency_supersession_e2e() {
 
     // Superseded claims should be in history
     let findings: Vec<_> = inputs.superseded_history.iter()
-        .map(|hit| classify_superseded_claim(hit))
+        .map(classify_superseded_claim)
         .collect();
 
     assert!(findings.iter().any(|f| f.kind == RepoConsistencyFindingKind::SupersededMemoryIgnored));

@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn review_distribution_panel_handles_review_without_distribution() {
-        let reviews = vec![ReviewSummaryRow {
+        let reviews = [ReviewSummaryRow {
             review_id: "wapr_1".into(),
             inspection_id: "weci_1".into(),
             reviewer: "alice".into(),
@@ -304,8 +304,7 @@ mod tests {
 
     #[test]
     fn review_distribution_panel_handles_multiple_reviews() {
-        let reviews = vec![
-            ReviewSummaryRow {
+        let reviews = [ReviewSummaryRow {
                 review_id: "wapr_1".into(),
                 inspection_id: "weci_1".into(),
                 reviewer: "alice".into(),
@@ -320,8 +319,7 @@ mod tests {
                 decision: "ReviewedWithCaveats".into(),
                 scope: "extended".into(),
                 caveat_count: 2,
-            },
-        ];
+            }];
         assert_eq!(2, reviews.len());
     }
 }

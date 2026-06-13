@@ -14,8 +14,6 @@ use crate::workflow_proposal_validation::{
 
 #[cfg(test)]
 use crate::builder::build_task_plan;
-#[cfg(test)]
-use crate::context::TaskPlanInput;
 
 /// Input for building a workflow proposal from an approved task plan.
 pub struct WorkflowProposalInput {

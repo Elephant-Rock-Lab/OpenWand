@@ -503,7 +503,7 @@ mod composition_tests {
         }
     }
 
-    fn ctx_with_lc(lc: &WorkflowLoopControllerRecord) -> WorkflowCommandComposerContext {
+    fn ctx_with_lc(lc: &WorkflowLoopControllerRecord) -> WorkflowCommandComposerContext<'_> {
         WorkflowCommandComposerContext {
             loop_controller_record: Some(lc), workflow_run: None, latest_revision: None,
         }
@@ -591,7 +591,7 @@ mod composition_tests {
         let rec = compose_command_descriptor(&test_request(), &ctx);
         for mi in &rec.missing_inputs {
             // Missing inputs should not be in arguments with a value
-            assert!(rec.descriptor.as_ref().map_or(true, |d| !d.arguments.iter().any(|a| a.name == mi.name && !a.missing)));
+            assert!(rec.descriptor.as_ref().is_none_or(|d| !d.arguments.iter().any(|a| a.name == mi.name && !a.missing)));
         }
     }
 

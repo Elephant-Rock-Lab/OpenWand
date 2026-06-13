@@ -382,8 +382,7 @@ async fn session_memory_retrieval_called_during_run() {
 
 use openwand_memory::prompt_assembly::{
     MemoryPromptAssemblyInputs, PromptInclusionReason,
-    SupportedMemoryClaim, SupersededMemoryClaim,
-    MissingMemoryObservation,
+    SupportedMemoryClaim,
     RepoConsistencyPromptAssembler,
 };
 use openwand_memory::evidence::EvidenceKind;

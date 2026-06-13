@@ -110,7 +110,6 @@ impl MemoryEvaluationSuiteReport {
 mod tests {
     use super::*;
     use crate::evaluation::*;
-    use crate::provenance_hydration::MemoryTrustBucket;
 
     fn make_scenario(category: MemoryEvaluationCategory) -> MemoryEvaluationScenario {
         MemoryEvaluationScenario {

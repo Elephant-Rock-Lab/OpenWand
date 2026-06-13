@@ -26,9 +26,9 @@ pub fn assemble_console_state(
 
     let mut evidence_chain = Vec::new();
     let mut chain_warnings = Vec::new();
-    let mut sections = Vec::new();
-    let mut attestation_groups = Vec::new();
-    let mut verification_readiness_summary = Vec::new();
+    let sections;
+    let attestation_groups;
+    let verification_readiness_summary;
 
     // Patch 1 (48A): Try to consume evidence chain inspector
     let inspector_links = assemble_inspector_links(store_root, workflow_execution_id);

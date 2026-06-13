@@ -32,7 +32,7 @@ fn review_accept_args(d: &tempfile::TempDir, suffix: &str) -> Vec<String> {
 fn cli_manual_result_review_accept_outputs_review_id() {
     let d = temp_dir();
     let out = Command::new(openwand_bin())
-        .args(&review_accept_args(&d, "accept"))
+        .args(review_accept_args(&d, "accept"))
         .output().unwrap();
     assert!(out.status.success(), "accept failed: {}", String::from_utf8_lossy(&out.stderr));
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -112,7 +112,7 @@ fn cli_manual_result_review_latest_by_manual_result_returns_latest() {
     let d = temp_dir();
     // Create review first
     let create = Command::new(openwand_bin())
-        .args(&review_accept_args(&d, "lat"))
+        .args(review_accept_args(&d, "lat"))
         .output().unwrap();
     assert!(create.status.success(), "create failed: {}", String::from_utf8_lossy(&create.stderr));
 

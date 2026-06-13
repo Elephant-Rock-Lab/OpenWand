@@ -12,9 +12,6 @@ use crate::workflow_loop_controller::WorkflowLoopControllerRecord;
 #[cfg(test)]
 use chrono::Utc;
 
-#[cfg(test)]
-use crate::workflow_command_descriptor::WorkflowManualCommandDescriptor;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowCommandReviewValidationRule {

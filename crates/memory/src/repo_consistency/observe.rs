@@ -243,6 +243,13 @@ pub struct StubRepoReadFs {
 }
 
 #[cfg(test)]
+impl Default for StubRepoReadFs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
 impl StubRepoReadFs {
     pub fn new() -> Self {
         Self {
@@ -384,7 +391,7 @@ blake3 = "1"
         let _snap = observe_repo(&fs, Path::new("/repo")).unwrap();
         // RepoReadFs has no write methods — this is a compile-time guarantee
         // The trait only exposes read_to_string, read_dir, exists
-        assert!(true, "RepoReadFs exposes no write methods");
+        // No assertion needed: the type system enforces this.
     }
 
     #[test]

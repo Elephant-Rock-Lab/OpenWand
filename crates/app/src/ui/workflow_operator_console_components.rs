@@ -586,13 +586,11 @@ mod tests {
 
     #[test]
     fn operator_console_uses_allowed_read_only_wording() {
-        let allowed = vec!["reported", "recorded", "present", "missing", "warning", "eligibility", "unverified", "read-only"];
-        let all_copy = vec![
-            attestation_unverified_note(),
+        let allowed = ["reported", "recorded", "present", "missing", "warning", "eligibility", "unverified", "read-only"];
+        let all_copy = [attestation_unverified_note(),
             readiness_eligibility_note(),
             evidence_link_status_label("found"),
-            evidence_link_status_label("missing"),
-        ];
+            evidence_link_status_label("missing")];
         let combined = all_copy.join(" ").to_lowercase();
         // At least some allowed words should appear
         let found = allowed.iter().filter(|w| combined.contains(*w)).count();

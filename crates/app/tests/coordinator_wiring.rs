@@ -180,7 +180,7 @@ async fn unverifiable_claim_excluded_from_text() {
 
     assert!(result.repo_observed);
     assert!(
-        result.inputs.unverifiable_claims_excluded.len() >= 1,
+        !result.inputs.unverifiable_claims_excluded.is_empty(),
         "microservices claim should be excluded as unverifiable"
     );
     if let Some(block) = result.inputs.to_prompt_block() {
@@ -228,7 +228,7 @@ async fn mixed_claims_classify_correctly() {
     assert!(!result.inputs.supported_claims.is_empty());
 
     // Unverifiable should have at least the 'microservices' claim
-    assert!(result.inputs.unverifiable_claims_excluded.len() >= 1);
+    assert!(!result.inputs.unverifiable_claims_excluded.is_empty());
 }
 
 #[tokio::test]
@@ -385,7 +385,7 @@ async fn full_pipeline_produces_provenance_tagged_prompt() {
 
     // Verify supported claims
     assert!(!result.inputs.supported_claims.is_empty());
-    assert!(result.inputs.unverifiable_claims_excluded.len() >= 1);
+    assert!(!result.inputs.unverifiable_claims_excluded.is_empty());
 
     // Verify prompt block
     let block = result.inputs.to_prompt_block().expect("should produce prompt block");

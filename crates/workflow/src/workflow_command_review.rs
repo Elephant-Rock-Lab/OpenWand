@@ -186,13 +186,13 @@ mod tests {
     fn workflow_command_review_rejection_requires_feedback() {
         let r = test_review(WorkflowCommandReviewDecision::Rejected);
         // Rejection without feedback blocking_reasons is invalid
-        assert!(r.feedback.is_none() || r.feedback.as_ref().map_or(true, |f| f.blocking_reasons.is_empty()));
+        assert!(r.feedback.is_none() || r.feedback.as_ref().is_none_or(|f| f.blocking_reasons.is_empty()));
     }
 
     #[test]
     fn workflow_command_review_change_request_requires_requested_change() {
         let r = test_review(WorkflowCommandReviewDecision::ChangesRequested);
-        assert!(r.feedback.is_none() || r.feedback.as_ref().map_or(true, |f| f.requested_changes.is_empty()));
+        assert!(r.feedback.is_none() || r.feedback.as_ref().is_none_or(|f| f.requested_changes.is_empty()));
     }
 
     #[test]

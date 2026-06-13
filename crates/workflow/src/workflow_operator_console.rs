@@ -391,10 +391,6 @@ pub fn validate_linkage_aware_chain(
 mod tests {
     use super::*;
 
-    fn test_stage(id: &str, status: &str) -> ConsoleStageSummary {
-        ConsoleStageSummary { stage_id: id.into(), title: format!("Stage {}", id), status: status.into(), order: 0 }
-    }
-
     fn build_test_state(detected: &WorkflowDetectedLoopState) -> WorkflowOperatorConsoleState {
         build_console_state(
             WorkflowExecutionId("wfx_t".into()), "suspended".into(),

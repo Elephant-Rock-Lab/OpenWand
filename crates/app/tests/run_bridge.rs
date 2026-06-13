@@ -216,7 +216,7 @@ async fn ui_run_bridge_cleanup_stops_receiver_task() {
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     // Send an event — should not be received
-    let send_result = tx.send(AgentEvent::TextDelta {
+    let _send_result = tx.send(AgentEvent::TextDelta {
         session_id: SessionId::new(),
         delta: "should not arrive".into(),
     });

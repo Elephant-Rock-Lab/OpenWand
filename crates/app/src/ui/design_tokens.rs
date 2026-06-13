@@ -350,13 +350,11 @@ mod tests {
     fn design_tokens_defines_no_persistence_or_trace_types() {
         // Compile-time check: this module has no imports from backend crates.
         // This test documents the invariant.
-        let _tokens = vec![
-            colors::PRIMARY,
+        let _tokens = [colors::PRIMARY,
             typo::FONT_BODY,
             spacing::SPACE_MD,
             radius::MD,
-            layout_dims::SIDEBAR_LEFT_WIDTH,
-        ];
+            layout_dims::SIDEBAR_LEFT_WIDTH];
         // If this module imported openwand_store/SessionRunner/TraceStore,
         // the compilation would fail — but it doesn't, proving the guard.
     }

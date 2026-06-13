@@ -6,8 +6,6 @@
 
 use openwand_llm::tool_buffer::ToolCallBuffer;
 use openwand_llm::response::LlmDelta;
-use openwand_core::snapshots::TokenUsageSnapshot;
-
 /// Feed: ToolCallStart → ToolCallArgsDelta → drain_ids → complete
 /// Expect: ToolCallComplete with correct name and parsed arguments
 #[test]

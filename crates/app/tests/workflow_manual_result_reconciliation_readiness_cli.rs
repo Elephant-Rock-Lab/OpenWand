@@ -33,7 +33,7 @@ fn evaluate_args(d: &tempfile::TempDir, suffix: &str) -> Vec<String> {
 fn cli_evaluate_outputs_readiness_id() {
     let d = temp_dir();
     let out = Command::new(openwand_bin())
-        .args(&evaluate_args(&d, "eval"))
+        .args(evaluate_args(&d, "eval"))
         .output().unwrap();
     assert!(out.status.success(), "evaluate failed: {}", String::from_utf8_lossy(&out.stderr));
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -79,7 +79,7 @@ fn cli_show_returns_readiness() {
 fn cli_latest_returns_latest() {
     let d = temp_dir();
     let create = Command::new(openwand_bin())
-        .args(&evaluate_args(&d, "lat"))
+        .args(evaluate_args(&d, "lat"))
         .output().unwrap();
     assert!(create.status.success());
 

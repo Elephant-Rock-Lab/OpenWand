@@ -190,12 +190,12 @@ mod tests {
     #[test] fn outcome_by_session_returns_expected() {
         let d = test_dir(); let r = test_outcome(WorkflowActionOutcomeStatus::ApprovalResolved, "se");
         save_workflow_action_outcome(&d, &r).unwrap();
-        assert_eq!(r.outcome_id, outcome_by_session(&d, &format!("sess_se")).unwrap().unwrap().outcome_id);
+        assert_eq!(r.outcome_id, outcome_by_session(&d, &"sess_se".to_string()).unwrap().unwrap().outcome_id);
     }
     #[test] fn outcome_by_pending_approval_returns_expected() {
         let d = test_dir(); let r = test_outcome(WorkflowActionOutcomeStatus::ApprovalResolved, "pa");
         save_workflow_action_outcome(&d, &r).unwrap();
-        assert_eq!(r.outcome_id, outcome_by_pending_approval(&d, &format!("arid_pa")).unwrap().unwrap().outcome_id);
+        assert_eq!(r.outcome_id, outcome_by_pending_approval(&d, &"arid_pa".to_string()).unwrap().unwrap().outcome_id);
     }
     #[test] fn same_idempotency_key_returns_existing() {
         let d = test_dir(); let r = test_outcome(WorkflowActionOutcomeStatus::ApprovalResolved, "id");

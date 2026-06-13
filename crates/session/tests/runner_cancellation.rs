@@ -31,7 +31,7 @@ fn blocking_stream_runner() -> Arc<SessionRunner> {
     use openwand_policy::PolicyEngine;
     use openwand_memory::MemoryReadStore;
     use openwand_trace::TraceStore;
-    use futures::stream;
+    
     use futures::StreamExt;
     use tokio::sync::mpsc;
 

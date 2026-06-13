@@ -354,7 +354,7 @@ mod tests {
             }
         }
 
-        fn ctx(&self) -> WorkflowReconciliationContext {
+        fn ctx(&self) -> WorkflowReconciliationContext<'_> {
             WorkflowReconciliationContext {
                 workflow_run: Some(&self.run), route_record: Some(&self.route),
                 outcome_record: Some(&self.outcome), prior_reconciliations: vec![],

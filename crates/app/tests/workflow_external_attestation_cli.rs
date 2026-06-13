@@ -64,7 +64,7 @@ fn cli_attestation_attach_requires_claim_and_source() {
 #[test]
 fn cli_attestation_reference_is_metadata_only() {
     let dir = test_dir();
-    let mut req = ExternalAttestationRequest {
+    let req = ExternalAttestationRequest {
         workflow_execution_id: WorkflowExecutionId("wfx_t".into()),
         target_kind: ExternalAttestationTargetKind::ManualResult,
         target_id: "wmr_1".into(),

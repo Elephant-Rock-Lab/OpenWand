@@ -475,10 +475,8 @@ mod tests {
 
     #[test]
     fn timeline_uses_recorded_stage_order() {
-        let stages = vec![
-            WorkflowStageRunRow { stage_id: "s2".into(), kind: "act".into(), status: "completed".into(), order: 1, summary: "".into() },
-            WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() },
-        ];
+        let stages = [WorkflowStageRunRow { stage_id: "s2".into(), kind: "act".into(), status: "completed".into(), order: 1, summary: "".into() },
+            WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() }];
         // Verify order field exists and is distinct
         assert_eq!(0, stages.iter().find(|s| s.stage_id == "s1").unwrap().order);
         assert_eq!(1, stages.iter().find(|s| s.stage_id == "s2").unwrap().order);
@@ -486,13 +484,9 @@ mod tests {
 
     #[test]
     fn timeline_groups_events_by_stage_when_no_global_order_exists() {
-        let stages = vec![
-            WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() },
-        ];
-        let events = vec![
-            WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "began".into() },
-            WorkflowLifecycleEventRow { event_id: "e2".into(), stage_id: "s1".into(), event_kind: "completed".into(), summary: "done".into() },
-        ];
+        let stages = [WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() }];
+        let events = [WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "began".into() },
+            WorkflowLifecycleEventRow { event_id: "e2".into(), stage_id: "s1".into(), event_kind: "completed".into(), summary: "done".into() }];
         // Both events belong to s1
         assert!(events.iter().all(|e| e.stage_id == "s1"));
         // No global order field on events — grouped by stage_id
@@ -502,10 +496,8 @@ mod tests {
 
     #[test]
     fn timeline_does_not_infer_unrecorded_event_order() {
-        let events = vec![
-            WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "first".into() },
-            WorkflowLifecycleEventRow { event_id: "e2".into(), stage_id: "s1".into(), event_kind: "completed".into(), summary: "second".into() },
-        ];
+        let events = [WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "first".into() },
+            WorkflowLifecycleEventRow { event_id: "e2".into(), stage_id: "s1".into(), event_kind: "completed".into(), summary: "second".into() }];
         // Events have no order field — we display them in recorded order only
         assert_eq!("e1", events[0].event_id);
         assert_eq!("e2", events[1].event_id);
@@ -572,25 +564,19 @@ mod tests {
 
     #[test]
     fn timeline_displays_stage_ids() {
-        let stages = vec![
-            WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() },
-        ];
+        let stages = [WorkflowStageRunRow { stage_id: "s1".into(), kind: "observe".into(), status: "completed".into(), order: 0, summary: "".into() }];
         assert!(!stages[0].stage_id.is_empty());
     }
 
     #[test]
     fn timeline_displays_event_ids() {
-        let events = vec![
-            WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "".into() },
-        ];
+        let events = [WorkflowLifecycleEventRow { event_id: "e1".into(), stage_id: "s1".into(), event_kind: "started".into(), summary: "".into() }];
         assert!(!events[0].event_id.is_empty());
     }
 
     #[test]
     fn timeline_displays_action_request_ids() {
-        let requests = vec![
-            WorkflowActionRequestRow { action_request_id: "ar_1".into(), capability: "read".into(), routing_status: "prepared".into() },
-        ];
+        let requests = [WorkflowActionRequestRow { action_request_id: "ar_1".into(), capability: "read".into(), routing_status: "prepared".into() }];
         assert!(!requests[0].action_request_id.is_empty());
     }
 

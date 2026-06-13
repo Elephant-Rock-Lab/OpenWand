@@ -18,7 +18,8 @@ use chrono::Utc;
 fn test_dir() -> std::path::PathBuf { tempfile::tempdir().unwrap().into_path() }
 
 fn make_suspended_run() -> WorkflowRunRecord {
-    let mut run = WorkflowRunRecord {
+    
+    WorkflowRunRecord {
         execution_id: WorkflowExecutionId("wfx_live_test".into()),
         readiness_id: WorkflowReadinessId("wfrd_live".into()),
         proposal_id: WorkflowProposalId("wfp_live".into()),
@@ -53,8 +54,7 @@ fn make_suspended_run() -> WorkflowRunRecord {
             abort_notes_available: false, rollback_notes_available: false, recovery_notes: vec![],
         },
         created_at: Utc::now(), completed_at: None,
-    };
-    run
+    }
 }
 
 fn route_request() -> WorkflowActionRouteRequest {

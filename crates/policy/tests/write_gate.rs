@@ -10,7 +10,7 @@ use openwand_core::mode::{ConfirmationLevel, InteractionMode};
 use openwand_core::risk::RiskLevelSnapshot;
 use openwand_core::tool_vocab::ToolEffect;
 use openwand_policy::{
-    GateDecision, PolicyEngine, PolicyEffect, PolicyRequest, PolicyRule, PolicyRuleId,
+    PolicyEngine, PolicyEffect, PolicyRequest, PolicyRule, PolicyRuleId,
     RuleClass, ToolMatcher,
 };
 

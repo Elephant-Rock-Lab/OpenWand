@@ -120,8 +120,8 @@ mod tests {
             latest_reconciliation: Some(workflow_reconciliation_summary(&r)),
             latest_run_revision: None,
             predicates: workflow_reconciliation_predicate_rows(&r),
-            progression: r.progression.as_ref().map(|p| workflow_stage_progression_lines(p)),
-            lifecycle_event: r.progression.as_ref().map(|p| workflow_lifecycle_event_lines(p)),
+            progression: r.progression.as_ref().map(workflow_stage_progression_lines),
+            lifecycle_event: r.progression.as_ref().map(workflow_lifecycle_event_lines),
             warnings: vec![],
         };
         assert!(state.latest_reconciliation.is_some());

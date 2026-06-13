@@ -113,7 +113,7 @@ mod tests {
             latest_readiness: Some(workflow_continuation_readiness_summary(&r)),
             latest_proposal: None,
             predicates: workflow_continuation_predicate_rows(&r),
-            candidate: r.selected_candidate.as_ref().map(|c| workflow_next_action_candidate_lines(c)),
+            candidate: r.selected_candidate.as_ref().map(workflow_next_action_candidate_lines),
             evidence_links: vec![], warnings: vec![],
         };
         assert!(state.latest_readiness.is_some());

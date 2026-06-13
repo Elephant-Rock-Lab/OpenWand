@@ -4,12 +4,10 @@ use openwand_memory::evidence::EvidenceKind;
 use openwand_memory::in_memory::InMemoryMemoryStore;
 use openwand_memory::memory_store::MemoryStore;
 use openwand_memory::prompt_assembly::{
-    MemoryPromptAssemblyInputs, MissingMemoryObservation,
-    PromptInclusionReason, RepoConsistencyPromptAssembler, SupportedMemoryClaim,
-    SupersededMemoryClaim,
+    MemoryPromptAssemblyInputs, RepoConsistencyPromptAssembler,
 };
 use openwand_memory::repo_consistency::{
-    classify_conflict_claim, classify_current_claim, detect_missing_in_memory,
+    classify_current_claim, detect_missing_in_memory,
     load_memory_inputs, observe_repo, ConsistencySeverity, RepoConsistencyFinding,
     RepoConsistencyFindingKind, RepoConsistencyReport,
     RepoConsistencySummary, RepoMemoryInputSummary, RepoObservationSummary,
@@ -17,7 +15,6 @@ use openwand_memory::repo_consistency::{
 };
 use openwand_memory::ranking::MemoryRankScore;
 use openwand_memory::retrieval::RankedMemoryHit;
-use openwand_memory::supersession::RetrievalMode;
 use openwand_memory::types::{CandidateMemory, CandidateKind, EpisodeRole, MemoryEpisode};
 use std::path::{Path, PathBuf};
 

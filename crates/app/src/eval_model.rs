@@ -553,7 +553,7 @@ mod tests {
             forbidden_tool_calls: vec!["local__file_write".to_string()],
             ..Default::default()
         };
-        let requested = vec!["local__file_read".to_string(), "local__file_write".to_string()];
+        let requested = ["local__file_read".to_string(), "local__file_write".to_string()];
         let forbidden: Vec<String> = requested
             .iter()
             .filter(|t| expected.forbidden_tool_calls.contains(t))

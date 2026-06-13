@@ -334,7 +334,7 @@ mod tests {
     use super::*;
     use crate::ranking::MemoryRankScore;
     use crate::retrieval::RankedMemoryHit;
-    use crate::types::{CandidateKind, MemoryKind};
+    use crate::types::MemoryKind;
 
     fn make_finding(kind: RepoConsistencyFindingKind, claim: &str) -> RepoConsistencyFinding {
         RepoConsistencyFinding {

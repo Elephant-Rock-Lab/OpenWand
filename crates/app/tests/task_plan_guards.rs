@@ -15,7 +15,7 @@ fn read_crate_sources(crate_name: &str) -> String {
         for entry in entries {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "rs") {
+            if path.extension().is_some_and(|e| e == "rs") {
                 all.push_str(&std::fs::read_to_string(&path).unwrap());
                 all.push('\n');
             }

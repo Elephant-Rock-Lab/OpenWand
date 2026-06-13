@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn completed_route_cannot_duplicate_with_different_key() {
         let dir = test_dir();
-        let mut r1 = test_route(WorkflowActionRouteStatus::Completed, "vwx1");
+        let r1 = test_route(WorkflowActionRouteStatus::Completed, "vwx1");
         save_workflow_action_route(&dir, &r1).unwrap();
         let mut r2 = test_route(WorkflowActionRouteStatus::Completed, "vwx2");
         // Same execution_id, stage_id, action_request_id but different route_id

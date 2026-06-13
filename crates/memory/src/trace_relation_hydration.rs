@@ -588,7 +588,6 @@ mod tests {
 
     #[test]
     fn preserves_deterministic_relation_order() {
-        use std::sync::Mutex;
         let t1 = Utc::now();
         let t2 = t1 + chrono::Duration::seconds(1);
         let rel1 = TraceRelationAuditRow {

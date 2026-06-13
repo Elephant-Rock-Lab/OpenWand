@@ -34,7 +34,7 @@ async fn search_labels_conflict_group_records() {
     store.project_episode(make_episode("ep1", "t1")).await.unwrap();
     store.project_episode(make_episode("ep2", "t2")).await.unwrap();
 
-    let mut r1 = store.accept_candidate(make_candidate("prefer tabs for indentation", "ep1")).await.unwrap().unwrap();
+    let r1 = store.accept_candidate(make_candidate("prefer tabs for indentation", "ep1")).await.unwrap().unwrap();
     let r2 = store.accept_candidate(make_candidate("prefer spaces for indentation", "ep2")).await.unwrap().unwrap();
 
     // Manually set conflict group on records

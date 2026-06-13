@@ -76,7 +76,7 @@ fn score_record(rec: &FixtureRecord, mode: RetrievalMode) -> (String, u16) {
         scope_bps: 7000,
         recency_bps: 7000,
         confidence_bps: rec.confidence_bps,
-        evidence_bps: if evidence_bps > penalty { evidence_bps - penalty } else { 0 },
+        evidence_bps: evidence_bps.saturating_sub(penalty),
         verification_bps: 0,
         final_bps: 0,
     };

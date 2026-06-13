@@ -330,7 +330,7 @@ mod tests {
             }
         }
 
-        fn ctx(&self) -> WorkflowRoutingReadinessContext {
+        fn ctx(&self) -> WorkflowRoutingReadinessContext<'_> {
             WorkflowRoutingReadinessContext {
                 proposal: Some(&self.proposal), review: Some(&self.review),
                 latest_review: Some(&self.review), run_revision: Some(&self.revision),

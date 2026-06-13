@@ -154,7 +154,7 @@ fn explicit_arid_with_matching_cache_returns_live() {
     let index = index_with_pending(vec![p]);
     let decision = ApprovalDecision::for_approval(arid.clone(), ApprovalResolution::Approve);
 
-    let (target, source) = select_approval_target(&index, Some(arid), &decision).unwrap();
+    let (_target, source) = select_approval_target(&index, Some(arid), &decision).unwrap();
 
     assert_eq!(ApprovalSource::Live, source);
 }

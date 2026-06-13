@@ -10,7 +10,6 @@
 //! mutate workflow state, or create workflow/evidence records.
 
 use crate::ui::design_tokens::*;
-use crate::ui::workflow_evidence_chain_inspector_components::chain_hash_display;
 use crate::ui::workflow_manual_result_reconciliation_readiness_state::*;
 
 // ── Pure helpers (always compiled, testable) ──────────────────────────────

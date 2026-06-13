@@ -1,5 +1,5 @@
 mod session;
-mod inference;
+pub mod inference;
 mod gate;
 mod tool;
 mod file;

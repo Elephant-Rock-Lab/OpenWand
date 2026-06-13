@@ -49,7 +49,7 @@ fn make_report(scenario_id: &str, total: u32) -> EvalRunReport {
         },
         capability_context: CapabilityContextEvalResult::default(),
         score: EvalScore::from_dimensions(vec![
-            DimensionScore { name: "memory".into(), passed: total, total: total, evidence_refs: vec![] },
+            DimensionScore { name: "memory".into(), passed: total, total, evidence_refs: vec![] },
         ]),
     }
 }
@@ -57,7 +57,7 @@ fn make_report(scenario_id: &str, total: u32) -> EvalRunReport {
 #[test]
 fn eval_cli_compare_works_with_two_reports() {
     let dir = tempfile::tempdir().unwrap();
-    let store = EvalReportStore::new(dir.path().to_path_buf());
+    let _store = EvalReportStore::new(dir.path().to_path_buf());
 
     let mut current = make_report("test", 90);
     current.provider.model = "model_v2".to_string();
@@ -92,7 +92,7 @@ fn eval_cli_summarize_lists_reports() {
 #[test]
 fn eval_cli_fail_on_regression_detects_drop() {
     let dir = tempfile::tempdir().unwrap();
-    let store = EvalReportStore::new(dir.path().to_path_buf());
+    let _store = EvalReportStore::new(dir.path().to_path_buf());
 
     let current = make_report("test", 60);
     let baseline = make_report("test", 80);

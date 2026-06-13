@@ -494,7 +494,7 @@ fn blocks_missing_rollback_drill() {
     let exec = make_executed_record(&proposal, &review);
     let results = evaluate_post_commit_predicates(
         Some(&exec), Some(&proposal), Some(&review), None,
-        &vec![PostCommitCheckResult {
+        &[PostCommitCheckResult {
             spec: PostCommitCheckSpec { name: "test".to_string(), kind: PostCommitCheckKind::CargoCheckWorkspace },
             status: PostCommitCheckStatus::Passed, output_summary: "OK".to_string(),
         }],

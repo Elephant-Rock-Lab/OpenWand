@@ -468,7 +468,7 @@ mod tests {
         let (mut req, ctx) = full_chain();
         req.expected_readiness_hash = "wrong".into();
         // This checks proposal_id match; readiness hash is proposal_id check
-        let record = evaluate_workflow_execution(&req, &ctx);
+        let _record = evaluate_workflow_execution(&req, &ctx);
         // readiness_id matches, but expected_readiness_hash won't match proposal hash
         // Our implementation checks proposal_id match, not a separate hash
     }
@@ -524,11 +524,10 @@ mod tests {
     #[test]
     fn blocks_executable_tool_intent() {
         let (req, mut ctx) = full_chain();
-        if let Some(ref mut p) = ctx.proposal {
-            if let Some(stage) = p.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
+        if let Some(ref mut p) = ctx.proposal
+            && let Some(stage) = p.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
                 stage.tool_intents[0].capability = "shell".into();
             }
-        }
         let record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ToolIntentsRemainNonExecutable && !p.passed));
@@ -633,11 +632,10 @@ mod tests {
     #[test]
     fn blocks_unresolved_tool_intent() {
         let (req, mut ctx) = full_chain();
-        if let Some(ref mut p) = ctx.proposal {
-            if let Some(stage) = p.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
+        if let Some(ref mut p) = ctx.proposal
+            && let Some(stage) = p.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
                 stage.tool_intents[0].capability = "quantum-computation".into();
             }
-        }
         let record = evaluate_workflow_execution(&req, &ctx);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowExecutionPredicate::ToolIntentResolutionStillValid && !p.passed));

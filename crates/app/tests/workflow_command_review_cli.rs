@@ -25,7 +25,7 @@ fn acknowledge_args(d: &tempfile::TempDir) -> Vec<String> {
 #[test]
 fn cli_command_review_acknowledge_outputs_review_id() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&acknowledge_args(&d))
+    let out = Command::new(openwand_bin()).args(acknowledge_args(&d))
         .arg("--json").output().expect("ack");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("wcrv_"), "Expected review ID: {}", stdout);
@@ -35,7 +35,7 @@ fn cli_command_review_acknowledge_outputs_review_id() {
 #[test]
 fn cli_acknowledge_output_says_review_recorded_not_executed() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&acknowledge_args(&d)).output().expect("ack");
+    let out = Command::new(openwand_bin()).args(acknowledge_args(&d)).output().expect("ack");
     let stdout = String::from_utf8_lossy(&out.stdout).to_lowercase();
     assert!(stdout.contains("review recorded"), "Expected 'review recorded': {}", stdout);
     assert!(stdout.contains("not executed"), "Expected 'not executed': {}", stdout);
@@ -44,7 +44,7 @@ fn cli_acknowledge_output_says_review_recorded_not_executed() {
 #[test]
 fn cli_command_review_reject_requires_feedback() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&[
+    let out = Command::new(openwand_bin()).args([
         "workflow-command-review", "reject",
         "--command-composer-id", "wcc_t",
         "--loop-controller-id", "wlc_t",
@@ -62,7 +62,7 @@ fn cli_command_review_reject_requires_feedback() {
 #[test]
 fn cli_command_review_request_changes_requires_feedback() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&[
+    let out = Command::new(openwand_bin()).args([
         "workflow-command-review", "request-changes",
         "--command-composer-id", "wcc_t",
         "--loop-controller-id", "wlc_t",
@@ -79,11 +79,11 @@ fn cli_command_review_request_changes_requires_feedback() {
 #[test]
 fn cli_command_review_show_roundtrips_record() {
     let d = temp_dir();
-    let ack = Command::new(openwand_bin()).args(&acknowledge_args(&d))
+    let ack = Command::new(openwand_bin()).args(acknowledge_args(&d))
         .arg("--json").output().expect("ack");
     let rec: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&ack.stdout)).unwrap();
     let rid = rec["review_id"].as_str().unwrap();
-    let show = Command::new(openwand_bin()).args(&["workflow-command-review", "show", rid,
+    let show = Command::new(openwand_bin()).args(["workflow-command-review", "show", rid,
         "--output-dir"]).arg(d.path()).arg("--json").output().expect("show");
     let shown: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&show.stdout)).unwrap();
     assert_eq!(rid, shown["review_id"].as_str().unwrap_or(""));
@@ -92,9 +92,9 @@ fn cli_command_review_show_roundtrips_record() {
 #[test]
 fn cli_command_review_latest_by_command_composer_returns_latest() {
     let d = temp_dir();
-    let _ = Command::new(openwand_bin()).args(&acknowledge_args(&d))
+    let _ = Command::new(openwand_bin()).args(acknowledge_args(&d))
         .arg("--json").output().expect("ack");
-    let out = Command::new(openwand_bin()).args(&["workflow-command-review", "latest",
+    let out = Command::new(openwand_bin()).args(["workflow-command-review", "latest",
         "--command-composer-id", "wcc_t",
         "--output-dir"]).arg(d.path()).arg("--json").output().expect("latest");
     assert!(String::from_utf8_lossy(&out.stdout).contains("wcrv_"));
@@ -103,7 +103,7 @@ fn cli_command_review_latest_by_command_composer_returns_latest() {
 #[test]
 fn cli_command_review_requires_expected_hashes() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&[
+    let out = Command::new(openwand_bin()).args([
         "workflow-command-review", "acknowledge",
         "--command-composer-id", "wcc_t",
         "--loop-controller-id", "wlc_t",
@@ -116,7 +116,7 @@ fn cli_command_review_requires_expected_hashes() {
 
 #[test]
 fn cli_command_review_does_not_expose_execute_route_resolve_reconcile_retry_resume() {
-    let out = Command::new(openwand_bin()).args(&["workflow-command-review", "--help"]).output().expect("help");
+    let out = Command::new(openwand_bin()).args(["workflow-command-review", "--help"]).output().expect("help");
     let stdout = String::from_utf8_lossy(&out.stdout).to_lowercase();
     assert!(!stdout.contains("execute")); assert!(!stdout.contains("route-now"));
     assert!(!stdout.contains("resolve-now")); assert!(!stdout.contains("reconcile-now"));

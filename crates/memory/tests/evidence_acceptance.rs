@@ -48,7 +48,7 @@ mod evidence_kind_persistence {
     async fn inmemory_roundtrips_evidence_kind() {
         let store = InMemoryMemoryStore::new();
         store.project_episode(make_episode("ep1", "t1")).await.unwrap();
-        let record = store.accept_candidate(make_candidate("roundtrip test", "ep1")).await.unwrap().unwrap();
+        let _record = store.accept_candidate(make_candidate("roundtrip test", "ep1")).await.unwrap().unwrap();
 
         // Retrieve via list_active_records
         let records = store.list_active_records().await.unwrap();

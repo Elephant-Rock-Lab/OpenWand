@@ -150,8 +150,7 @@ mod tests {
     #[test]
     fn desktop_bootstrap_smoke_policy_has_read_and_search_rules() {
         // Verify the rule IDs are present.
-        let rules = vec![
-            PolicyRule {
+        let rules = [PolicyRule {
                 id: PolicyRuleId("smoke-allow-read".into()),
                 name: "Allow read-effect tools (smoke)".into(),
                 enabled: true,
@@ -178,8 +177,7 @@ mod tests {
                 },
                 reason_code: "smoke_allow_search".into(),
                 summary: "Allow search-effect tools.".into(),
-            },
-        ];
+            }];
         assert_eq!(rules.len(), 2);
         assert_eq!(rules[0].id.0, "smoke-allow-read");
         assert_eq!(rules[1].id.0, "smoke-allow-search");

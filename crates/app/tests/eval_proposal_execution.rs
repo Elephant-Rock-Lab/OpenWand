@@ -619,9 +619,9 @@ fn local_git_backend_never_invokes_shell() {
 fn execution_module_does_not_push_tag_branch() {
     let source = include_str!("../src/eval_proposal_execution.rs");
     let lower = source.to_lowercase();
-    assert!(!lower.contains("git push") || source.contains("\"git push\"") == false, "No git push");
-    assert!(!lower.contains("git tag") || source.contains("\"git tag\"") == false, "No git tag");
-    assert!(!lower.contains("git branch") || source.contains("\"git branch\"") == false, "No git branch creation");
+    assert!(!lower.contains("git push") || !source.contains("\"git push\""), "No git push");
+    assert!(!lower.contains("git tag") || !source.contains("\"git tag\""), "No git tag");
+    assert!(!lower.contains("git branch") || !source.contains("\"git branch\""), "No git branch creation");
 }
 
 // ── Correction #2: Staging guard tests ─────────────────────────────────────

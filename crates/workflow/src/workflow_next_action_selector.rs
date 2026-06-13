@@ -439,7 +439,7 @@ mod tests {
             }
         }
 
-        fn ctx(&self) -> WorkflowContinuationContext {
+        fn ctx(&self) -> WorkflowContinuationContext<'_> {
             WorkflowContinuationContext {
                 workflow_run: Some(&self.run), run_revision: Some(&self.revision),
                 prior_readiness: vec![], prior_proposals: vec![],

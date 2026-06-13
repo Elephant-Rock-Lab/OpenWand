@@ -5,7 +5,6 @@
 use std::path::Path;
 
 use openwand_workflow::workflow_verification_readiness::*;
-use openwand_workflow::workflow_run::WorkflowExecutionId;
 
 fn readiness_root(store_root: &Path) -> std::path::PathBuf {
     store_root.join("workflow_verification_readiness")
@@ -172,6 +171,7 @@ fn load_index_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openwand_workflow::workflow_run::WorkflowExecutionId;
 
     fn test_dir() -> std::path::PathBuf {
         tempfile::tempdir().unwrap().into_path()

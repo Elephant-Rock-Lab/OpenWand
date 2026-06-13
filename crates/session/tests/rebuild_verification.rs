@@ -2,8 +2,7 @@
 //!
 //! Tests that session state can be rebuilt from the trace stream.
 
-use std::sync::Arc;
-use openwand_session::rebuild::{rebuild_session, RebuildResult};
+use openwand_session::rebuild::rebuild_session;
 use openwand_session::loro_state::LoroSessionState;
 use openwand_trace::testing::InMemoryTraceStore;
 use openwand_trace::store::TraceStore;
@@ -67,7 +66,7 @@ async fn rebuild_detects_message_count_divergence() {
     store.append(make_entry(sid, user_msg("hello"))).await.unwrap();
 
     let doc = loro::LoroDoc::new();
-    let mut stored = LoroSessionState::new(&doc);
+    let stored = LoroSessionState::new(&doc);
     stored.append_user_message("a", None::<&str>).unwrap();
     stored.append_user_message("b", None::<&str>).unwrap();
     stored.append_user_message("c", None::<&str>).unwrap();

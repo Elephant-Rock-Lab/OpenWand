@@ -28,7 +28,7 @@ fn capture_args(d: &tempfile::TempDir) -> Vec<String> {
 #[test]
 fn cli_manual_result_capture_outputs_result_id() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&capture_args(&d))
+    let out = Command::new(openwand_bin()).args(capture_args(&d))
         .arg("--json").output().expect("capture");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("wmr_"), "Expected result ID: {}", stdout);
@@ -37,7 +37,7 @@ fn cli_manual_result_capture_outputs_result_id() {
 #[test]
 fn cli_manual_result_capture_requires_expected_hashes() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&[
+    let out = Command::new(openwand_bin()).args([
         "workflow-manual-result", "capture",
         "--workflow-execution-id", "wfx_t",
         "--command-review-id", "wcrv_t",
@@ -56,7 +56,7 @@ fn cli_manual_result_capture_rejects_unacknowledged_review() {
     // layer (not connected here) would block it.
     // At CLI level, we just confirm the capture runs.
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&capture_args(&d))
+    let out = Command::new(openwand_bin()).args(capture_args(&d))
         .arg("--json").output().expect("capture");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("wmr_"));
@@ -66,11 +66,11 @@ fn cli_manual_result_capture_rejects_unacknowledged_review() {
 #[test]
 fn cli_manual_result_show_roundtrips_record() {
     let d = temp_dir();
-    let cap = Command::new(openwand_bin()).args(&capture_args(&d))
+    let cap = Command::new(openwand_bin()).args(capture_args(&d))
         .arg("--json").output().expect("capture");
     let rec: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&cap.stdout)).unwrap();
     let rid = rec["result_id"].as_str().unwrap();
-    let show = Command::new(openwand_bin()).args(&["workflow-manual-result", "show", rid,
+    let show = Command::new(openwand_bin()).args(["workflow-manual-result", "show", rid,
         "--output-dir"]).arg(d.path()).arg("--json").output().expect("show");
     let shown: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&show.stdout)).unwrap();
     assert_eq!(rid, shown["result_id"].as_str().unwrap_or(""));
@@ -79,9 +79,9 @@ fn cli_manual_result_show_roundtrips_record() {
 #[test]
 fn cli_manual_result_latest_by_command_review_returns_latest() {
     let d = temp_dir();
-    let _ = Command::new(openwand_bin()).args(&capture_args(&d))
+    let _ = Command::new(openwand_bin()).args(capture_args(&d))
         .arg("--json").output().expect("capture");
-    let out = Command::new(openwand_bin()).args(&["workflow-manual-result", "latest",
+    let out = Command::new(openwand_bin()).args(["workflow-manual-result", "latest",
         "--command-review-id", "wcrv_t",
         "--output-dir"]).arg(d.path()).arg("--json").output().expect("latest");
     assert!(String::from_utf8_lossy(&out.stdout).contains("wmr_"));
@@ -90,7 +90,7 @@ fn cli_manual_result_latest_by_command_review_returns_latest() {
 #[test]
 fn cli_manual_result_artifact_reference_is_metadata_only() {
     let d = temp_dir();
-    let out = Command::new(openwand_bin()).args(&capture_args(&d))
+    let out = Command::new(openwand_bin()).args(capture_args(&d))
         .arg("--json").output().expect("capture");
     let stdout = String::from_utf8_lossy(&out.stdout).to_lowercase();
     assert!(!stdout.contains("file_bytes"));
@@ -99,7 +99,7 @@ fn cli_manual_result_artifact_reference_is_metadata_only() {
 
 #[test]
 fn cli_manual_result_does_not_expose_execute_verify_shell_git() {
-    let out = Command::new(openwand_bin()).args(&["workflow-manual-result", "--help"]).output().expect("help");
+    let out = Command::new(openwand_bin()).args(["workflow-manual-result", "--help"]).output().expect("help");
     let stdout = String::from_utf8_lossy(&out.stdout).to_lowercase();
     assert!(!stdout.contains("execute")); assert!(!stdout.contains("verify"));
     assert!(!stdout.contains("shell")); assert!(!stdout.contains("git"));

@@ -20,7 +20,7 @@ fn proposal_eligible_requires_readiness_reference() {
     };
     let proposal = build_auto_commit_proposal(inputs);
     assert_eq!(AutoCommitProposalStatus::Eligible, proposal.status);
-    assert!(proposal.workspace_snapshot_id.len() > 0);
+    assert!(!proposal.workspace_snapshot_id.is_empty());
 }
 
 #[test]
@@ -61,8 +61,8 @@ fn proposal_has_no_execution_fields() {
     // governance_summary.execution_allowed_now is always false
     assert!(!proposal.governance_summary.execution_allowed_now);
     // No git-related fields exist on the struct
-    assert!(proposal.commit_title.len() > 0);
-    assert!(proposal.commit_body.len() > 0);
+    assert!(!proposal.commit_title.is_empty());
+    assert!(!proposal.commit_body.is_empty());
 }
 
 #[test]

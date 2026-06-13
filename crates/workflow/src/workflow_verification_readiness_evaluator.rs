@@ -14,12 +14,6 @@ use crate::workflow_verification_readiness::{
 
 #[cfg(test)]
 use crate::workflow_verification_readiness::{VerificationReadinessTargetKind, VerificationReadinessStatus, compute_readiness_id};
-#[cfg(test)]
-use crate::workflow_run::{WorkflowExecutionId, WorkflowStageRun};
-#[cfg(test)]
-use crate::workflow_action_outcome::{WorkflowActionOutcomeId, WorkflowSessionActionOutcomeSnapshot};
-#[cfg(test)]
-use crate::workflow_reconciliation::WorkflowReconciliationId;
 
 /// Evaluate full verification readiness for a manual result with review context.
 /// Patch 4: Requires latest accepted review.
@@ -246,7 +240,7 @@ mod tests {
             attested_at: chrono::Utc::now(), idempotency_key: "k".into(),
         };
         let att = build_external_attestation(req);
-        let readiness_id = compute_readiness_id("wmr_t", "wfx_t", "hash_t", "key1");
+        let _readiness_id = compute_readiness_id("wmr_t", "wfx_t", "hash_t", "key1");
         let mut vreq = test_request(VerificationReadinessTargetKind::ExternalAttestation);
         vreq.target_id = att.attestation_id.0.clone();
         let rec = evaluate_attestation_readiness(&vreq, &att);

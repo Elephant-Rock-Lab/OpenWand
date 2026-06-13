@@ -9,8 +9,9 @@ use openwand_core::mode::InteractionMode;
 use openwand_memory::evaluation::{
     EvaluationModelConfig, MemoryEvaluationReport, MemoryEvaluationScenario,
     PromptInputEvaluationSnapshot, RepoConsistencySummarySnapshot, SeedResolutionMaps,
-    ScenarioExecutionMode,
 };
+#[cfg(test)]
+use openwand_memory::evaluation::ScenarioExecutionMode;
 use openwand_memory::provenance_hydration::{HydratedMemoryClaim, MemoryTrustBucket};
 use openwand_memory::evaluation_judge::MemoryEvaluationJudge;
 use openwand_memory::{
@@ -248,7 +249,7 @@ impl MemoryEvaluationHarness {
             let event = StoredEvent(OpenWandTraceEvent::Session(SessionEvent::Started {
                 session_id: openwand_core::ids::SessionId::new(),
                 mode: InteractionMode::Direct,
-            }));;
+            }));
             let command = AppendTraceEntry {
                 actor: Actor::System {
                     component: "eval.relation".to_string(),

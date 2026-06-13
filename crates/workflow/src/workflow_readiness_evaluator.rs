@@ -550,28 +550,6 @@ mod tests {
         }
     }
 
-    fn full_context(proposal: &WorkflowProposal, review: &WorkflowProposalReview, plan_review: &TaskPlanReview) -> WorkflowReadinessContext {
-        let source_plan = build_task_plan(&TaskPlanInput {
-            user_intent: "Readiness test".into(),
-            skill_context: vec![],
-            goal_context: vec![],
-            memory_summaries: vec!["mem".into()],
-            trace_summaries: vec!["trace".into()],
-            governance_summaries: vec![],
-            policy_constraints: vec!["No shell".into()],
-        }).unwrap();
-        WorkflowReadinessContext {
-            proposal: Some(proposal.clone()),
-            review: Some(review.clone()),
-            latest_review_for_proposal: Some(review.clone()),
-            source_task_plan: Some(source_plan),
-            source_task_plan_review: Some(plan_review.clone()),
-            latest_source_task_plan_review: Some(plan_review.clone()),
-            environment: full_environment(),
-            existing_readiness_records: vec![],
-        }
-    }
-
     // We need the source task plan
     fn full_ready_context() -> (WorkflowReadinessRequest, WorkflowReadinessContext) {
         let (proposal, review) = test_proposal_and_review();
@@ -795,11 +773,10 @@ mod tests {
     #[test]
     fn blocks_executable_tool_intent() {
         let (request, mut context) = full_ready_context();
-        if let Some(ref mut proposal) = context.proposal {
-            if let Some(stage) = proposal.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
+        if let Some(ref mut proposal) = context.proposal
+            && let Some(stage) = proposal.stages.iter_mut().find(|s| !s.tool_intents.is_empty()) {
                 stage.tool_intents[0].capability = "shell".into();
             }
-        }
         let record = evaluate_workflow_readiness(&request, &context);
         assert!(record.predicates.iter().any(|p|
             p.predicate == WorkflowReadinessPredicate::ToolIntentsRemainNonExecutable && !p.passed));

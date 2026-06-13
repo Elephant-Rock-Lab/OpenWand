@@ -11,7 +11,7 @@
 //! - Projection checkpoint advances
 
 use openwand_memory::{
-    CandidateKind, CandidateMemory, EpisodeRole, MemoryEpisode, MemoryKind,
+    CandidateKind, CandidateMemory, EpisodeRole, MemoryEpisode,
     MemoryQuery, MemoryStore,
 };
 #[cfg(feature = "sqlite")]

@@ -343,3 +343,14 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 89A | Real-Time Inspector Refresh | `wave-89a-lock` | 3,999 | crates/app/tests/inspector_refresh.rs |
 | 90B | v0.4.0 Release Preparation | `wave-90b-lock` | 3,999 | RELEASE_NOTES_v040_STABLE.md |
 | **v0.4.0** | **Stable Release** | **`v0.4.0`** | **3,999** | **RELEASE_NOTES_v040_STABLE.md** |
+
+---
+
+## Phase: v0.5.0 Runtime Integrity Hardening
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 91A | Post-v0.4 Roadmap Reset | `wave-91a-lock` | 3,999 | docs/V050_ROADMAP.md |
+| 92A | Trace Verifier Core: Append-Only + Hash Chain | `wave-92a-lock` | 4,015 | crates/trace/src/verifier.rs |
+| 92B | Trace Verifier Tamper Detection + CLI Command | `wave-92b-lock` | 4,025 | crates/app/tests/trace_verify_cli.rs |
+| 93A | Operation Replay: Desktop Ops ↔ Trace Events | `wave-93a-lock` | 4,054 | crates/trace/src/replay.rs |

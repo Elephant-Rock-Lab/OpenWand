@@ -4,7 +4,7 @@
 0.4.0 (stable) — planning v0.5.0
 
 ## Status
-**v0.4.0 stable released. v0.5.0 in progress. Wave 93A (operation replay) locked.**
+**v0.4.0 stable released. v0.5.0 in progress. Wave 93B (audit check) locked.**
 
 Release: v0.4.0 — tag `v0.4.0`
 
@@ -38,7 +38,7 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 - 3,939 carried from v0.3.0
 - +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.5.0 current (Wave 93A):** 4,054 tests, 0 failures.
+**v0.5.0 current (Wave 93B):** 4,060 tests, 0 failures.
 - 3,999 carried from v0.4.0
 - +26 from v0.5.0 (92A: +16, 92B: +10)
 - +29 from 93A (trace replay: +19, app operation replay: +10)

@@ -354,3 +354,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 92A | Trace Verifier Core: Append-Only + Hash Chain | `wave-92a-lock` | 4,015 | crates/trace/src/verifier.rs |
 | 92B | Trace Verifier Tamper Detection + CLI Command | `wave-92b-lock` | 4,025 | crates/app/tests/trace_verify_cli.rs |
 | 93A | Operation Replay: Desktop Ops ↔ Trace Events | `wave-93a-lock` | 4,054 | crates/trace/src/replay.rs |
+| 93B | Operation Audit Check: Structural + Correspondence | `wave-93b-lock` | 4,060 | crates/app/src/operation_audit.rs |

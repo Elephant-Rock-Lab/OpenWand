@@ -34,7 +34,7 @@ mod authority_guards {
             .split("async fn cmd_trace_verify")
             .nth(1)
             .unwrap_or("")
-            .split("// ── Subcommand: session-rebuild")
+            .split("async fn cmd_audit_check")
             .next()
             .unwrap_or("");
 

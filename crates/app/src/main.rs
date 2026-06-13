@@ -55,6 +55,12 @@ enum Commands {
         session_id: String,
     },
 
+    #[command(name = "audit-check")]
+    AuditCheck {
+        /// Session ID to audit
+        session_id: String,
+    },
+
     /// Rebuild session projection from trace
     #[command(name = "session-rebuild")]
     SessionRebuild {
@@ -1026,6 +1032,7 @@ async fn main() -> Result<()> {
         Commands::Run { message } => cmd_run(&cli, message).await,
         Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
+        Commands::AuditCheck { session_id } => cmd_audit_check(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
         Commands::WorkflowProposal { workflow_proposal_cmd } => { cmd_workflow_proposal(workflow_proposal_cmd)?; Ok(()) },
@@ -1389,6 +1396,11 @@ async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
     std::process::exit(exit_code);
 }
 
+
+async fn cmd_audit_check(_cli: &Cli, _session_id: &str) -> Result<()> {
+    eprintln!("error: the 'audit-check' command is not yet implemented.");
+    std::process::exit(1);
+}
 
 // ── Subcommand: session-rebuild ──────────────────────────────
 

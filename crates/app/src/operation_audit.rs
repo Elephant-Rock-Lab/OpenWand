@@ -43,12 +43,11 @@ impl OperationReplayVerifier {
             DesktopOperation::EvidenceExport { workflow_execution_id, artifact_path, artifact_hash } => Self::verify_exp(workflow_execution_id, artifact_path.as_deref(), artifact_hash.as_deref(), entries),
         }
     }
-
     fn verify_wf(eid: &str, entries: &[TraceEntry<StoredEvent>]) -> (Vec<OperationReplayFinding>, ReplayResult) {
         let mut f = Vec::new();
         let wf: Vec<_> = entries.iter().filter(|e| e.event_kind.starts_with("workflow.")).collect();
         if wf.is_empty() {
-            f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No workflow.* events for execution {eid}. appends_trace=false.") });
+            f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No workflow.* events for {eid}. appends_trace=false.") });
             return (f, ReplayResult::Inconclusive);
         }
         let m: Vec<_> = wf.iter().filter(|e| { if let OpenWandTraceEvent::Workflow(w) = &e.event.0 { Self::wf_ref(w, eid) } else { false } }).collect();
@@ -62,30 +61,19 @@ impl OperationReplayVerifier {
             f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::OrderingValid, detail: format!("mod_completed seq={cc} before mod_started seq={ss}") });
             return (f, ReplayResult::Fail);
         }
-        f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("{} workflow events for {eid}, valid ordering.", m.len()) });
+        f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("{} workflow events for {eid}, valid.", m.len()) });
         (f, ReplayResult::Pass)
     }
-
     fn verify_appr(arid: &str, tcid: Option<&str>, entries: &[TraceEntry<StoredEvent>]) -> (Vec<OperationReplayFinding>, ReplayResult) {
         let mut f = Vec::new();
         let am = entries.iter().find(|e| match &e.event.0 {
-            OpenWandTraceEvent::Tool(ToolEvent::Resumed { approval_request_id: Some(a), .. })
-            | OpenWandTraceEvent::Tool(ToolEvent::Denied { approval_request_id: Some(a), .. }) => a.0 == arid,
-            _ => false,
+            OpenWandTraceEvent::Tool(ToolEvent::Resumed { approval_request_id: Some(a), .. }) | OpenWandTraceEvent::Tool(ToolEvent::Denied { approval_request_id: Some(a), .. }) => a.0 == arid, _ => false,
         });
         if let Some(re) = am {
-            let tc = match &re.event.0 {
-                OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id, .. }) | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id, .. }) => tool_call_id.0.clone(),
-                _ => String::new(),
-            };
-            let susp = entries.iter().find(|e| match &e.event.0 {
-                OpenWandTraceEvent::Tool(ToolEvent::Suspended { tool_call_id: s, .. }) => s.0 == tc, _ => false,
-            });
+            let tc = match &re.event.0 { OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id, .. }) | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id, .. }) => tool_call_id.0.clone(), _ => String::new() };
+            let susp = entries.iter().find(|e| match &e.event.0 { OpenWandTraceEvent::Tool(ToolEvent::Suspended { tool_call_id: s, .. }) => s.0 == tc, _ => false });
             if let Some(s) = susp {
-                if s.global_sequence >= re.global_sequence {
-                    f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::OrderingValid, detail: format!("suspended seq={} after resolution seq={}", s.global_sequence, re.global_sequence) });
-                    return (f, ReplayResult::Fail);
-                }
+                if s.global_sequence >= re.global_sequence { f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::OrderingValid, detail: format!("suspended seq={} after resolution seq={}", s.global_sequence, re.global_sequence) }); return (f, ReplayResult::Fail); }
                 f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ApprovalMatchedByArid, detail: format!("Approval {arid} matched by ARID. Valid ({}->{}).", s.global_sequence, re.global_sequence) });
                 return (f, ReplayResult::Pass);
             }
@@ -93,18 +81,11 @@ impl OperationReplayVerifier {
             return (f, ReplayResult::Inconclusive);
         }
         if let Some(tc) = tcid {
-            let susp = entries.iter().find(|e| match &e.event.0 {
-                OpenWandTraceEvent::Tool(ToolEvent::Suspended { tool_call_id: s, .. }) => s.0 == tc, _ => false,
-            });
-            let resol = entries.iter().find(|e| match &e.event.0 {
-                OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id: r, .. }) | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id: r, .. }) => r.0 == tc, _ => false,
-            });
+            let susp = entries.iter().find(|e| match &e.event.0 { OpenWandTraceEvent::Tool(ToolEvent::Suspended { tool_call_id: s, .. }) => s.0 == tc, _ => false });
+            let resol = entries.iter().find(|e| match &e.event.0 { OpenWandTraceEvent::Tool(ToolEvent::Resumed { tool_call_id: r, .. }) | OpenWandTraceEvent::Tool(ToolEvent::Denied { tool_call_id: r, .. }) => r.0 == tc, _ => false });
             if let (Some(s), Some(r)) = (susp, resol) {
-                if s.global_sequence >= r.global_sequence {
-                    f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::OrderingValid, detail: format!("suspended seq={} after resolution seq={}", s.global_sequence, r.global_sequence) });
-                    return (f, ReplayResult::Fail);
-                }
-                f.push(OperationReplayFinding { severity: ReplaySeverity::Warning, check: ReplayCheck::ApprovalMatchedByToolCallId, detail: format!("Matched by tool_call_id={tc}; canonical ARID not in trace. Valid ({}->{}).", s.global_sequence, r.global_sequence) });
+                if s.global_sequence >= r.global_sequence { f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::OrderingValid, detail: format!("suspended seq={} after resolution seq={}", s.global_sequence, r.global_sequence) }); return (f, ReplayResult::Fail); }
+                f.push(OperationReplayFinding { severity: ReplaySeverity::Warning, check: ReplayCheck::ApprovalMatchedByToolCallId, detail: format!("Matched by tool_call_id={tc}; ARID not in trace. Valid ({}->{}).", s.global_sequence, r.global_sequence) });
                 return (f, ReplayResult::Pass);
             }
             if susp.is_some() != resol.is_some() {
@@ -115,26 +96,13 @@ impl OperationReplayVerifier {
         f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No evidence for arid={arid}{}", tcid.map(|t| format!(" or tcid={t}")).unwrap_or_default()) });
         (f, ReplayResult::Fail)
     }
-
     fn verify_exp(eid: &str, ap: Option<&str>, _ah: Option<&str>, entries: &[TraceEntry<StoredEvent>]) -> (Vec<OperationReplayFinding>, ReplayResult) {
         let mut f = Vec::new();
         let ae: Vec<_> = entries.iter().filter(|e| e.event_kind == "artifact.generated").collect();
-        if ae.is_empty() {
-            f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No artifact.generated for export of {eid}. Export does not emit trace.") });
-            return (f, ReplayResult::Unsupported);
-        }
-        let m = ae.iter().any(|e| {
-            if let OpenWandTraceEvent::Artifact(openwand_core::events::ArtifactEvent::Generated { paths, artifact_kind, .. }) = &e.event.0 {
-                let km = artifact_kind.contains("audit") || artifact_kind.contains("evidence") || artifact_kind.contains("export");
-                let pm = ap.map(|x| paths.iter().any(|p| p == x)).unwrap_or(true);
-                km && pm
-            } else { false }
-        });
-        if m {
-            f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("Found artifact.generated matching export for {eid}.") });
-            return (f, ReplayResult::Pass);
-        }
-        f.push(OperationReplayFinding { severity: ReplaySeverity::Warning, check: ReplayCheck::ExpectedEventsPresent, detail: format!("artifact.generated events exist but none match export for {eid}.") });
+        if ae.is_empty() { f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No artifact.generated for {eid}. Export does not emit trace.") }); return (f, ReplayResult::Unsupported); }
+        let m = ae.iter().any(|e| { if let OpenWandTraceEvent::Artifact(openwand_core::events::ArtifactEvent::Generated { paths, artifact_kind, .. }) = &e.event.0 { let km = artifact_kind.contains("audit") || artifact_kind.contains("evidence") || artifact_kind.contains("export"); let pm = ap.map(|x| paths.iter().any(|p| p == x)).unwrap_or(true); km && pm } else { false } });
+        if m { f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("Found artifact.generated for {eid}.") }); return (f, ReplayResult::Pass); }
+        f.push(OperationReplayFinding { severity: ReplaySeverity::Warning, check: ReplayCheck::ExpectedEventsPresent, detail: format!("artifact.generated events exist but none match {eid}.") });
         (f, ReplayResult::Inconclusive)
     }
     fn wf_ref(wf: &WorkflowEvent, eid: &str) -> bool {
@@ -144,6 +112,7 @@ impl OperationReplayVerifier {
         }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -164,14 +133,14 @@ mod tests {
     }
 
     #[test] fn no_exec_calls() {
-        let s = include_str!("operation_replay.rs");
+        let s = include_str!("operation_audit.rs");
         let impl_only = s.split("#[cfg(test)]").next().unwrap_or("");
         assert!(!impl_only.contains("export_audit_packet")); assert!(!impl_only.contains("request_workflow_run"));
         assert!(!impl_only.contains("submit_approval_resolution")); assert!(!impl_only.contains("resolve_approval"));
         assert!(!impl_only.contains("ToolExecutor")); assert!(!impl_only.contains("advance_stages")); assert!(!impl_only.contains("save_workflow_run"));
     }
     #[test] fn is_read_only() {
-        let s = include_str!("operation_replay.rs");
+        let s = include_str!("operation_audit.rs");
         let impl_only = s.split("#[cfg(test)]").next().unwrap_or("");
         assert!(!impl_only.contains(".append(")); assert!(!impl_only.contains("fn repair")); assert!(!impl_only.contains("fn execute")); assert!(!impl_only.contains("std::fs::write"));
     }

@@ -96,7 +96,7 @@ See [GOVERNANCE.md](GOVERNANCE.md), [ROADMAP.md](ROADMAP.md), and [WAVES.md](WAV
 
 ## Test Baseline
 
-**3,939 tests (Windows), 3,934 tests (Linux), zero failures** (v0.3.0 stable)
+**3,999 tests (Windows), zero failures** (v0.4.0 stable)
 
 ## License
 

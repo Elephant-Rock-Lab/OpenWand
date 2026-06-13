@@ -1,16 +1,16 @@
 # OpenWand — Project State
 
 ## Version
-0.3.0 (stable) — planning v0.4.0
+0.4.0 (stable)
 
 ## Status
-**v0.3.0 stable released. v0.4.0 roadmap defined. Next arc: from observation to operation.**
+**v0.4.0 stable released. Theme: from observation to operation. Desktop UI can request workflow operations through delegated authority.**
 
-Release: v0.3.0 — tag `v0.3.0`
+Release: v0.4.0 — tag `v0.4.0`
 
-Binary: 18,941,440 bytes (~18.0 MB), SHA-256 `A5B594A33495E8AE61FB96C77F66042247AEBA768A8E59580F4C6995431FAAC5`
+Binary: 17,853,952 bytes (~17.0 MB), SHA-256 `6C928123E05FD16B5AA2B223C19E3A990F222C679C90818FC56696CDB028C934`
 
-Stable for v0.3.0 milestone scope. Not production-ready. Not formal security review.
+Stable for v0.4.0 milestone scope. Not production-ready. Not formal security review.
 
 ## Workspace Structure
 ```
@@ -34,58 +34,39 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 
 ## Test Count
 
-**Canonical verification commands:**
-```bash
-cargo check --workspace --all-targets --all-features
-cargo build --workspace --all-targets --all-features
-cargo test -p openwand-core --lib
-cargo test -p openwand-session --lib --features testing
-cargo test -p openwand-tools --lib
-cargo test -p openwand-app --lib
-cargo clippy -p openwand-core -p openwand-session -p openwand-tools \
-  -p openwand-trace -p openwand-store -p openwand-memory \
-  -p openwand-llm -p openwand-policy -p openwand-skills \
-  -p openwand-goals -p openwand-workflow --all-features -- -D warnings
-cargo audit
-```
+**v0.4.0 stable baseline (Wave 90B):** 3,999 tests on Windows, 0 failures.
+- 3,939 carried from v0.3.0
+- +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.2.0 stable baseline (Wave 82D):** 2,279 lib + 1,638 integration tests, 0 failures.
+**Clippy posture:** 0 actionable production warnings on 11 non-app crates (HB-G5).
+50 app crate pedantic/test-only warnings accepted as cosmetic.
 
-**v0.3.0 stable baseline (Wave 86B):** 3,939 tests on Windows, 3,934 tests on Linux (Ubuntu WSL2), 0 failures.
-- Cross-platform validation complete
-- Linux desktop feature compilation: PASS (GUI runtime not validated)
-- Unix sandbox E2E: PASS (openat-based WorkspaceWriteHandle tested on Linux)
-- 5 live-wired workflow surfaces: proposal, readiness, outcome, reconciliation, loop controller
+**Desktop feature build:** PASS (0 errors, 0 warnings).
 
-**Clippy posture:** 0 actionable production warnings. 43 pedantic/test-only warnings accepted.
-
-## Post-Alpha Stabilization Arc
+## v0.4.0 Operation Arc
 
 | Wave | Title | Tag | Deliverable |
 |------|-------|-----|-------------|
-| 76A | Post-Alpha Issue Intake | `wave-76a-lock` | 5 issue templates + triage guide |
-| 76B | Windows TOCTOU Feasibility | `wave-76b-lock` | NT API feasibility document |
-| 76C | Multi-Provider Matrix | `wave-76c-lock` | 2 local models validated (4/4 PASS each) |
-| 76D | Desktop Interaction E2E | `wave-76d-lock` | 6 desktop interaction tests |
+| 87A | Post-v0.3 Roadmap Reset | `wave-87a-lock` | v0.4.0 roadmap, VD-1/2/3 proposed |
+| 88A | Workflow Run Initiation from Desktop | `wave-88a-lock` | Desktop → UiSessionService → execution gate → run saved |
+| 88B | Approval Resolution from Desktop | `wave-88b-lock` | Desktop → explicit ARID + decision → SessionRunner → governed path |
+| 88C | Evidence Export from Desktop | `wave-88c-lock` | Desktop → UiSessionService → export_audit_packet → validated output |
+| 89A | Real-Time Inspector Refresh | `wave-89a-lock` | Auto-refresh after operations + manual refresh button |
+| 90B | v0.4.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
 
-## Beta Gap Summary
+## v0.4.0 Blocker Resolution
 
-**Beta-blocking items (1 of 10 unresolved):**
+| Blocker | Status | Resolution |
+|---------|--------|------------|
+| VD-1: Live workflow execution depth | ✅ RESOLVED | 88A-89A: initiate, approve/reject, export, refresh |
+| VD-2: Linux GUI runtime validation | DEFERRED | Compile-validated (85A), no display server for runtime |
+| VD-3: Trace verifier implementation | DEFERRED to v0.5 | Belongs in runtime integrity hardening theme |
 
-| # | Criterion | Status |
-|---|-----------|--------|
-| BC-1 | No unresolved release blockers | ✅ 6/6 resolved |
-| BC-2 | At least one hosted provider validated | ✅ Z.AI glm-4.5-air + glm-5.1 |
-| BC-3 | Desktop UI interaction path validated | ✅ Windows UI Automation (77C) |
-| BC-6 | Documentation current through 77C | ✅ This wave |
-| BC-7 | Beta release notes written | ⬌ Beta release wave |
-| BC-8 | Windows TOCTOU path revisited | ✅ Documented (76B) |
-| BC-9 | Multi-provider matrix expanded | ✅ 2 local + 2 hosted models |
-| BC-10 | Non-Windows platform testing | ⬜ Deferred |
+## Release Lineage
 
-**Beta path:** 77A (docs) → 77B (hosted provider ✅) → 77C (desktop UX ✅) → 77D (beta tag)
-
-See `docs/BETA_GAP_LEDGER.md` for full gap analysis.
+```
+v0.1.0-alpha → v0.1.0-beta → v0.2.0-beta → v0.2.0-rc.1 → v0.2.0 → v0.3.0 → v0.4.0
+```
 
 ## Hard Boundaries (Global)
 - HB-G1: Binary < 20MB

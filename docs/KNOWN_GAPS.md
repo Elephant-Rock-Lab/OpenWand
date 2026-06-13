@@ -36,12 +36,12 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 
 ---
 
-## Current Gaps (Updated Wave 86B — post-v0.3.0 stable)
+## Current Gaps (Updated Wave 90B — post-v0.4.0 stable)
 
 | # | Gap | Category | Status |
 |---|-----|----------|--------|
 | C1 | ~~9 placeholder UI surfaces (3-line stubs)~~ | Feature | ✅ Closed 80A-80C — all 10 surfaces implemented |
-| C2 | `openwand-app` 43 test-module clippy warnings | Cosmetic | Accepted (DEFERRED-001) — reduced from 57 in 81A |
+| C2 | `openwand-app` 50 test-module clippy warnings | Cosmetic | Accepted (DEFERRED-001) — grew from 43 in 86B due to new waves |
 | C3 | `openwand-content` crate is a stub (add() only) | Feature | Accepted — README corrected 83A |
 | C4 | Trace store append-only is structural, not enforced by runtime verifier | Architecture | Accepted (claim corrected in README) |
 | C5 | 15 cargo audit warnings (all transitive, via Dioxus/Loro) | Dependency | Accepted (DEFERRED-002) — 0 vulnerabilities, verified 82A |
@@ -61,4 +61,14 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 - Pre-50A gaps: **All resolved.**
 - Current gaps: **8 closed, 5 accepted.**
   - Closed: C1 (80A-80C), C6 (published), C7 (69G), C8 (70B), C9 (84A-84C), C10 (85A partial), C11 (85A), C12 (accepted)
-  - Accepted: C2 (cosmetic), C3 (stub crate), C4 (architecture), C5 (upstream deps), C12 (macOS deferred)
+  - Accepted: C2 (cosmetic, 50 warnings), C3 (stub crate), C4 (architecture), C5 (upstream deps), C12 (macOS deferred)
+
+---
+
+## v0.4.0 New Items
+
+| # | Gap | Category | Status |
+|---|-----|----------|--------|
+| C13 | ARID/tool-call-ID mismatch in 88B approval | Precision | Accepted — runner recovery index resolves it; refinement deferred |
+| C14 | Synchronous workflow run initiation in 88A | Performance | Accepted — may block UI briefly; background task deferred |
+| C15 | Linux GUI runtime not validated | Validation | Deferred — compile-validated (85A), no display server |

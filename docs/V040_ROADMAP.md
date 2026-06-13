@@ -1,7 +1,7 @@
 # v0.4.0 Roadmap — Post-v0.3 Reset
 
 **Created:** 2026-06-13 (Wave 87A)
-**Status:** Planning
+**Status:** Complete (v0.4.0 declared)
 **Predecessor:** v0.3.0 stable (`4d2efd6`)
 
 ---
@@ -169,4 +169,17 @@ v0.3.x patches are optional. The v0.3.0 stable caveats are sufficient unless a r
 
 ---
 
-*This roadmap defines v0.4.0 priorities. It does not commit to specific wave content or ordering. Actual implementation depends on environment access (Linux display, provider credentials), emerging priorities, and external feedback on v0.3.0. It adds no feature behavior, no new authority, no policy change, no prompt change, and no unsupported production-readiness claim.*
+## v0.4.0 Resolution Summary
+
+| Blocker | Status | Resolution |
+|---------|--------|------------|
+| VD-1 | ✅ RESOLVED | 88A: workflow initiation, 88B: approval resolution, 88C: evidence export, 89A: real-time refresh |
+| VD-2 | DEFERRED | Linux compile-validated (85A). GUI runtime requires display server. |
+| VD-3 | DEFERRED to v0.5 | Trace verifier is runtime integrity theme, not operation theme. |
+
+**Test baseline:** 3,999 tests, 0 failures.
+**Binary:** 17,853,952 bytes, SHA-256 `6C928123E05FD16B5AA2B223C19E3A990F222C679C90818FC56696CDB028C934`.
+
+---
+
+*This roadmap is now a historical document. v0.4.0 has been declared. It adds no feature behavior, no new authority, no policy change, no prompt change, and no unsupported production-readiness claim.*

@@ -231,7 +231,7 @@ pub fn proposal_and_review_by_workflow_run(
     store_root: &std::path::Path,
     execution_id: &str,
 ) -> Result<Option<(WorkflowProposal, Option<WorkflowProposalReview>)>, String> {
-    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowRunRecord};
+    use openwand_workflow::workflow_run::WorkflowRunRecord;
     let run_path = store_root
         .join("workflow_runs")
         .join("records")

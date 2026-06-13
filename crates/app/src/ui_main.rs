@@ -241,6 +241,7 @@ fn App() -> Element {
                                                 execution_timeline_state: &EXECUTION_TIMELINE_STATE,
                                                 proposal_state: &PROPOSAL_STATE,
                                                 readiness_state: &READINESS_STATE,
+                                                outcome_state: &OUTCOME_STATE,
                                             };
                                             sigs.load_inspector_shell(&path, &wfx_id);
                                             *STATUS_TEXT.write() = "Inspector loaded".into();
@@ -332,6 +333,7 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                             execution_timeline_state: &EXECUTION_TIMELINE_STATE,
                             proposal_state: &PROPOSAL_STATE,
                             readiness_state: &READINESS_STATE,
+                            outcome_state: &OUTCOME_STATE,
                         };
                         sigs.clear_inspector_shell();
                         match svc.open_session(&id).await {
@@ -412,6 +414,7 @@ fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_execution_components::*;
     use openwand_app::ui::workflow_proposal_components::*;
     use openwand_app::ui::workflow_readiness_components::*;
+    use openwand_app::ui::workflow_action_outcome_components::*;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
     let reviews = REVIEW_ROWS.read().clone();
@@ -431,6 +434,7 @@ fn render_inspector_pane() -> Element {
     let execution_timeline = EXECUTION_TIMELINE_STATE.read().clone();
     let proposal_state = PROPOSAL_STATE.read().clone();
     let readiness_state = READINESS_STATE.read().clone();
+    let outcome_state = OUTCOME_STATE.read().clone();
     let wfx_id = CURRENT_SESSION.read().as_ref().map(|v| v.summary.session_id.clone()).unwrap_or_default();
 
     match inspector_state {
@@ -472,6 +476,10 @@ fn render_inspector_pane() -> Element {
                 // Workflow readiness (live data — Wave 84A)
                 if let Some(ref readiness) = readiness_state {
                     { render_workflow_readiness_panel(readiness) }
+                }
+                // Workflow action outcome (live data — Wave 84B)
+                if let Some(ref outcome) = outcome_state {
+                    { render_action_outcome_panel(outcome) }
                 }
             }
         },
@@ -673,6 +681,7 @@ static EXECUTION_TIMELINE_STATE: GlobalSignal<Option<openwand_app::ui::workflow_
 // Workflow proposal + readiness states (Wave 84A — live wiring)
 static PROPOSAL_STATE: GlobalSignal<Option<openwand_app::ui::workflow_proposal_state::WorkflowProposalUiState>> = Signal::global(|| None);
 static READINESS_STATE: GlobalSignal<Option<openwand_app::ui::workflow_readiness_state::WorkflowReadinessUiState>> = Signal::global(|| None);
+static OUTCOME_STATE: GlobalSignal<Option<openwand_app::ui::workflow_action_outcome_state::WorkflowActionOutcomeUiState>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

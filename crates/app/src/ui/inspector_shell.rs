@@ -44,6 +44,7 @@ pub struct InspectorSignals<'a> {
     pub execution_timeline_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_execution_state::WorkflowExecutionUiState>>,
     pub proposal_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_proposal_state::WorkflowProposalUiState>>,
     pub readiness_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_readiness_state::WorkflowReadinessUiState>>,
+    pub outcome_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_action_outcome_state::WorkflowActionOutcomeUiState>>,
 }
 
 // ── Desktop-gated loading ────────────────────────────────────────────────
@@ -62,6 +63,7 @@ impl<'a> InspectorSignals<'a> {
                 self.load_routing_ladder(path, wfx_id);
                 self.load_execution_timeline(path, wfx_id);
                 self.load_proposal_and_readiness(path, wfx_id);
+                self.load_action_outcome(path, wfx_id);
             }
             Err(_) => {
                 *self.inspector_state.write() = None;
@@ -89,6 +91,7 @@ impl<'a> InspectorSignals<'a> {
         *self.execution_timeline_state.write() = None;
         *self.proposal_state.write() = None;
         *self.readiness_state.write() = None;
+        *self.outcome_state.write() = None;
     }
 
     fn load_audit(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
@@ -233,6 +236,29 @@ impl<'a> InspectorSignals<'a> {
             }
             _ => {
                 *self.readiness_state.write() = None;
+            }
+        }
+    }
+
+    /// Load workflow action outcome for the selected workflow run.
+    /// Read-only: uses outcome_by_workflow_run to load persisted records.
+    /// If no data exists, sets state to None (honest empty/unavailable).
+    fn load_action_outcome(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
+        match crate::workflow_action_outcome::outcome_by_workflow_run(path, &wfx_id.0) {
+            Ok(Some(record)) => {
+                use crate::ui::workflow_action_outcome_state::*;
+                let ui_state = WorkflowActionOutcomeUiState {
+                    latest_outcome: Some(workflow_action_outcome_summary(&record)),
+                    predicates: workflow_action_outcome_predicate_rows(&record),
+                    approval_resolution: Some(workflow_approval_resolution_lines(&record)),
+                    session_outcome: workflow_session_action_outcome_lines(&record),
+                    trace_links: workflow_outcome_trace_link_rows(&record),
+                    warnings: vec![],
+                };
+                *self.outcome_state.write() = Some(ui_state);
+            }
+            _ => {
+                *self.outcome_state.write() = None;
             }
         }
     }

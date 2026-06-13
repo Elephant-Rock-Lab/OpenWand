@@ -5,6 +5,7 @@
 //! for path containment, independent of policy auto-allow decisions.
 
 use std::path::{Component, Path, PathBuf};
+use std::ffi::OsStr;
 
 /// How the resolved path will be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,8 +430,6 @@ impl WorkspaceWriteHandle {
         resolved: &Path,
         content: &str,
     ) -> Result<(), WriteSafeError> {
-        use std::os::unix::io::{AsRawFd, FromRawFd};
-
         let root_fd = self.root_fd.ok_or_else(|| {
             WriteSafeError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -848,10 +847,18 @@ mod handle_tests {
             Err(WriteSafeError::SymlinkDetected { component }) => {
                 assert_eq!("link_dir", component);
             }
+            Err(WriteSafeError::Validation(e)) => {
+                // On some Unix systems, canonicalization detects the symlink
+                // escape before the per-component check fires. This is still
+                // a correct rejection — the symlink IS blocked.
+                assert!(
+                    e.message.contains("Symlink") || e.message.contains("symlink") || e.message.contains("escapes"),
+                    "Expected symlink-related rejection, got: {:?}",
+                    e
+                );
+            }
             Err(e) => {
-                // On some platforms the error may manifest differently
-                // but it MUST NOT succeed
-                panic!("Expected SymlinkDetected, got: {:?}", e);
+                panic!("Expected SymlinkDetected or PathContainmentError, got: {:?}", e);
             }
             Ok(()) => {
                 panic!("Write should have been blocked — symlink at intermediate component");
@@ -1225,6 +1232,7 @@ mod tests {
 
     // ── Windows prefix rejection (Patch 8) ─────────────────────────────
 
+    #[cfg(windows)]
     #[test]
     fn rejects_windows_drive_prefix_path() {
         let ws = setup_workspace();
@@ -1234,6 +1242,7 @@ mod tests {
         assert!(err.message.contains("Absolute") || err.message.contains("Drive") || err.message.contains("Prefix"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn rejects_unc_path() {
         let ws = setup_workspace();

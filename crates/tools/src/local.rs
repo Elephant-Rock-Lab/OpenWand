@@ -1963,6 +1963,9 @@ mod git_observation_tests {
     fn git_path_filter_rejects_absolute() {
         let dir = std::path::Path::new("/tmp");
         assert!(validate_git_path_filter("/etc/passwd", dir).is_err());
+        // Windows-style absolute paths are only absolute on Windows.
+        // On Unix, backslash is a valid filename character, not a separator.
+        #[cfg(windows)]
         assert!(validate_git_path_filter("C:\\Windows\\System32", dir).is_err());
     }
 

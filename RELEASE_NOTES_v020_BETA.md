@@ -15,7 +15,7 @@
 OpenWand's Windows filesystem sandbox now uses NtCreateFile handle-relative directory traversal with per-component reparse point detection. This closes the intermediate-directory TOCTOU race condition identified in the v0.1.0-beta release.
 
 - **Unix (73B):** Fully closed via `openat` + `O_NOFOLLOW` per component. No residual.
-- **Windows (78C):** Closed via NtCreateFile + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` for directory traversal, `NtQueryInformationFile(FileBasicInformation)` for reparse detection. Final-component residual accepted (same as 72B).
+- **Windows (78C):** Closed via NtCreateFile + `RootDirectory` + `FILE_OPEN_REPARSE_POINT` for directory traversal, `NtQueryInformationFile(FileBasicInformation)` for reparse detection. Final-component behavior remains on the 72B no-follow hardening path (`write_file_no_follow` with `FILE_FLAG_NO_REPARSE_POINT`), not a newly closed NtCreateFile final-write path.
 - **Implementation:** `crates/tools/src/sandbox_ntapi.rs` (~430 lines), `crates/tools/src/sandbox.rs` `WorkspaceWriteHandle`.
 
 ### Provider Scope Sufficient for v0.2.0 (VB-2)
@@ -73,9 +73,9 @@ All surfaces use Wave 52A design-system tokens, follow the pure-helpers + deskto
 
 ## Accepted Caveats
 
-### 1. Dependency Security Audit Not Run
+### 1. Dependency Security Audit
 
-`cargo audit` was not available in the build environment. Dependency vulnerability status is unknown. This is why this release is classified as **beta** rather than stable.
+`cargo audit` was run (0.22.1, RustSec 1,131 advisories). **0 vulnerabilities found.** 15 warnings (13 unmaintained, 2 unsound) — all transitive dependencies through dioxus-desktop/wry or loro. 12 of 15 are Linux-only GTK3 bindings not in the Windows binary. Full report: `docs/DEPENDENCY_AUDIT_REPORT.md`.
 
 ### 2. Pedantic Clippy Warnings
 
@@ -95,7 +95,7 @@ Anthropic, Ollama, and direct OpenAI validation are post-v0.2 compatibility hard
 
 ### 6. Windows Final-Component TOCTOU Residual
 
-The final file write uses `CreateFileW` with `FILE_FLAG_NO_REPARSE_POINT` (not NtCreateFile) due to NTFS ACL generic-to-specific right mapping. This is the same residual accepted in v0.1.0-beta (Wave 72B).
+The final file write uses `write_file_no_follow()` with `FILE_FLAG_NO_REPARSE_POINT` (the 72B no-follow hardening path), not a NtCreateFile final-write path, due to NTFS ACL generic-to-specific right mapping. This is the same final-component behavior accepted in v0.1.0-beta.
 
 ---
 
@@ -110,7 +110,7 @@ The final file write uses `CreateFileW` with `FILE_FLAG_NO_REPARSE_POINT` (not N
 ## What This Release Is Not
 
 - Not production-ready
-- Not security-audited (cargo audit not run)
+- Not a formal security review (cargo audit covers dependency advisories only)
 - Not validated across all platforms (Windows only)
 - Not validated across all providers (5 models, 2 families)
 - Not a stable API guarantee

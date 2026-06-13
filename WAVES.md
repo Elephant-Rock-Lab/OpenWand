@@ -306,3 +306,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 79A | Hosted OpenAI-Compatible API Validation | `wave-79a-lock` | 2,466 | `docs/PROVIDER_VALIDATION_MATRIX.md` |
 | 79B | Provider Scope Closure and Product Surface Pivot | `wave-79b-lock` | 2,466 | `docs/V020_ROADMAP.md` |
 | 80A | Placeholder Surfaces I (outcome, verification, continuation) | `wave-80a-lock` | 2,265 | `crates/app/src/ui/workflow_*_components.rs` |
+| 80B | Placeholder Surfaces II (proposal, readiness, command composer, command review) | `wave-80b-lock` | 2,265 | `crates/app/src/ui/workflow_*_components.rs` |

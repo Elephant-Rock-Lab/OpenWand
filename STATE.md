@@ -4,11 +4,11 @@
 0.2.0-rc.1
 
 ## Status
-**v0.2.0-rc.1 declared. Dependency audit clean (0 vulnerabilities). Pending external review for stable.**
+**v0.2.0-rc.1 external review: PASS WITH CAVEATS. All claims verified. No overclaims. Eligible for v0.2.0 stable.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: External review of v0.2.0-rc.1. Stable declaration after review.
+Next: v0.2.0 stable declaration (after human external review) or post-v0.2 work.
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

@@ -45,6 +45,8 @@ pub struct InspectorSignals<'a> {
     pub proposal_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_proposal_state::WorkflowProposalUiState>>,
     pub readiness_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_readiness_state::WorkflowReadinessUiState>>,
     pub outcome_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_action_outcome_state::WorkflowActionOutcomeUiState>>,
+    pub reconciliation_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_reconciliation_state::WorkflowReconciliationUiState>>,
+    pub loop_controller_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_loop_controller_state::WorkflowLoopControllerUiState>>,
 }
 
 // ── Desktop-gated loading ────────────────────────────────────────────────
@@ -64,6 +66,7 @@ impl<'a> InspectorSignals<'a> {
                 self.load_execution_timeline(path, wfx_id);
                 self.load_proposal_and_readiness(path, wfx_id);
                 self.load_action_outcome(path, wfx_id);
+                self.load_reconciliation_and_loop(path, wfx_id);
             }
             Err(_) => {
                 *self.inspector_state.write() = None;
@@ -92,6 +95,8 @@ impl<'a> InspectorSignals<'a> {
         *self.proposal_state.write() = None;
         *self.readiness_state.write() = None;
         *self.outcome_state.write() = None;
+        *self.reconciliation_state.write() = None;
+        *self.loop_controller_state.write() = None;
     }
 
     fn load_audit(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
@@ -259,6 +264,57 @@ impl<'a> InspectorSignals<'a> {
             }
             _ => {
                 *self.outcome_state.write() = None;
+            }
+        }
+    }
+
+    /// Load workflow reconciliation and loop controller for the selected workflow run.
+    /// Read-only: uses existing by_workflow_run index loaders.
+    /// If no data exists, sets state to None (honest empty/unavailable).
+    fn load_reconciliation_and_loop(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
+        // Reconciliation
+        match crate::workflow_reconciliation::reconciliation_by_workflow_run(path, &wfx_id.0) {
+            Ok(Some(record)) => {
+                use crate::ui::workflow_reconciliation_state::*;
+
+                // Also load run revision if linked
+                let run_revision = record.new_run_revision_id.as_ref()
+                    .and_then(|rid| {
+                        crate::workflow_reconciliation::load_workflow_run_revision(path, rid).ok()
+                    });
+
+                let ui_state = WorkflowReconciliationUiState {
+                    latest_reconciliation: Some(workflow_reconciliation_summary(&record)),
+                    latest_run_revision: run_revision.as_ref().map(workflow_run_revision_lines),
+                    predicates: workflow_reconciliation_predicate_rows(&record),
+                    progression: record.progression.as_ref().map(workflow_stage_progression_lines),
+                    lifecycle_event: record.progression.as_ref().map(workflow_lifecycle_event_lines),
+                    warnings: vec![],
+                };
+                *self.reconciliation_state.write() = Some(ui_state);
+            }
+            _ => {
+                *self.reconciliation_state.write() = None;
+            }
+        }
+
+        // Loop controller
+        match crate::workflow_loop_controller::controller_by_workflow_run(path, &wfx_id.0) {
+            Ok(Some(record)) => {
+                use crate::ui::workflow_loop_controller_state::*;
+
+                let ui_state = WorkflowLoopControllerUiState {
+                    latest_controller: Some(workflow_loop_controller_summary_lines(&record)),
+                    detected_state: record.loop_state.as_ref().map(workflow_loop_detected_state_lines),
+                    recommendation: record.recommendation.as_ref().map(workflow_loop_recommendation_lines),
+                    predicates: workflow_loop_predicate_rows(&record),
+                    evidence_links: workflow_loop_evidence_rows(&record),
+                    warnings: vec![],
+                };
+                *self.loop_controller_state.write() = Some(ui_state);
+            }
+            _ => {
+                *self.loop_controller_state.write() = None;
             }
         }
     }

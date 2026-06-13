@@ -242,6 +242,8 @@ fn App() -> Element {
                                                 proposal_state: &PROPOSAL_STATE,
                                                 readiness_state: &READINESS_STATE,
                                                 outcome_state: &OUTCOME_STATE,
+                                                reconciliation_state: &RECONCILIATION_STATE,
+                                                loop_controller_state: &LOOP_CONTROLLER_STATE,
                                             };
                                             sigs.load_inspector_shell(&path, &wfx_id);
                                             *STATUS_TEXT.write() = "Inspector loaded".into();
@@ -334,6 +336,8 @@ fn render_session_item(session: &UiSessionSummary, service: Arc<UiSessionService
                             proposal_state: &PROPOSAL_STATE,
                             readiness_state: &READINESS_STATE,
                             outcome_state: &OUTCOME_STATE,
+                            reconciliation_state: &RECONCILIATION_STATE,
+                            loop_controller_state: &LOOP_CONTROLLER_STATE,
                         };
                         sigs.clear_inspector_shell();
                         match svc.open_session(&id).await {
@@ -415,6 +419,8 @@ fn render_inspector_pane() -> Element {
     use openwand_app::ui::workflow_proposal_components::*;
     use openwand_app::ui::workflow_readiness_components::*;
     use openwand_app::ui::workflow_action_outcome_components::*;
+    use openwand_app::ui::workflow_reconciliation_components::*;
+    use openwand_app::ui::workflow_loop_controller_components::*;
 
     let inspector_state = INSPECTOR_STATE.read().clone();
     let reviews = REVIEW_ROWS.read().clone();
@@ -435,6 +441,8 @@ fn render_inspector_pane() -> Element {
     let proposal_state = PROPOSAL_STATE.read().clone();
     let readiness_state = READINESS_STATE.read().clone();
     let outcome_state = OUTCOME_STATE.read().clone();
+    let reconciliation_state = RECONCILIATION_STATE.read().clone();
+    let loop_controller_state = LOOP_CONTROLLER_STATE.read().clone();
     let wfx_id = CURRENT_SESSION.read().as_ref().map(|v| v.summary.session_id.clone()).unwrap_or_default();
 
     match inspector_state {
@@ -480,6 +488,14 @@ fn render_inspector_pane() -> Element {
                 // Workflow action outcome (live data — Wave 84B)
                 if let Some(ref outcome) = outcome_state {
                     { render_action_outcome_panel(outcome) }
+                }
+                // Workflow reconciliation (live data — Wave 84C)
+                if let Some(ref recon) = reconciliation_state {
+                    { render_reconciliation_panel(recon) }
+                }
+                // Workflow loop controller (live data — Wave 84C)
+                if let Some(ref loop_ctrl) = loop_controller_state {
+                    { render_loop_controller_panel(loop_ctrl) }
                 }
             }
         },
@@ -682,6 +698,8 @@ static EXECUTION_TIMELINE_STATE: GlobalSignal<Option<openwand_app::ui::workflow_
 static PROPOSAL_STATE: GlobalSignal<Option<openwand_app::ui::workflow_proposal_state::WorkflowProposalUiState>> = Signal::global(|| None);
 static READINESS_STATE: GlobalSignal<Option<openwand_app::ui::workflow_readiness_state::WorkflowReadinessUiState>> = Signal::global(|| None);
 static OUTCOME_STATE: GlobalSignal<Option<openwand_app::ui::workflow_action_outcome_state::WorkflowActionOutcomeUiState>> = Signal::global(|| None);
+static RECONCILIATION_STATE: GlobalSignal<Option<openwand_app::ui::workflow_reconciliation_state::WorkflowReconciliationUiState>> = Signal::global(|| None);
+static LOOP_CONTROLLER_STATE: GlobalSignal<Option<openwand_app::ui::workflow_loop_controller_state::WorkflowLoopControllerUiState>> = Signal::global(|| None);
 
 // ── Send Handler ──────────────────────────────────────────
 

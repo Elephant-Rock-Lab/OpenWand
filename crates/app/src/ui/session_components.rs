@@ -13,7 +13,7 @@ use crate::ui::design_tokens::*;
 #[cfg(feature = "desktop")]
 use crate::ui::layout::*;
 use crate::ui::run_dto::{
-    UiMemoryContextSummary, UiPendingApproval, UiRunStatus,
+    UiMemoryContextSummary, UiPendingApproval, UiRunState, UiRunStatus,
     UiSessionMessage, UiTraceSummary,
 };
 

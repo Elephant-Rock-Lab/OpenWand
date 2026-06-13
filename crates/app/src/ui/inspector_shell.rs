@@ -42,6 +42,8 @@ pub struct InspectorSignals<'a> {
     pub routing_next_action_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_next_action_routing_state::WorkflowNextActionRoutingUiState>>,
     pub routing_review_row: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_next_action_review_state::ReviewSummaryRow>>,
     pub execution_timeline_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_execution_state::WorkflowExecutionUiState>>,
+    pub proposal_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_proposal_state::WorkflowProposalUiState>>,
+    pub readiness_state: &'a dioxus::prelude::GlobalSignal<Option<crate::ui::workflow_readiness_state::WorkflowReadinessUiState>>,
 }
 
 // ── Desktop-gated loading ────────────────────────────────────────────────
@@ -59,6 +61,7 @@ impl<'a> InspectorSignals<'a> {
                 self.load_manual_result_ladder(path, wfx_id);
                 self.load_routing_ladder(path, wfx_id);
                 self.load_execution_timeline(path, wfx_id);
+                self.load_proposal_and_readiness(path, wfx_id);
             }
             Err(_) => {
                 *self.inspector_state.write() = None;
@@ -84,6 +87,8 @@ impl<'a> InspectorSignals<'a> {
         *self.routing_next_action_state.write() = None;
         *self.routing_review_row.write() = None;
         *self.execution_timeline_state.write() = None;
+        *self.proposal_state.write() = None;
+        *self.readiness_state.write() = None;
     }
 
     fn load_audit(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
@@ -181,6 +186,54 @@ impl<'a> InspectorSignals<'a> {
             *self.execution_timeline_state.write() = Some(ui_state);
         } else {
             *self.execution_timeline_state.write() = None;
+        }
+    }
+
+    /// Load workflow proposal and readiness for the selected workflow run.
+    /// Read-only: uses proposal_and_review_by_workflow_run and
+    /// readiness_by_workflow_run to load persisted records.
+    /// If no data exists, sets state to None (honest empty/unavailable).
+    fn load_proposal_and_readiness(&self, path: &std::path::Path, wfx_id: &openwand_workflow::workflow_run::WorkflowExecutionId) {
+        // Proposal + review
+        match crate::workflow_proposal::proposal_and_review_by_workflow_run(path, &wfx_id.0) {
+            Ok(Some((proposal, review_opt))) => {
+                use crate::ui::workflow_proposal_state::*;
+                let ui_state = WorkflowProposalUiState {
+                    latest_proposal: Some(workflow_proposal_summary_lines(&proposal)),
+                    latest_review: review_opt.as_ref().map(workflow_proposal_review_lines),
+                    stages: workflow_stage_rows(&proposal),
+                    tool_intents: workflow_tool_intent_rows(&proposal),
+                    risks: workflow_risk_rows(&proposal),
+                    approvals: workflow_approval_marker_rows(&proposal),
+                    abort_rollback_notes: workflow_abort_rollback_rows(&proposal),
+                    evidence_links: workflow_proposal_evidence_rows(&proposal),
+                    warnings: vec![],
+                };
+                *self.proposal_state.write() = Some(ui_state);
+            }
+            _ => {
+                *self.proposal_state.write() = None;
+            }
+        }
+
+        // Readiness
+        match crate::workflow_readiness::readiness_by_workflow_run(path, &wfx_id.0) {
+            Ok(Some(record)) => {
+                use crate::ui::workflow_readiness_state::*;
+                let ui_state = WorkflowReadinessUiState {
+                    latest_readiness: Some(workflow_readiness_summary_lines(&record)),
+                    predicates: workflow_readiness_predicate_rows(&record),
+                    tool_intents: tool_intent_resolution_rows(&record),
+                    approval_markers: workflow_approval_marker_rows(&record),
+                    environment: Some(workflow_environment_lines(&record)),
+                    rollback_abort: Some(workflow_rollback_abort_lines(&record)),
+                    warnings: vec![],
+                };
+                *self.readiness_state.write() = Some(ui_state);
+            }
+            _ => {
+                *self.readiness_state.write() = None;
+            }
         }
     }
 }

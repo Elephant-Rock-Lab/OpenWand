@@ -225,6 +225,26 @@ pub fn latest_proposal_review(store_root: &Path) -> Result<Option<WorkflowPropos
     load_proposal_review(store_root, &review_id).map(Some)
 }
 
+/// Load proposal and proposal review for a workflow run by its execution ID.
+/// Read-only: loads the run record, then reads the proposal and review by their IDs.
+pub fn proposal_and_review_by_workflow_run(
+    store_root: &std::path::Path,
+    execution_id: &str,
+) -> Result<Option<(WorkflowProposal, Option<WorkflowProposalReview>)>, String> {
+    use openwand_workflow::workflow_run::{WorkflowExecutionId, WorkflowRunRecord};
+    let run_path = store_root
+        .join("workflow_runs")
+        .join("records")
+        .join(format!("{}.json", execution_id));
+    let run_json = std::fs::read_to_string(&run_path)
+        .map_err(|e| format!("Failed to read workflow run {}: {}", execution_id, e))?;
+    let run: WorkflowRunRecord = serde_json::from_str(&run_json)
+        .map_err(|e| format!("Failed to parse workflow run {}: {}", execution_id, e))?;
+    let proposal = load_workflow_proposal(store_root, &run.proposal_id)?;
+    let review = load_proposal_review(store_root, &run.proposal_review_id).ok();
+    Ok(Some((proposal, review)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

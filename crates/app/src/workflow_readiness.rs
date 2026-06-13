@@ -227,6 +227,25 @@ pub fn workflow_readiness_by_task_plan(
     load_workflow_readiness(store_root, &readiness_id).map(Some)
 }
 
+/// Load readiness record for a workflow run by its execution ID.
+/// Read-only: loads the run record, then reads the readiness by its ID.
+pub fn readiness_by_workflow_run(
+    store_root: &std::path::Path,
+    execution_id: &str,
+) -> Result<Option<WorkflowReadinessRecord>, String> {
+    use openwand_workflow::workflow_run::WorkflowRunRecord;
+    let run_path = store_root
+        .join("workflow_runs")
+        .join("records")
+        .join(format!("{}.json", execution_id));
+    let run_json = std::fs::read_to_string(&run_path)
+        .map_err(|e| format!("Failed to read workflow run {}: {}", execution_id, e))?;
+    let run: WorkflowRunRecord = serde_json::from_str(&run_json)
+        .map_err(|e| format!("Failed to parse workflow run {}: {}", execution_id, e))?;
+    let record = load_workflow_readiness(store_root, &run.readiness_id)?;
+    Ok(Some(record))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -98,12 +98,18 @@ mod desktop_render {
                         }
 
                         // Status flags
-                        div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM};",
-                            div { style: "color: {if snap.display_only {colors::TEXT_MUTED} else {colors::STATUS_ERROR}};",
-                                if snap.display_only { "Display only" } else { "Executable (not from this UI)" }
-                            }
-                            div { style: "color: {if snap.review_only {colors::TEXT_MUTED} else {colors::TEXT_BODY}};",
-                                if snap.review_only { "Review only" } else { "Acknowledged" }
+                        {
+                            let do_color = if snap.display_only { colors::TEXT_MUTED } else { colors::STATUS_ERROR };
+                            let ro_color = if snap.review_only { colors::TEXT_MUTED } else { colors::TEXT_BODY };
+                            rsx! {
+                                div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM};",
+                                    div { style: "color: {do_color};",
+                                        if snap.display_only { "Display only" } else { "Executable (not from this UI)" }
+                                    }
+                                    div { style: "color: {ro_color};",
+                                        if snap.review_only { "Review only" } else { "Acknowledged" }
+                                    }
+                                }
                             }
                         }
 

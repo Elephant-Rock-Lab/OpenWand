@@ -13,7 +13,6 @@ use crate::ui::workflow_manual_result_state::*;
 use crate::ui::workflow_manual_result_review_state::WorkflowManualResultReviewSummaryRow;
 use crate::ui::workflow_manual_result_reconciliation_readiness_state::WorkflowManualResultReconciliationReadinessSummaryRow;
 use crate::ui::workflow_manual_result_reconciliation_gate_state::WorkflowManualResultReconciliationGateSummaryRow;
-#[cfg(any(feature = "desktop", test))]
 use crate::ui::workflow_evidence_chain_inspector_components::chain_hash_display;
 
 // ── Pure helpers (always compiled, testable) ──────────────────────────────

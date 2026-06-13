@@ -186,6 +186,17 @@ pub mod colors {
     pub const BORDER_DEFAULT: &str = "#ddd";
     pub const BORDER_LIGHT: &str = "#eee";
     pub const BORDER_SUBTLE: &str = "#f0f0f0";
+    // Aliases for workflow component naming convention (Waves 80A-80C)
+    pub const TEXT_STRONG: &str = "#222";
+    pub const TEXT_BODY: &str = "#444";
+    pub const TEXT_WARN: &str = "#856404";
+    pub const BG_CARD: &str = "#fafafa";
+    pub const BG_WARN: &str = "#fff3cd";
+    pub const BG_SUBTLE: &str = "#f5f5f5";
+    pub const BORDER_WARN: &str = "#ffc107";
+    pub const STATUS_SUCCESS: &str = "#2d6a2d";
+    pub const STATUS_WARN: &str = "#f0c040";
+    pub const STATUS_ERROR: &str = "#cc3333";
 
     // Muted / disabled
     pub const MUTED_MID: &str = "#9e9e9e";
@@ -204,6 +215,7 @@ pub mod typo {
     pub const TEXT_MD: &str = "13px";
     pub const TEXT_LG: &str = "14px";
     pub const TEXT_XL: &str = "16px";
+    pub const TEXT_2XL: &str = "18px";
 }
 
 // ── Spacing ─────────────────────────────────────────────────────────────────
@@ -225,6 +237,9 @@ pub mod radius {
     pub const MD: &str = "4px";
     pub const LG: &str = "6px";
     pub const PILL: &str = "12px";
+    // Aliases for workflow component naming convention
+    pub const RADIUS_SM: &str = "3px";
+    pub const RADIUS_MD: &str = "4px";
 }
 
 // ── Layout Dimensions ───────────────────────────────────────────────────────

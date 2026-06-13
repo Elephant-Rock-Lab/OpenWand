@@ -54,6 +54,7 @@ pub fn readiness_safety_text() -> String {
 #[cfg(feature = "desktop")]
 mod desktop_render {
     use super::*;
+    use crate::ui::workflow_evidence_chain_inspector_components::chain_hash_display;
     use crate::ui::components::*;
     
     use dioxus::prelude::*;

@@ -107,11 +107,16 @@ mod desktop_render {
                                 span { style: "color: {colors::TEXT_BODY};",
                                     if arg.required { "{arg.name} *" } else { "{arg.name}" }
                                 }
-                                span { style: "color: {if arg.missing {colors::STATUS_ERROR} else {colors::TEXT_MUTED}};",
-                                    if arg.missing { "MISSING" } else {
-                                        if let Some(v) = &arg.value_preview { "{v}" } else { "-" }
+                            {
+                                let color = if arg.missing { colors::STATUS_ERROR } else { colors::TEXT_MUTED };
+                                rsx! {
+                                    span { style: "color: {color};",
+                                        if arg.missing { "MISSING" } else {
+                                            if let Some(v) = &arg.value_preview { "{v}" } else { "-" }
+                                        }
                                     }
                                 }
+                            }
                             }
                         }
                     }

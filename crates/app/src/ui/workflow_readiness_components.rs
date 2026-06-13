@@ -110,17 +110,25 @@ mod desktop_render {
                 }
 
                 if let Some(env) = &state.environment {
-                    div { style: "{card}",
-                        div { style: "font-weight: 600; font-size: {typo::TEXT_SM}; margin-bottom: {spacing::SPACE_XS};", "Environment" }
-                        div { style: "font-size: {typo::TEXT_SM};",
-                            div { style: "color: {if env.workspace_observed {colors::STATUS_SUCCESS} else {colors::STATUS_ERROR}};",
-                                if env.workspace_observed { "Workspace: observed" } else { "Workspace: not observed" }
-                            }
-                            div { style: "color: {if env.provider_config_available {colors::STATUS_SUCCESS} else {colors::STATUS_ERROR}};",
-                                if env.provider_config_available { "Provider: available" } else { "Provider: unavailable" }
-                            }
-                            div { style: "color: {if env.session_runtime_available {colors::STATUS_SUCCESS} else {colors::STATUS_ERROR}};",
-                                if env.session_runtime_available { "Runtime: available" } else { "Runtime: unavailable" }
+                    {
+                        let ws_color = if env.workspace_observed { colors::STATUS_SUCCESS } else { colors::STATUS_ERROR };
+                        let prov_color = if env.provider_config_available { colors::STATUS_SUCCESS } else { colors::STATUS_ERROR };
+                        let rt_color = if env.session_runtime_available { colors::STATUS_SUCCESS } else { colors::STATUS_ERROR };
+                        let sm = format!("font-size: {};", typo::TEXT_SM);
+                        rsx! {
+                            div { style: "{card}",
+                                div { style: "font-weight: 600; font-size: {typo::TEXT_SM}; margin-bottom: {spacing::SPACE_XS};", "Environment" }
+                                div { style: "{sm}",
+                                    div { style: "color: {ws_color};",
+                                        if env.workspace_observed { "Workspace: observed" } else { "Workspace: not observed" }
+                                    }
+                                    div { style: "color: {prov_color};",
+                                        if env.provider_config_available { "Provider: available" } else { "Provider: unavailable" }
+                                    }
+                                    div { style: "color: {rt_color};",
+                                        if env.session_runtime_available { "Runtime: available" } else { "Runtime: unavailable" }
+                                    }
+                                }
                             }
                         }
                     }

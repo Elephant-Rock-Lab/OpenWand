@@ -133,9 +133,14 @@ fn workflow_readiness_evaluation_leaves_trace_memory_git_unchanged() {
 }
 
 /// Guard: readiness evaluation does not create workflow run records.
+/// The read-only `readiness_by_workflow_run` loader (Wave 84A) reads existing
+/// run records to resolve readiness IDs — it does not create them.
 #[test]
 fn workflow_readiness_evaluation_does_not_create_workflow_run_record() {
     let src = include_str!("../src/workflow_readiness.rs");
-    assert!(!src.contains("workflow_run"), "must not create workflow run records");
-    assert!(!src.contains("WorkflowRun"), "must not reference WorkflowRun");
+    // May read workflow_run records for live UI wiring (read-only loaders)
+    // but must never write/create them.
+    assert!(!src.contains("save_workflow_run"), "must not save workflow run records");
+    assert!(!src.contains("create_workflow_run"), "must not create workflow run records");
+    assert!(!src.contains("WorkflowRunRecord {"), "must not construct workflow run records");
 }

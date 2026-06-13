@@ -36,6 +36,11 @@ pub fn status_dot_style(tone: UiTone, size: UiSize) -> String {
     )
 }
 
+/// Badge background color for a tone (Wave 84A — needed by workflow components).
+pub fn tone_to_badge_color(tone: UiTone) -> String {
+    tone.bg().to_string()
+}
+
 /// Style string for a badge / pill label.
 pub fn badge_style(tone: UiTone) -> String {
     format!(

@@ -18,6 +18,9 @@ use openwand_app::memory_coordinator::PromptInputProductionConfig;
 use openwand_app::ui::run_dto::{UiRunEvent, UiRunState, UiRunStatus};
 use openwand_app::ui::{CreateSessionRequest, UiSessionService, UiSessionSummary, UiSessionView};
 use openwand_app::ui::workflow_run_request::{WorkflowRunRequest, WorkflowRunRequestState};
+use openwand_app::ui::approval_resolution_request::{
+    ApprovalDecisionDto, ApprovalResolutionRequest, ApprovalResolutionState,
+};
 use openwand_app::settings;
 use openwand_core::SessionId;
 use openwand_llm::LlmTarget;
@@ -621,13 +624,167 @@ fn render_workflow_run_initiation(
             }
 
             // Status display
-n            div { style: "margin-top: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM}; color: {status_color};",
+                        div { style: "margin-top: {spacing::SPACE_SM}; font-size: {typo::TEXT_SM}; color: {status_color};",
                 "{status_text}"
             }
             if !detail_text.is_empty() {
                 div { style: "margin-top: {spacing::SPACE_XS}; font-size: {typo::TEXT_XS}; color: {colors::TEXT_MUTED};",
                     "{detail_text}"
                 }
+            }
+        }
+    }
+}
+
+// ── Approval Resolution (Wave 88B) ────────────────────────
+/// Renders the approval resolution UI when a tool approval is pending.
+/// Shows approve/reject buttons that submit decisions through the
+/// existing UiSessionService approval governance path.
+/// The UI never directly calls resolve_approval, resumes execution,
+/// or mutates approval records.
+#[cfg(feature = "desktop")]
+fn render_approval_resolution(
+    run_state: &UiRunState,
+    active_runner: &Option<ActiveRun>,
+) -> Element {
+    use openwand_app::ui::design_tokens::*;
+
+    // Only render when waiting for approval and have pending approval info
+    if run_state.status != UiRunStatus::WaitingForApproval {
+        return rsx! {};
+    }
+    let pending = match &run_state.pending_approval {
+        Some(p) => p,
+        None => return rsx! {},
+    };
+
+    let resolution_state = APPROVAL_RESOLUTION_STATE.read().clone();
+    let tool_name = pending.tool_name.clone();
+    let tool_call_id = pending.tool_call_id.clone();
+    let reason = pending.reason.clone();
+
+    // Status display
+    let status_label = resolution_state.status_label();
+    let status_color = match &resolution_state {
+        ApprovalResolutionState::Resolved { decision, .. } => {
+            if *decision == ApprovalDecisionDto::Approve { colors::STATUS_SUCCESS }
+            else { colors::STATUS_WARN }
+        }
+        ApprovalResolutionState::Failed { .. } => colors::STATUS_ERROR,
+        ApprovalResolutionState::Stale { .. } => colors::TEXT_MUTED,
+        ApprovalResolutionState::Pending => colors::TEXT_MUTED,
+        ApprovalResolutionState::Idle => colors::TEXT_STRONG,
+    };
+
+    // Detail for resolved state
+    let detail = match &resolution_state {
+        ApprovalResolutionState::Resolved { tool_name, tool_status, source, .. } => {
+            format!("{} — {} — via {}",
+                tool_name.as_deref().unwrap_or("unknown"),
+                tool_status.as_deref().unwrap_or("no status"),
+                source,
+            )
+        }
+        ApprovalResolutionState::Failed { error } => format!("Error: {}", error),
+        ApprovalResolutionState::Stale { reason } => format!("Stale: {}", reason),
+        _ => String::new(),
+    };
+
+    let is_resolving = resolution_state.is_pending();
+    let card_bg = format!("padding: {} {}; background: {}; border: 1px solid {}; border-radius: {}; margin: {} {};",
+        spacing::SPACE_MD, spacing::SPACE_MD,
+        colors::BG_WARN, colors::BORDER_WARN, radius::RADIUS_MD,
+        spacing::SPACE_SM, spacing::SPACE_MD,
+    );
+    let title_style = format!("font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+        typo::TEXT_BASE, colors::TEXT_STRONG, spacing::SPACE_XS);
+    let info_style = format!("font-size: {}; color: {}; margin-bottom: {};",
+        typo::TEXT_SM, colors::TEXT_BODY, spacing::SPACE_SM);
+    let reason_style = format!("font-size: {}; color: {}; font-style: italic; margin-bottom: {};",
+        typo::TEXT_XS, colors::TEXT_MUTED, spacing::SPACE_SM);
+    let btn_approve_style = format!("padding: {} {}; background: {}; color: white; border: none; border-radius: {}; cursor: {}; font-size: {};",
+        spacing::SPACE_SM, spacing::SPACE_LG, colors::STATUS_SUCCESS,
+        radius::RADIUS_SM, if is_resolving { "not-allowed" } else { "pointer" }, typo::TEXT_SM);
+    let btn_reject_style = format!("padding: {} {}; background: {}; color: white; border: none; border-radius: {}; cursor: {}; font-size: {};",
+        spacing::SPACE_SM, spacing::SPACE_LG, colors::STATUS_ERROR,
+        radius::RADIUS_SM, if is_resolving { "not-allowed" } else { "pointer" }, typo::TEXT_SM);
+    let status_style = format!("margin-top: {}; font-size: {}; color: {};",
+        spacing::SPACE_SM, typo::TEXT_SM, status_color);
+    let detail_style = format!("margin-top: {}; font-size: {}; color: {};",
+        spacing::SPACE_XS, typo::TEXT_XS, colors::TEXT_MUTED);
+
+    // Build ARID from tool_call_id for the explicit binding
+    // The pending approval state has tool_call_id; the runner's approval
+    // recovery index maps this to the ARID.
+    let arid = tool_call_id.clone();
+
+    rsx! {
+        div { style: "{card_bg}",
+            div { style: "{title_style}", "Approval Required" }
+            div { style: "{info_style}",
+                "Tool: {tool_name}"
+            }
+            if !reason.is_empty() {
+                div { style: "{reason_style}", "{reason}" }
+            }
+
+                        if !resolution_state.is_terminal() {
+                div { style: "display: flex; gap: {spacing::SPACE_SM};",
+                    button {
+                        style: "{btn_approve_style}",
+                        disabled: "{is_resolving}",
+                        onclick: move |_| {
+                            *APPROVAL_RESOLUTION_STATE.write() = ApprovalResolutionState::Pending;
+                            let req = ApprovalResolutionRequest {
+                                approval_request_id: arid.clone(),
+                                displayed_tool_name: Some(tool_name.clone()),
+                                decision: ApprovalDecisionDto::Approve,
+                                rationale: None,
+                                resolved_by: "desktop".into(),
+                                idempotency_key: format!("desktop_approve_{}", chrono::Utc::now().timestamp()),
+                            };
+                            let runner_opt = active_runner.as_ref().map(|r| r.runner.clone());
+                            spawn(async move {
+                                let result = UiSessionService::submit_approval_resolution(
+                                    runner_opt.as_deref(),
+                                    &req,
+                                ).await;
+                                *APPROVAL_RESOLUTION_STATE.write() = result;
+                            });
+                        },
+                        "Approve"
+                    }
+                    button {
+                        style: "{btn_reject_style}",
+                        disabled: "{is_resolving}",
+                        onclick: move |_| {
+                            *APPROVAL_RESOLUTION_STATE.write() = ApprovalResolutionState::Pending;
+                            let req = ApprovalResolutionRequest {
+                                approval_request_id: arid.clone(),
+                                displayed_tool_name: Some(tool_name.clone()),
+                                decision: ApprovalDecisionDto::Reject,
+                                rationale: Some("Rejected via desktop".into()),
+                                resolved_by: "desktop".into(),
+                                idempotency_key: format!("desktop_reject_{}", chrono::Utc::now().timestamp()),
+                            };
+                            let runner_opt = active_runner.as_ref().map(|r| r.runner.clone());
+                            spawn(async move {
+                                let result = UiSessionService::submit_approval_resolution(
+                                    runner_opt.as_deref(),
+                                    &req,
+                                ).await;
+                                *APPROVAL_RESOLUTION_STATE.write() = result;
+                            });
+                        },
+                        "Reject"
+                    }
+                }
+            }
+
+            // Status display
+            div { style: "{status_style}", "{status_label}" }
+            if !detail.is_empty() {
+                div { style: "{detail_style}", "{detail}" }
             }
         }
     }
@@ -700,6 +857,9 @@ fn render_detail_pane(service: Arc<UiSessionService>, memory: Arc<SqliteMemorySt
                         }
                     }
                 }
+
+                // Approval resolution area (only visible when WaitingForApproval)
+                { render_approval_resolution(&run_state, &*ACTIVE_RUNNER.read()) }
 
                 // Input area
                 div { style: "padding: 12px 20px; border-top: 1px solid #eee; background: #fafafa;
@@ -831,6 +991,7 @@ static OUTCOME_STATE: GlobalSignal<Option<openwand_app::ui::workflow_action_outc
 static RECONCILIATION_STATE: GlobalSignal<Option<openwand_app::ui::workflow_reconciliation_state::WorkflowReconciliationUiState>> = Signal::global(|| None);
 static LOOP_CONTROLLER_STATE: GlobalSignal<Option<openwand_app::ui::workflow_loop_controller_state::WorkflowLoopControllerUiState>> = Signal::global(|| None);
 static WORKFLOW_RUN_REQUEST_STATE: GlobalSignal<openwand_app::ui::workflow_run_request::WorkflowRunRequestState> = Signal::global(WorkflowRunRequestState::default);
+static APPROVAL_RESOLUTION_STATE: GlobalSignal<openwand_app::ui::approval_resolution_request::ApprovalResolutionState> = Signal::global(ApprovalResolutionState::default);
 
 // ── Send Handler ──────────────────────────────────────────
 

@@ -416,4 +416,94 @@ impl UiSessionService {
             },
         }
     }
+
+    /// Submit an approval resolution from the desktop UI.
+    ///
+    /// This is the authority boundary for desktop approval decisions.
+    /// The desktop constructs an `ApprovalResolutionRequest` with an explicit
+    /// ARID and a decision. This method maps the DTO to the existing
+    /// `SessionRunner::resolve_approval()` API.
+    ///
+    /// Authority: this method constructs the `ApprovalDecision` and `RunConfig`.
+    /// The desktop UI code does NOT.
+    /// Tool-name and args-hash enforcement remains in the runner's pending
+    /// approval snapshot — the UI's `displayed_tool_name` is display-only.
+    ///
+    /// Returns `Stale` if the runner is no longer active.
+    pub async fn submit_approval_resolution(
+        runner: Option<&SessionRunner>,
+        request: &crate::ui::approval_resolution_request::ApprovalResolutionRequest,
+    ) -> crate::ui::approval_resolution_request::ApprovalResolutionState {
+        use crate::ui::approval_resolution_request::{
+            ApprovalDecisionDto, ApprovalResolutionState,
+        };
+        use openwand_session::runner::{ApprovalDecision, ApprovalResolution};
+
+        // Validate the DTO before any delegation
+        if let Err(e) = request.validate() {
+            return ApprovalResolutionState::Failed { error: e };
+        }
+
+        // Require an active runner — no silent success on stale state
+        let runner = match runner {
+            Some(r) => r,
+            None => {
+                return ApprovalResolutionState::Stale {
+                    reason: "No active session runner".into(),
+                };
+            }
+        };
+
+        // Map DTO decision to backend ApprovalDecision
+        let arid = openwand_core::ApprovalRequestId(
+            request.approval_request_id.clone(),
+        );
+        let resolution = match request.decision {
+            ApprovalDecisionDto::Approve => ApprovalResolution::Approve,
+            ApprovalDecisionDto::Reject => ApprovalResolution::Reject {
+                reason: request.rationale.clone(),
+            },
+        };
+        let decision = ApprovalDecision::for_approval(arid, resolution);
+
+        // The service boundary constructs RunConfig — never the UI
+        let config = RunConfig {
+            max_steps: 25,
+            mode: InteractionMode::Conversational,
+            working_directory: ".".into(),
+            system_prompt: None,
+            llm_target: None,
+            memory_prompt_inputs: None,
+            output_guard: None,
+            capability_context: None,
+        };
+
+        // Delegate through the existing approval governance path
+        match runner.resolve_approval(decision, config).await {
+            Ok(result) => {
+                let tool_status = result.tool_result.as_ref().map(|_| "completed");
+                let source = format!("{:?}", result.source).to_lowercase();
+                ApprovalResolutionState::Resolved {
+                    decision: request.decision,
+                    approval_request_id: result.approval_request_id.0.clone(),
+                    tool_name: Some(result.tool_name.clone()),
+                    tool_status: tool_status.map(|s| s.to_string()),
+                    source,
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                // Distinguish stale (no pending approval) from real errors
+                if msg.contains("no pending") || msg.contains("not found") {
+                    ApprovalResolutionState::Stale {
+                        reason: format!("Approval no longer pending: {msg}"),
+                    }
+                } else {
+                    ApprovalResolutionState::Failed {
+                        error: format!("Approval resolution failed: {msg}"),
+                    }
+                }
+            }
+        }
+    }
 }

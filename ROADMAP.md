@@ -1,7 +1,7 @@
 # OpenWand Roadmap
 
 > **Note:** This is the original Wave 38 roadmap, preserved for historical context.
-> For current roadmap, see [docs/V040_ROADMAP.md](docs/V040_ROADMAP.md) (v0.4.0 — complete)
+> For current roadmap, see [docs/V050_ROADMAP.md](docs/V050_ROADMAP.md) (v0.5.0 — planning)
 > and [docs/V040_ROADMAP.md](docs/V040_ROADMAP.md) (v0.4.0 — planning).
 
 Calibrated from disk-verified repository state at Wave 38.

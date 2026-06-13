@@ -329,3 +329,17 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 85A | Linux Environment Gate and Validation Decision | `wave-85a-lock` | 3,939 Win / 3,934 Linux | docs/V030_ROADMAP.md |
 | 86B | v0.3.0 Release Preparation | `wave-86b-lock` | 3,939 Win / 3,934 Linux | RELEASE_NOTES_v030_STABLE.md |
 | **v0.3.0** | **Stable Release** | **`v0.3.0`** | **3,939 Win / 3,934 Linux** | **RELEASE_NOTES_v030_STABLE.md** |
+
+---
+
+## Phase: v0.4.0 Desktop Operation
+
+| Wave | Title | Tag | Tests | Lock Doc |
+|------|-------|-----|------:|----------|
+| 87A | Post-v0.3 Roadmap Reset | `wave-87a-lock` | 3,939 | docs/V040_ROADMAP.md |
+| 88A | Workflow Run Initiation from Desktop | `wave-88a-lock` | 3,953 | crates/app/tests/workflow_run_initiation.rs |
+| 88B | Approval Resolution from Desktop | `wave-88b-lock` | 3,973 | crates/app/tests/approval_resolution_desktop.rs |
+| 88C | Evidence Export from Desktop | `wave-88c-lock` | 3,989 | crates/app/tests/evidence_export_desktop.rs |
+| 89A | Real-Time Inspector Refresh | `wave-89a-lock` | 3,999 | crates/app/tests/inspector_refresh.rs |
+| 90B | v0.4.0 Release Preparation | `wave-90b-lock` | 3,999 | RELEASE_NOTES_v040_STABLE.md |
+| **v0.4.0** | **Stable Release** | **`v0.4.0`** | **3,999** | **RELEASE_NOTES_v040_STABLE.md** |

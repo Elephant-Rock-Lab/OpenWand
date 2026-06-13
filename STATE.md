@@ -1,10 +1,10 @@
 # OpenWand — Project State
 
 ## Version
-0.4.0 (stable)
+0.4.0 (stable) — planning v0.5.0
 
 ## Status
-**v0.4.0 stable released. Theme: from observation to operation. Desktop UI can request workflow operations through delegated authority.**
+**v0.4.0 stable released. v0.5.0 roadmap defined. Next arc: runtime integrity hardening.**
 
 Release: v0.4.0 — tag `v0.4.0`
 

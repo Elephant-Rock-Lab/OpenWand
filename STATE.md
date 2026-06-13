@@ -1,14 +1,14 @@
 # OpenWand — Project State
 
 ## Version
-0.2.0-beta
+0.2.0-rc.1
 
 ## Status
-**Wave 82A complete. Dependency audit run: 0 vulnerabilities, 15 warnings (all transitive). v0.2.0 eligible for RC.**
+**v0.2.0-rc.1 declared. Dependency audit clean (0 vulnerabilities). Pending external review for stable.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: Wave 82B — v0.2.0 Release Candidate Declaration (if desired) or post-v0.2 work.
+Next: External review of v0.2.0-rc.1. Stable declaration after review.
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

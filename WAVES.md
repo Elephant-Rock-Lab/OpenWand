@@ -311,3 +311,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 81A | Code Quality and Dependency Refresh | `wave-81a-lock` | 3,917 | workspace-wide |
 | 81B | v0.2.0 Declaration Package | `wave-81b-lock` | 3,917 | RELEASE_NOTES_v020_BETA.md |
 | 82A | Dependency Audit and RC Readiness | `wave-82a-lock` | 3,917 | docs/DEPENDENCY_AUDIT_REPORT.md |
+| 82B | v0.2.0-rc.1 Declaration | `wave-82b-lock` | 3,917 | RELEASE_NOTES_v020_RC1.md |

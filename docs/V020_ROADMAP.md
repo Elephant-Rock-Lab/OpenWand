@@ -226,7 +226,7 @@ core → trace → store → session → app
 |---|-----------|--------|
 | VB-1 | ~~Windows TOCTOU micro-race closed~~ ✅ Closed 78C | ✅ Done |
 | ~~VB-2~~ | ~~Anthropic adapter validated~~ → Post-v0.2 | ✅ Demoted |
-| VB-3 | All placeholder UI surfaces implemented | ⬜ Blocked |
+| VB-3 | All placeholder UI surfaces implemented | ✅ Closed 80C |
 
 **v0.2.0 release requires VB-3 resolved. VB-2 (provider expansion) demoted to post-v0.2
 compatibility hardening — OpenAI-compatible path proven across local + hosted providers.**

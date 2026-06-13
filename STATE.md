@@ -4,11 +4,11 @@
 0.1.0-beta
 
 ## Status
-**Wave 80B complete. 7/10 placeholder UI surfaces implemented. VB-3 nearly closed.**
+**Wave 80C complete. 10/10 placeholder UI surfaces implemented. VB-3 CLOSED.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: Wave 80C — Placeholder UI Surface Completion III (final 3).
+Next: Wave 81A — Code Quality and Dependency Refresh.
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

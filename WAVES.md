@@ -314,3 +314,4 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 82B | v0.2.0-rc.1 Declaration | `wave-82b-lock` | 3,917 | RELEASE_NOTES_v020_RC1.md |
 | 82C | v0.2.0-rc.1 External Review | `wave-82c-lock` | 3,917 | docs/V020_RC1_EXTERNAL_REVIEW.md |
 | 82D | v0.2.0 Stable Declaration | `wave-82d-lock` | 3,917 | RELEASE_NOTES_v020_STABLE.md |
+| 83A | Post-v0.2 Roadmap Reset | `wave-83a-lock` | 3,917 | docs/V030_ROADMAP.md |

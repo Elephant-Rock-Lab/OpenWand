@@ -21,7 +21,7 @@ openwand (binary)
 ├── openwand-llm        Multi-provider LLM routing with model cascade
 ├── openwand-skills     YAML + Markdown skill store with auto-discovery
 ├── openwand-goals      Fitness functions + autonomous improvement loops
-├── openwand-content    Rich content: syntect, mermaid-rs-renderer, comrak
+├── openwand-content    Rich content rendering (stub — future crate)
 ├── openwand-workflow   Evidence ladder: 44 modules, 6 dependencies, leaf crate
 └── openwand-app        CLI binary, lib, UI, persistence
 ```
@@ -44,13 +44,10 @@ cargo test --workspace --features "openwand-session/testing,openwand-session/sql
 | Layer | Technology |
 |-------|-----------|
 | UI | Dioxus 0.7 (desktop) |
-| Rich Text | taino-edit-dioxus |
 | Sessions | Loro CRDT |
 | MCP | rmcp (official Rust SDK) |
-| Diagrams | mermaid-rs-renderer (mmdr) |
-| Syntax | syntect |
 | Memory | rusqlite |
-| Trust | blake3 + ring |
+| Trust | blake3 |
 | Runtime | tokio |
 
 ## Principles
@@ -99,7 +96,7 @@ See [GOVERNANCE.md](GOVERNANCE.md), [ROADMAP.md](ROADMAP.md), and [WAVES.md](WAV
 
 ## Test Baseline
 
-**2824 tests, zero failures** (Wave 38 locked)
+**3,917 tests, zero failures** (v0.2.0 stable)
 
 ## License
 

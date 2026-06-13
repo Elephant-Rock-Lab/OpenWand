@@ -1,14 +1,14 @@
 # OpenWand — Project State
 
 ## Version
-0.2.0
+0.2.0 (stable) — planning v0.3.0
 
 ## Status
-**v0.2.0 stable declared. All blockers closed, 0 vulnerabilities, 3,917 tests. Not production-ready.**
+**v0.2.0 stable. Post-v0.2 roadmap reset complete. v0.3.0 theme: live workflow wiring.**
 
 Release: v0.1.0-beta — `b29898b` — `v0.1.0-beta`
 
-Next: Post-v0.2 work (provider expansion, non-Windows validation, upstream dependency tracking).
+Next: Wave 83B — README/docs staleness sweep, then Wave 84A — Live workflow wiring.
 Binary: 18,030,080 bytes (17.2 MB), SHA-256 `641F1E7B7AF0D1A40E63D767738B6B8F06AC95C2B5641E5CD21A030E16B2CB9C`
 
 Not stable. Not production-ready. Accepted residuals documented.

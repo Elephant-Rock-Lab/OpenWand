@@ -47,3 +47,43 @@ impl TraceEventEnvelope for StoredEvent {
         self.0.schema_version()
     }
 }
+
+/// Implement hash verification policy for StoredEvent.
+///
+/// Serializes the inner `OpenWandTraceEvent` (via `.0`) to match the
+/// canonical JSON form used by the SQLite store during append.
+/// This ensures hash recomputation produces the same value as the original
+/// `compute_entry_hash` call in the writer.
+impl openwand_trace::verifier::HashVerificationPolicy<StoredEvent>
+    for openwand_trace::verifier::Blake3HashPolicy
+{
+    fn serialize_event(
+        &self,
+        event: &StoredEvent,
+    ) -> Result<String, serde_json::Error> {
+        // Serialize the inner OpenWandTraceEvent, not the wrapper.
+        // This matches writer.rs: serde_json::to_string(&command.event.0)
+        serde_json::to_string(&event.0)
+    }
+
+    fn compute_entry_hash(
+        &self,
+        global_sequence: u64,
+        stream_scope: &str,
+        stream_id: &str,
+        stream_sequence: u64,
+        event_kind: &str,
+        event_payload_json: &str,
+        prev_hash: Option<&openwand_trace::EntryHash>,
+    ) -> openwand_trace::EntryHash {
+        openwand_trace::verifier::Blake3HashPolicy::compute_hash(
+            global_sequence,
+            stream_scope,
+            stream_id,
+            stream_sequence,
+            event_kind,
+            event_payload_json,
+            prev_hash,
+        )
+    }
+}

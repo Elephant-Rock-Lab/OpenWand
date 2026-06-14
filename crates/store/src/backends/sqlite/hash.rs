@@ -1,11 +1,14 @@
 //! BLAKE3 entry hash computation for trace entries.
 //!
-//! Production hash chain. The in-memory store used a deterministic placeholder;
-//! this module provides the real BLAKE3 implementation.
+//! Wave 98A: The canonical BLAKE3 hash function now lives in `openwand-trace`
+//! as `Blake3HashPolicy::compute_hash()`. This module re-exports it for
+//! backward compatibility with existing store code.
 
-use openwand_trace::stream::EntryHash;
+pub use openwand_trace::verifier::Blake3HashPolicy;
 
 /// Compute BLAKE3 hash of entry content for the hash chain.
+/// Delegates to the canonical implementation in `openwand-trace`.
+///
 /// Input: the stable fields that define an entry's identity.
 pub fn compute_entry_hash(
     global_sequence: u64,
@@ -14,24 +17,17 @@ pub fn compute_entry_hash(
     stream_sequence: u64,
     event_kind: &str,
     event_payload_json: &str,
-    prev_hash: Option<&EntryHash>,
-) -> EntryHash {
-    let mut hasher = blake3::Hasher::new();
-
-    // Stable fields — never change these without a schema version bump
-    hasher.update(&global_sequence.to_le_bytes());
-    hasher.update(stream_scope.as_bytes());
-    hasher.update(stream_id.as_bytes());
-    hasher.update(&stream_sequence.to_le_bytes());
-    hasher.update(event_kind.as_bytes());
-    hasher.update(event_payload_json.as_bytes());
-
-    if let Some(prev) = prev_hash {
-        hasher.update(prev.0.as_bytes());
-    }
-
-    let hash = hasher.finalize();
-    EntryHash(hash.to_hex().to_string())
+    prev_hash: Option<&openwand_trace::EntryHash>,
+) -> openwand_trace::EntryHash {
+    Blake3HashPolicy::compute_hash(
+        global_sequence,
+        stream_scope,
+        stream_id,
+        stream_sequence,
+        event_kind,
+        event_payload_json,
+        prev_hash,
+    )
 }
 
 #[cfg(test)]
@@ -63,38 +59,14 @@ mod tests {
 
     #[test]
     fn hash_changes_with_sequence() {
-        let h1 = compute_entry_hash(
-            1,
-            "Session",
-            "s-main",
-            1,
-            "session.started",
-            "{}",
-            None,
-        );
-        let h2 = compute_entry_hash(
-            2,
-            "Session",
-            "s-main",
-            2,
-            "session.started",
-            "{}",
-            None,
-        );
+        let h1 = compute_entry_hash(1, "Session", "s-main", 1, "session.started", "{}", None);
+        let h2 = compute_entry_hash(2, "Session", "s-main", 2, "session.started", "{}", None);
         assert_ne!(h1, h2, "Different sequences must produce different hashes");
     }
 
     #[test]
     fn hash_changes_with_prev_hash() {
-        let h1 = compute_entry_hash(
-            2,
-            "Session",
-            "s-main",
-            2,
-            "tool.called",
-            "{}",
-            None,
-        );
+        let h1 = compute_entry_hash(2, "Session", "s-main", 2, "tool.called", "{}", None);
         let h2 = compute_entry_hash(
             2,
             "Session",
@@ -102,7 +74,7 @@ mod tests {
             2,
             "tool.called",
             "{}",
-            Some(&EntryHash("prev_hash_value".into())),
+            Some(&openwand_trace::EntryHash("prev_hash_value".into())),
         );
         assert_ne!(h1, h2, "prev_hash must participate in the hash");
     }

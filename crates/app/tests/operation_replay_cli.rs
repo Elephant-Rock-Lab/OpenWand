@@ -58,4 +58,12 @@ mod cli_behavior_tests {
         let s = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
         assert!(!s.contains("full verification")); let _ = std::fs::remove_file(&t);
     }
+
+    #[test]
+    fn verifier_does_not_emit_trace() {
+        let src = include_str!("../src/operation_audit.rs");
+        let impl_only = src.split("#[cfg(test)]").next().unwrap_or("");
+        assert!(!impl_only.contains(".append("), "verifier must not append trace");
+        assert!(!impl_only.contains("AppendTraceEntry"), "verifier must not construct trace entries");
+    }
 }

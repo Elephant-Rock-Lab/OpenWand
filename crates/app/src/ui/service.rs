@@ -279,7 +279,63 @@ impl UiSessionService {
         request: &crate::ui::workflow_run_request::WorkflowRunRequest,
         store_root: &std::path::Path,
     ) -> crate::ui::workflow_run_request::WorkflowRunRequestState {
-        Self::evaluate_workflow_run_request(request, store_root)
+        let result = Self::evaluate_workflow_run_request(request, store_root);
+
+        // Append workflow initiation trace evidence (Wave 99A).
+        // This allows operation-replay to verify workflow initiation
+        // correspondence instead of reporting Inconclusive.
+        //
+        // Authority: The service boundary appends trace after the governed
+        // execution gate has approved the run. The desktop UI does not
+        // append trace. This is a WRITE in the existing execution path,
+        // not in the verifier.
+        if let crate::ui::workflow_run_request::WorkflowRunRequestState::Created {
+            ref execution_id, ref status, ..
+        } = result {
+            let stream_id = openwand_trace::TraceStreamId {
+                scope: openwand_trace::TraceStreamScope::Session,
+                id: format!("workflow:{}", execution_id),
+            };
+            // Emit ModStarted trace event
+            let _ = openwand_trace::TraceStore::append(
+                self.trace.as_ref(),
+                openwand_trace::AppendTraceEntry {
+                    actor: openwand_trace::Actor::System { component: "ui_workflow_run".into() },
+                    event: openwand_store::StoredEvent(
+                        openwand_core::OpenWandTraceEvent::Workflow(
+                            openwand_core::WorkflowEvent::ModStarted {
+                                mod_id: execution_id.clone(),
+                                mod_name: "workflow_run".into(),
+                            }
+                        )
+                    ),
+                    relations: vec![],
+                    stream_id: stream_id.clone(),
+                    idempotency_key: None,
+                },
+            );
+            // Emit ModCompleted trace event with the run status as outcome
+            let _ = openwand_trace::TraceStore::append(
+                self.trace.as_ref(),
+                openwand_trace::AppendTraceEntry {
+                    actor: openwand_trace::Actor::System { component: "ui_workflow_run".into() },
+                    event: openwand_store::StoredEvent(
+                        openwand_core::OpenWandTraceEvent::Workflow(
+                            openwand_core::WorkflowEvent::ModCompleted {
+                                mod_id: execution_id.clone(),
+                                mod_name: "workflow_run".into(),
+                                outcome: status.clone(),
+                            }
+                        )
+                    ),
+                    relations: vec![],
+                    stream_id,
+                    idempotency_key: None,
+                },
+            );
+        }
+
+        result
     }
 
     /// Core evaluation logic — callable without a service instance.

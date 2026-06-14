@@ -248,4 +248,79 @@ mod tests {
         assert_eq!(r.result, ReplayResult::Inconclusive);
         assert_eq!(r.operations_checked, 3);
     }
+
+    // ── Wave 99A: Trace-backed workflow initiation tests ──
+
+    #[test]
+    fn wf_initiation_with_trace_events_passes() {
+        // When workflow trace events exist and match the execution_id,
+        // the verifier reports Pass instead of Inconclusive.
+        let eid = "wfx_99a_test";
+        let e = vec![
+            mk(1, 1, OpenWandTraceEvent::Workflow(WorkflowEvent::ModStarted {
+                mod_id: eid.into(), mod_name: "workflow_run".into()
+            }), "workflow.mod_started"),
+            mk(2, 2, OpenWandTraceEvent::Workflow(WorkflowEvent::ModCompleted {
+                mod_id: eid.into(), mod_name: "workflow_run".into(), outcome: "suspended".into()
+            }), "workflow.mod_completed"),
+        ];
+        let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: eid.into() }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Pass, "workflow initiation with matching trace should Pass");
+    }
+
+    #[test]
+    fn wf_initiation_wrong_id_fails() {
+        // Workflow events exist but reference a different execution_id
+        let e = vec![
+            mk(1, 1, OpenWandTraceEvent::Workflow(WorkflowEvent::ModStarted {
+                mod_id: "wfx_other".into(), mod_name: "workflow_run".into()
+            }), "workflow.mod_started"),
+        ];
+        let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: "wfx_99a_test".into() }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Fail, "wrong workflow ID should Fail");
+    }
+
+    #[test]
+    fn wf_initiation_legacy_no_events_remains_inconclusive() {
+        // Legacy traces without workflow events remain Inconclusive,
+        // NOT Fail. This preserves backward compatibility.
+        let e: Vec<TraceEntry<StoredEvent>> = vec![];
+        let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: "wfx_legacy".into() }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Inconclusive, "legacy traces without events must remain Inconclusive");
+    }
+
+    #[test]
+    fn wf_initiation_mod_completed_before_started_fails() {
+        // Ordering violation: mod_completed before mod_started
+        let eid = "wfx_99a_order";
+        let e = vec![
+            mk(1, 1, OpenWandTraceEvent::Workflow(WorkflowEvent::ModCompleted {
+                mod_id: eid.into(), mod_name: "workflow_run".into(), outcome: "done".into()
+            }), "workflow.mod_completed"),
+            mk(2, 2, OpenWandTraceEvent::Workflow(WorkflowEvent::ModStarted {
+                mod_id: eid.into(), mod_name: "workflow_run".into()
+            }), "workflow.mod_started"),
+        ];
+        let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: eid.into() }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Fail, "mod_completed before mod_started should Fail");
+    }
+
+    #[test]
+    fn wf_initiation_only_mod_started_passes() {
+        // Only ModStarted present (run still in progress) — still Pass,
+        // because we have evidence the workflow was initiated.
+        let eid = "wfx_99a_started_only";
+        let e = vec![
+            mk(1, 1, OpenWandTraceEvent::Workflow(WorkflowEvent::ModStarted {
+                mod_id: eid.into(), mod_name: "workflow_run".into()
+            }), "workflow.mod_started"),
+        ];
+        let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: eid.into() }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Pass, "ModStarted alone is sufficient evidence");
+    }
 }

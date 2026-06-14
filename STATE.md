@@ -58,7 +58,17 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 93A | Operation Replay | `wave-93a-lock` | `OperationReplayVerifier` - desktop operations to trace correspondence |
 | 93B | Operation Replay CLI | `wave-93b-lock` | `openwand operation-replay` with JSON operation descriptors |
 | 94A | Security Review Preparation | `wave-94a-lock` | Threat model, authority-boundary checklist, caveat ledger |
-| 96A | v0.5.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
+| 96A | v0.5.0 Release Preparation | `wave-96a-lock` | Release artifact, notes, blocker reconciliation |
+| 96B | v0.5.0 Declaration | `v0.5.0` | Tag v0.5.0, publish release |
+
+## v0.5.0 Blocker Resolution
+
+| Blocker | Status | Resolution |
+|---------|--------|------------|
+| VE-1: Trace verifier | RESOLVED | 92A-92B: TraceVerifier + CLI with tamper detection |
+| VE-2: Operation replay | RESOLVED | 93A-93B: OperationReplayVerifier + CLI with correspondence checking |
+| VE-3: Linux GUI runtime | DEFERRED | Environment-gated; compile-validated (85A), no display server |
+| VE-4: Security review prep | RESOLVED | 94A: Threat model, authority-boundary checklist, caveat ledger |
 
 ## v0.4.0 Operation Arc
 

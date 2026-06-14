@@ -1,0 +1,704 @@
+//! External checkpoint anchor model — read-only verification.
+//!
+//! Wave 104A: Defines the checkpoint anchor DTOs, root-hash computation,
+//! and verification semantics for externally persisted trace checkpoints.
+//!
+//! **What this module provides:**
+//! - `CheckpointAnchor` DTO (serde-serializable)
+//! - `AnchorVerificationResult` + `AnchorFreshness` enums
+//! - `AnchorVerificationReport` struct
+//! - `compute_root_hash()` pure function
+//! - `verify_anchor()` pure/read-only function
+//!
+//! **What this module does NOT provide:**
+//! - Anchor file writing (deferred to 104B: `CheckpointWriter`)
+//! - CLI commands (deferred to 104B)
+//! - Path containment checks for anchor roots (deferred to 104B)
+//! - Checkpoint sequence registry (deferred to 104B)
+//!
+//! **Authority:** The verifier READS anchors and COMPARES hashes.
+//! It does not create, repair, delete, or modify anchors.
+//! It does not mutate trace entries.
+//!
+//! **Dependency on hash correctness:** The checkpoint root hash is a rollup
+//! over stored `entry_hash` values. It does NOT recompute event payload hashes.
+//! In practice, verification should be run as:
+//!   1. `trace-verify` with hash correctness (98B)
+//!   2. Anchor verification over entry_hash rollup
+//!
+//! **Known limitation:** If an attacker modifies entry payloads and recomputes
+//! both `entry_hash` values AND the external anchor, the anchor model cannot
+//! detect it. Full immutability requires remote attestation or cryptographic
+//! signatures, which are out of scope.
+
+use crate::entry::TraceEntry;
+// EntryHash used in tests via make_entry
+use serde::{Deserialize, Serialize};
+
+// ── Anchor DTO ─────────────────────────────────────────────
+
+/// Trace state captured at checkpoint time.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointTraceState {
+    /// Number of trace entries at checkpoint time.
+    pub entry_count: u64,
+    /// Last global_sequence value at checkpoint time.
+    pub last_global_sequence: u64,
+    /// BLAKE3 root hash over all entry_hash values (sorted by global_sequence).
+    pub root_hash: String,
+}
+
+/// A checkpoint anchor — externally persisted evidence of trace state.
+///
+/// Serialized as JSON and stored outside the trace store root.
+/// The anchor provides tamper evidence: if the trace store is modified
+/// after the checkpoint, the root hash will not match on verification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointAnchor {
+    /// Anchor format version. Currently 1.
+    pub version: u16,
+
+    /// Monotonic checkpoint sequence number.
+    pub checkpoint_sequence: u64,
+
+    /// Workspace or session identifier.
+    pub workspace_id: String,
+
+    /// ISO-8601 timestamp when the checkpoint was created.
+    pub created_at: String,
+
+    /// Trace state at checkpoint time.
+    pub trace: CheckpointTraceState,
+
+    /// Hash algorithm used for root hash computation.
+    pub hash_algorithm: String,
+
+    /// Source identifier for the anchor writer.
+    pub anchor_source: String,
+}
+
+/// Supported anchor format versions.
+pub const ANCHOR_FORMAT_VERSION: u16 = 1;
+
+// ── Verification Result Types ──────────────────────────────
+
+/// Integrity verification result for an anchor.
+///
+/// This is SEPARATE from freshness: an anchor can be `Pass` (integrity holds
+/// for the checkpointed prefix) even if the trace has grown since the
+/// checkpoint. Freshness is tracked by `AnchorFreshness`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnchorVerificationResult {
+    /// Anchor exists and root hash matches for the checkpointed prefix.
+    Pass,
+    /// Anchor exists but root hash or entry count mismatch for the
+    /// checkpointed prefix. The trace was modified after the checkpoint.
+    Fail,
+    /// No anchor was provided or the anchor file does not exist.
+    MissingAnchor,
+    /// Anchor format version is not recognized.
+    Unsupported,
+}
+
+/// Freshness state of an anchor relative to the current trace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnchorFreshness {
+    /// Trace has not grown since the checkpoint.
+    /// `current_entries == anchor.trace.entry_count`.
+    Current,
+
+    /// Trace has additional entries appended after the checkpoint.
+    /// The checkpointed prefix is still valid; the new entries are
+    /// simply outside anchor coverage.
+    Stale {
+        /// Number of entries appended after the checkpoint.
+        additional_entries: u64,
+    },
+}
+
+/// Full anchor verification report.
+#[derive(Debug, Clone)]
+pub struct AnchorVerificationReport {
+    /// Integrity result for the checkpointed prefix.
+    pub result: AnchorVerificationResult,
+    /// Freshness relative to current trace.
+    pub freshness: AnchorFreshness,
+    /// Recomputed root hash (if verification was performed).
+    pub recomputed_root_hash: Option<String>,
+    /// Human-readable detail about the verification.
+    pub detail: String,
+}
+
+// ── Root Hash Computation ──────────────────────────────────
+
+/// Compute a root hash over trace entries.
+///
+/// The root hash is a BLAKE3 rollup:
+/// 1. Sort entries by `global_sequence` ascending.
+/// 2. Feed each entry's `entry_hash` bytes into a running BLAKE3 hasher.
+/// 3. The final digest is the root hash.
+///
+/// This detects insertion, deletion, or modification of entries after
+/// checkpoint unless the attacker can also rewrite the external anchor
+/// to match the modified store.
+///
+/// **Dependency:** The root hash is computed over stored `entry_hash` values.
+/// It does NOT recompute event payload hashes. For full integrity, run
+/// `trace-verify` with hash correctness (98B) BEFORE anchor verification.
+///
+/// **Known limitation:** If an attacker modifies payloads and recomputes
+/// both `entry_hash` values AND the external anchor, the local anchor model
+/// cannot detect it.
+pub fn compute_root_hash<E>(entries: &[TraceEntry<E>]) -> String {
+    let mut sorted: Vec<&TraceEntry<E>> = entries.iter().collect();
+    sorted.sort_by_key(|e| e.global_sequence);
+
+    let mut hasher = blake3::Hasher::new();
+    for entry in &sorted {
+        hasher.update(entry.entry_hash.0.as_bytes());
+    }
+
+    let hash = hasher.finalize();
+    format!("blake3:{}", hash.to_hex())
+}
+
+/// Compute a root hash over entries up to a given global_sequence (inclusive).
+///
+/// This is used for prefix verification: the anchor covers entries with
+/// `global_sequence <= last_global_sequence`. Entries appended after the
+/// checkpoint are excluded from the root hash computation.
+pub fn compute_root_hash_prefix<E>(
+    entries: &[TraceEntry<E>],
+    last_global_sequence: u64,
+) -> (String, u64) {
+    let mut filtered: Vec<&TraceEntry<E>> = entries
+        .iter()
+        .filter(|e| e.global_sequence <= last_global_sequence)
+        .collect();
+    filtered.sort_by_key(|e| e.global_sequence);
+
+    let count = filtered.len() as u64;
+
+    let mut hasher = blake3::Hasher::new();
+    for entry in &filtered {
+        hasher.update(entry.entry_hash.0.as_bytes());
+    }
+
+    let hash = hasher.finalize();
+    (format!("blake3:{}", hash.to_hex()), count)
+}
+
+// ── Anchor Verification ────────────────────────────────────
+
+/// Verify an anchor against the current trace entries.
+///
+/// This is a PURE, READ-ONLY function. It does not read files, write files,
+/// or mutate state. The caller provides both the entries and the anchor.
+///
+/// Verification logic:
+/// 1. Check anchor format version → `Unsupported` if not recognized.
+/// 2. Compute root hash over entries with `global_sequence <= anchor.trace.last_global_sequence`.
+/// 3. Compare entry count and root hash.
+/// 4. Determine freshness: `Current` if no additional entries, `Stale` otherwise.
+///
+/// **Authority:** Read-only. No mutation of entries or anchors.
+pub fn verify_anchor<E>(
+    entries: &[TraceEntry<E>],
+    anchor: Option<&CheckpointAnchor>,
+) -> AnchorVerificationReport {
+    // No anchor provided
+    let anchor = match anchor {
+        None => {
+            return AnchorVerificationReport {
+                result: AnchorVerificationResult::MissingAnchor,
+                freshness: AnchorFreshness::Current,
+                recomputed_root_hash: None,
+                detail: "No anchor provided. Anchor verification is Inconclusive (not a trace failure).".into(),
+            };
+        }
+        Some(a) => a,
+    };
+
+    // Version check
+    if anchor.version != ANCHOR_FORMAT_VERSION {
+        return AnchorVerificationReport {
+            result: AnchorVerificationResult::Unsupported,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: None,
+            detail: format!(
+                "Anchor version {} is not supported (expected {}).",
+                anchor.version, ANCHOR_FORMAT_VERSION
+            ),
+        };
+    }
+
+    // Validate root_hash format
+    if !anchor.trace.root_hash.starts_with("blake3:") {
+        return AnchorVerificationReport {
+            result: AnchorVerificationResult::Unsupported,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: None,
+            detail: format!(
+                "Anchor root_hash does not have expected 'blake3:' prefix: {}",
+                &anchor.trace.root_hash.get(..20).unwrap_or(&anchor.trace.root_hash)
+            ),
+        };
+    }
+
+    // Compute root hash over the checkpointed prefix
+    let (recomputed_hash, prefix_count) =
+        compute_root_hash_prefix(entries, anchor.trace.last_global_sequence);
+
+    // Check for entries removed (current has fewer entries than checkpoint)
+    let current_count = entries.len() as u64;
+    if current_count < anchor.trace.entry_count {
+        return AnchorVerificationReport {
+            result: AnchorVerificationResult::Fail,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: Some(recomputed_hash),
+            detail: format!(
+                "Trace has {} entries but anchor recorded {}. Entries were removed after checkpoint.",
+                current_count, anchor.trace.entry_count
+            ),
+        };
+    }
+
+    // Check prefix entry count matches anchor
+    if prefix_count != anchor.trace.entry_count {
+        return AnchorVerificationReport {
+            result: AnchorVerificationResult::Fail,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: Some(recomputed_hash),
+            detail: format!(
+                "Prefix (global_sequence <= {}) has {} entries but anchor recorded {}. Entries were removed or reordered within the checkpoint range.",
+                anchor.trace.last_global_sequence, prefix_count, anchor.trace.entry_count
+            ),
+        };
+    }
+
+    // Compare root hashes
+    if recomputed_hash != anchor.trace.root_hash {
+        return AnchorVerificationReport {
+            result: AnchorVerificationResult::Fail,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: Some(recomputed_hash),
+            detail: "Root hash mismatch: trace was modified after checkpoint.".into(),
+        };
+    }
+
+    // Root hash matches — determine freshness
+    let additional = current_count.saturating_sub(anchor.trace.entry_count);
+    if additional == 0 {
+        AnchorVerificationReport {
+            result: AnchorVerificationResult::Pass,
+            freshness: AnchorFreshness::Current,
+            recomputed_root_hash: Some(recomputed_hash),
+            detail: "Anchor root hash matches. Trace is at checkpoint state.".into(),
+        }
+    } else {
+        AnchorVerificationReport {
+            result: AnchorVerificationResult::Pass,
+            freshness: AnchorFreshness::Stale {
+                additional_entries: additional,
+            },
+            recomputed_root_hash: Some(recomputed_hash),
+            detail: format!(
+                "Anchor root hash matches for checkpointed prefix. {} additional entries appended after checkpoint (outside anchor coverage).",
+                additional
+            ),
+        }
+    }
+}
+
+// ── Tests ──────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::Actor;
+    use crate::entry::TraceEntry;
+    use crate::ids::TraceId;
+    use crate::stream::{EntryHash, TraceStreamId, TraceStreamScope};
+
+    /// Minimal test event type.
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+    struct TestEvent(String);
+
+    fn make_entry(
+        global_seq: u64,
+        entry_hash: &str,
+    ) -> TraceEntry<TestEvent> {
+        TraceEntry {
+            id: TraceId::new(),
+            stream_id: TraceStreamId {
+                scope: TraceStreamScope::Session,
+                id: "s1".into(),
+            },
+            stream_sequence: global_seq,
+            global_sequence: global_seq,
+            occurred_at: chrono::Utc::now(),
+            actor: Actor::User,
+            event: TestEvent("test".into()),
+            event_kind: "test.event".into(),
+            event_schema_version: 1,
+            trace_schema_version: 1,
+            prev_hash: if global_seq > 1 {
+                Some(EntryHash(format!("prev_{}", global_seq - 1)))
+            } else {
+                None
+            },
+            entry_hash: EntryHash(entry_hash.into()),
+        }
+    }
+
+    fn make_anchor(entries: &[TraceEntry<TestEvent>]) -> CheckpointAnchor {
+        let root = compute_root_hash(entries);
+        let last_gseq = entries.iter().map(|e| e.global_sequence).max().unwrap_or(0);
+        CheckpointAnchor {
+            version: ANCHOR_FORMAT_VERSION,
+            checkpoint_sequence: 1,
+            workspace_id: "test-ws".into(),
+            created_at: "2026-06-14T12:00:00Z".into(),
+            trace: CheckpointTraceState {
+                entry_count: entries.len() as u64,
+                last_global_sequence: last_gseq,
+                root_hash: root,
+            },
+            hash_algorithm: "blake3".into(),
+            anchor_source: "test".into(),
+        }
+    }
+
+    // ── compute_root_hash tests ──
+
+    #[test]
+    fn root_hash_is_deterministic() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+            make_entry(3, "hash_c"),
+        ];
+        let h1 = compute_root_hash(&entries);
+        let h2 = compute_root_hash(&entries);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn root_hash_changes_on_entry_modification() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let original = compute_root_hash(&entries);
+
+        let mut tampered = entries.clone();
+        tampered[1].entry_hash = EntryHash("hash_TAMPERED".into());
+        let modified = compute_root_hash(&tampered);
+
+        assert_ne!(original, modified, "root hash must change when entry_hash is modified");
+    }
+
+    #[test]
+    fn root_hash_changes_on_insertion() {
+        let entries = vec![make_entry(1, "hash_a")];
+        let original = compute_root_hash(&entries);
+
+        let extended = vec![make_entry(1, "hash_a"), make_entry(2, "hash_b")];
+        let grown = compute_root_hash(&extended);
+
+        assert_ne!(original, grown, "root hash must change on insertion");
+    }
+
+    #[test]
+    fn root_hash_changes_on_deletion() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let original = compute_root_hash(&entries);
+
+        let reduced = vec![make_entry(1, "hash_a")];
+        let shrunk = compute_root_hash(&reduced);
+
+        assert_ne!(original, shrunk, "root hash must change on deletion");
+    }
+
+    #[test]
+    fn root_hash_independent_of_input_order() {
+        let e1 = make_entry(1, "hash_a");
+        let e2 = make_entry(2, "hash_b");
+        let e3 = make_entry(3, "hash_c");
+
+        let ordered = compute_root_hash(&[e1.clone(), e2.clone(), e3.clone()]);
+        let shuffled = compute_root_hash(&[e3, e1, e2]);
+
+        assert_eq!(ordered, shuffled, "root hash must sort internally by global_sequence");
+    }
+
+    #[test]
+    fn root_hash_empty_entries() {
+        let entries: Vec<TraceEntry<TestEvent>> = vec![];
+        let hash = compute_root_hash(&entries);
+        assert!(hash.starts_with("blake3:"), "empty root hash should still have blake3 prefix");
+    }
+
+    // ── compute_root_hash_prefix tests ──
+
+    #[test]
+    fn prefix_hash_only_covers_entries_up_to_checkpoint() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+            make_entry(3, "hash_c"),  // appended after checkpoint
+        ];
+
+        // Prefix covers only entries 1 and 2
+        let (prefix_hash, count) = compute_root_hash_prefix(&entries, 2);
+        assert_eq!(count, 2);
+
+        // Should match root over just entries 1 and 2
+        let just_prefix = compute_root_hash(&[entries[0].clone(), entries[1].clone()]);
+        assert_eq!(prefix_hash, just_prefix);
+    }
+
+    // ── verify_anchor tests ──
+
+    #[test]
+    fn verify_anchor_pass_current() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let anchor = make_anchor(&entries);
+
+        let report = verify_anchor(&entries, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Pass);
+        assert_eq!(report.freshness, AnchorFreshness::Current);
+    }
+
+    #[test]
+    fn verify_anchor_pass_stale_after_append() {
+        // Entries at checkpoint time
+        let checkpoint_entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let anchor = make_anchor(&checkpoint_entries);
+
+        // Trace grows: entries appended after checkpoint
+        let mut grown = checkpoint_entries.clone();
+        grown.push(make_entry(3, "hash_c"));
+        grown.push(make_entry(4, "hash_d"));
+
+        let report = verify_anchor(&grown, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Pass,
+            "anchor should remain valid after append-only growth");
+        assert_eq!(report.freshness, AnchorFreshness::Stale { additional_entries: 2 });
+    }
+
+    #[test]
+    fn verify_anchor_fail_on_modification_within_prefix() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let anchor = make_anchor(&entries);
+
+        // Tamper: modify an entry within the checkpoint prefix
+        let mut tampered = entries.clone();
+        tampered[1].entry_hash = EntryHash("hash_EVIL".into());
+
+        let report = verify_anchor(&tampered, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Fail,
+            "modification within checkpoint prefix must Fail");
+    }
+
+    #[test]
+    fn verify_anchor_fail_on_deletion_within_prefix() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+            make_entry(3, "hash_c"),
+        ];
+        let anchor = make_anchor(&entries);
+
+        // Delete an entry within the checkpoint range
+        let reduced = vec![entries[0].clone(), entries[2].clone()];
+
+        let report = verify_anchor(&reduced, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Fail,
+            "deletion within checkpoint prefix must Fail");
+    }
+
+    #[test]
+    fn verify_anchor_fail_on_insertion_within_prefix() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let anchor = make_anchor(&entries);
+
+        // Insert a new entry within the checkpoint range
+        let mut modified = entries.clone();
+        modified.push(make_entry(2, "hash_inserted")); // same global_seq
+
+        let report = verify_anchor(&modified, Some(&anchor));
+        // This either fails on count mismatch or root hash mismatch
+        assert_eq!(report.result, AnchorVerificationResult::Fail);
+    }
+
+    #[test]
+    fn verify_anchor_missing_anchor() {
+        let entries = vec![make_entry(1, "hash_a")];
+        let report = verify_anchor(&entries, None);
+        assert_eq!(report.result, AnchorVerificationResult::MissingAnchor);
+    }
+
+    #[test]
+    fn verify_anchor_unsupported_version() {
+        let entries = vec![make_entry(1, "hash_a")];
+        let mut anchor = make_anchor(&entries);
+        anchor.version = 99;
+
+        let report = verify_anchor(&entries, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Unsupported);
+    }
+
+    #[test]
+    fn verify_anchor_unsupported_root_hash_prefix() {
+        let entries = vec![make_entry(1, "hash_a")];
+        let mut anchor = make_anchor(&entries);
+        anchor.trace.root_hash = "sha256:abc123".into(); // wrong prefix
+
+        let report = verify_anchor(&entries, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Unsupported);
+    }
+
+    #[test]
+    fn verify_anchor_tamper_after_checkpoint_not_covered_but_anchor_still_valid() {
+        // Entries at checkpoint time
+        let checkpoint_entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let anchor = make_anchor(&checkpoint_entries);
+
+        // After checkpoint, add then tamper an entry
+        let mut grown = checkpoint_entries.clone();
+        grown.push(make_entry(3, "hash_c"));
+        // Tamper the post-checkpoint entry
+        grown[2].entry_hash = EntryHash("hash_EVIL".into());
+
+        let report = verify_anchor(&grown, Some(&anchor));
+        // Anchor covers only entries 1-2. Entry 3 tamper is outside coverage.
+        // So the anchor verification should still Pass (stale).
+        assert_eq!(report.result, AnchorVerificationResult::Pass,
+            "tamper after checkpoint is outside anchor coverage");
+        assert_eq!(report.freshness, AnchorFreshness::Stale { additional_entries: 1 });
+    }
+
+    #[test]
+    fn verify_anchor_fully_consistent_tamper_not_detected() {
+        // KNOWN LIMITATION: An attacker who modifies entries AND recomputes
+        // both entry_hash values AND the external anchor produces a trace
+        // that passes anchor verification.
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+
+        // Attacker modifies entry 2 and recomputes everything
+        let mut tampered = entries.clone();
+        tampered[1].entry_hash = EntryHash("hash_recomputed_consistently".into());
+
+        // Attacker creates a new anchor matching the tampered trace
+        let fake_anchor = make_anchor(&tampered);
+
+        let report = verify_anchor(&tampered, Some(&fake_anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Pass,
+            "fully consistent tamper passes — documented limitation (requires external trust anchor)");
+    }
+
+    #[test]
+    fn verify_anchor_current_count_less_than_anchor_fails() {
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+            make_entry(3, "hash_c"),
+        ];
+        let anchor = make_anchor(&entries);
+
+        // Remove an entry (trace shrank)
+        let reduced = vec![entries[0].clone(), entries[1].clone()];
+
+        let report = verify_anchor(&reduced, Some(&anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Fail);
+    }
+
+    #[test]
+    fn verify_anchor_report_contains_recomputed_hash() {
+        let entries = vec![make_entry(1, "hash_a"), make_entry(2, "hash_b")];
+        let anchor = make_anchor(&entries);
+
+        let report = verify_anchor(&entries, Some(&anchor));
+        assert!(report.recomputed_root_hash.is_some(),
+            "Pass report should include recomputed root hash");
+        assert_eq!(
+            report.recomputed_root_hash.as_ref().unwrap(),
+            &anchor.trace.root_hash
+        );
+    }
+
+    // ── Authority guard test ──
+
+    #[test]
+    fn verify_anchor_is_read_only() {
+        // Prove that verify_anchor does not mutate the entries
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+        let hash_before: Vec<String> = entries.iter().map(|e| e.entry_hash.0.clone()).collect();
+        let gseq_before: Vec<u64> = entries.iter().map(|e| e.global_sequence).collect();
+        let kind_before: Vec<String> = entries.iter().map(|e| e.event_kind.clone()).collect();
+        let anchor = make_anchor(&entries);
+
+        let _ = verify_anchor(&entries, Some(&anchor));
+
+        let hash_after: Vec<String> = entries.iter().map(|e| e.entry_hash.0.clone()).collect();
+        let gseq_after: Vec<u64> = entries.iter().map(|e| e.global_sequence).collect();
+        let kind_after: Vec<String> = entries.iter().map(|e| e.event_kind.clone()).collect();
+
+        assert_eq!(hash_before, hash_after, "verify_anchor must not mutate entry hashes");
+        assert_eq!(gseq_before, gseq_after, "verify_anchor must not mutate global_sequence");
+        assert_eq!(kind_before, kind_after, "verify_anchor must not mutate event_kind");
+    }
+
+    // ── Source-level authority guard ──
+
+    #[test]
+    fn anchor_module_does_not_write_files() {
+        let src = include_str!("anchor.rs");
+        let impl_only = src.split("#[cfg(test)]").next().unwrap_or("");
+        assert!(!impl_only.contains("std::fs::write"),
+            "anchor module must not write files (writing is deferred to 104B CheckpointWriter)");
+        assert!(!impl_only.contains("std::fs::create_dir"),
+            "anchor module must not create directories");
+        assert!(!impl_only.contains("tokio::fs::write"),
+            "anchor module must not write files async");
+        assert!(!impl_only.contains("std::fs::remove"),
+            "anchor module must not delete files");
+    }
+
+    #[test]
+    fn anchor_module_does_not_import_backend() {
+        let src = include_str!("anchor.rs");
+        let impl_only = src.split("#[cfg(test)]").next().unwrap_or("");
+        assert!(!impl_only.contains("openwand_store"),
+            "anchor module must not import openwand-store (backend coupling)");
+        assert!(!impl_only.contains("openwand_core"),
+            "anchor module must not import openwand-core (domain coupling)");
+        assert!(!impl_only.contains("openwand_session"),
+            "anchor module must not import openwand-session");
+    }
+}

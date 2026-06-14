@@ -52,7 +52,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 
 | Wave | Title | Tag | Deliverable |
 |------|-------|-----|-------------|
-| 103A | Post-v0.6 Roadmap Reset | (this wave) | v0.7.0 roadmap (VG-1 through VG-5) |
+| 103A | Post-v0.6 Roadmap Reset | `wave-103a-lock` | v0.7.0 roadmap (VG-1 through VG-5) |
+| 104A | External Anchor Design | (this wave) | Anchor DTOs, root-hash computation, verification semantics |
 
 ## v0.7.0 Blocker Plan
 

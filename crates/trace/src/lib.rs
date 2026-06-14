@@ -16,6 +16,7 @@ pub mod store;
 pub mod projector;
 pub mod error;
 pub mod verifier;
+pub mod anchor;
 pub mod replay;
 
 #[cfg(feature = "testing")]

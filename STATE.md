@@ -1,10 +1,10 @@
 # OpenWand — Project State
 
 ## Version
-0.5.0 (stable)
+0.5.0 (stable) — planning v0.6.0
 
 ## Status
-**v0.5.0 stable released. Tag `v0.5.0`.**
+**v0.5.0 stable released. v0.6.0 in progress. Wave 97A (post-v0.5 roadmap reset) locked.**
 
 Release: v0.5.0 — tag `v0.5.0`
 
@@ -60,6 +60,7 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 94A | Security Review Preparation | `wave-94a-lock` | Threat model, authority-boundary checklist, caveat ledger |
 | 96A | v0.5.0 Release Preparation | `wave-96a-lock` | Release artifact, notes, blocker reconciliation |
 | 96B | v0.5.0 Declaration | `v0.5.0` | Tag v0.5.0, publish release |
+| 97A | Post-v0.5 Roadmap Reset | (this wave) | v0.6.0 roadmap, VF-1 through VF-5 proposed |
 
 ## v0.5.0 Blocker Resolution
 

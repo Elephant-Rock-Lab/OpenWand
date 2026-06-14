@@ -4,7 +4,7 @@
 0.4.0 (stable) — planning v0.5.0
 
 ## Status
-**v0.4.0 stable released. v0.5.0 in progress. Wave 93B (audit check) locked.**
+**v0.4.0 stable released. v0.5.0 in progress. Wave 94A (security review preparation) locked.**
 
 Release: v0.4.0 — tag `v0.4.0`
 
@@ -38,15 +38,27 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 - 3,939 carried from v0.3.0
 - +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.5.0 current (Wave 93B):** 4,060 tests, 0 failures.
+**v0.5.0 current (Wave 94A):** 4,071 tests, 0 failures.
 - 3,999 carried from v0.4.0
-- +26 from v0.5.0 (92A: +16, 92B: +10)
-- +29 from 93A (trace replay: +19, app operation replay: +10)
+- +26 from 92A-92B (trace verifier core + CLI)
+- +35 from 93A-93B (operation replay verifier + CLI)
+- +3 from 94A (security review documentation guards)
 
 **Clippy posture:** 0 actionable production warnings on 11 non-app crates (HB-G5).
 50 app crate pedantic/test-only warnings accepted as cosmetic.
 
 **Desktop feature build:** PASS (0 errors, 0 warnings).
+
+## v0.5.0 Runtime Integrity Arc
+
+| Wave | Title | Tag | Deliverable |
+|------|-------|-----|-------------|
+| 91A | Post-v0.4 Roadmap Reset | `wave-91a-lock` | v0.5.0 roadmap (VE-1 through VE-4) |
+| 92A | Trace Verifier Core | `wave-92a-lock` | `TraceVerifier::verify()` - chain continuity, ordering, duplicates |
+| 92B | Trace Verifier CLI | `wave-92b-lock` | `openwand trace-verify` with distinct exit codes |
+| 93A | Operation Replay | `wave-93a-lock` | `OperationReplayVerifier` - desktop operations to trace correspondence |
+| 93B | Operation Replay CLI | `wave-93b-lock` | `openwand operation-replay` with JSON operation descriptors |
+| 94A | Security Review Preparation | (this wave) | Threat model, authority-boundary checklist, caveat ledger |
 
 ## v0.4.0 Operation Arc
 

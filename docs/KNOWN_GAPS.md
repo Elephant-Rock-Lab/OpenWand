@@ -72,3 +72,4 @@ Updated again at Wave 69G with halt-era blocker closures and current gaps.
 | C13 | ARID/tool-call-ID mismatch in 88B approval | Precision | Accepted — runner recovery index resolves it; refinement deferred |
 | C14 | Synchronous workflow run initiation in 88A | Performance | Accepted — may block UI briefly; background task deferred |
 | C15 | Linux GUI runtime not validated | Validation | Deferred — compile-validated (85A), no display server |
+| C16 | TD-93B-1: module name debt | Maintainability | Accepted — `operation_audit.rs` contains operation_replay module code; rename deferred (94A caveat CV-7) |

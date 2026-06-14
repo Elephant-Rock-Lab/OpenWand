@@ -68,10 +68,11 @@ None. Zero OpenWand direct dependencies have vulnerability or unmaintained advis
 - **Underlying fact unchanged:** test-only `unsafe` blocks still exist.
 
 ### DEFERRED-004: trace immutability claim correction
-- **Status:** Closed by documentation downgrade
-- **Category:** Documentation
-- **Detail:** README.md updated: "immutable evidence chain" → "append-only evidence chain (structural hash-chaining; immutability enforcement deferred to verifier, not yet implemented)." Trace store deletion/mutation prevention is not enforced by a runtime verifier.
-- **Underlying fact unchanged:** no trace verifier exists.
+- **Status:** Partially closed by 92A-92B + 94A documentation
+- **Category:** Architecture / Verification
+- **Detail:** README.md updated: "immutable evidence chain" changed to "append-only evidence chain (structural hash-chaining; immutability enforcement deferred to verifier, not yet implemented)." Wave 92A implemented `TraceVerifier` that validates chain continuity (prev_hash to entry_hash linkage per stream), ordering, duplicates, and well-formedness. Wave 92B exposed it via `openwand trace-verify` CLI with tamper detection tests. Wave 94A documented the verifier authority boundary and caveats.
+- **What is now closed:** No verifier existed (closed 92A). No CLI verification path existed (closed 92B). No deterministic chain-continuity tamper detection existed (closed 92A-92B). No authority-boundary documentation existed (closed 94A).
+- **What remains open:** Backend-specific hash recomputation (verifier validates linkage, not BLAKE3 correctness). Full cryptographic hash correctness verification. Formal immutability proof. Physical-layer tamper prevention (SQLite file is technically mutable by direct access — verifier detects after the fact, does not prevent).
 
 ### DEFERRED-005: MutationHelper live-event correctness
 - **Status:** Closed with rationale and tests

@@ -58,7 +58,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 105A | Automated Security Scanning | `wave-105a-lock` | cargo audit, clippy, authority guards, SECURITY_SCAN_RESULTS.md |
 | 105B | Structured Authority Review | `wave-105b-lock` | AUTHORITY_REVIEW.md: 12 surfaces, write-authority map, residual risks |
 | 106A | Evidence Report Export | `wave-106a-lock` | Aggregated JSON report: trace verify + operation replay + anchor + scan + authority review |
-| 107A | v0.7.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
+| 107A | v0.7.0 Release Preparation | `wave-107a-lock` | Release artifact, notes, blocker reconciliation |
+| 107B | v0.7.0 Declaration | `v0.7.0` | Tag v0.7.0, publish release |
 
 ## v0.7.0 Blocker Plan
 

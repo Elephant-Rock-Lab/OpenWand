@@ -381,5 +381,6 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 105A | Automated Security Scanning | `wave-105a-lock` | 4,149 | docs/SECURITY_SCAN_RESULTS.md |
 | 105B | Structured Authority Review | `wave-105b-lock` | 4,156 | docs/AUTHORITY_REVIEW.md |
 | 106A | Evidence Report Export | `wave-106a-lock` | 4,176 | crates/app/src/evidence_report.rs |
-| 107A | v0.7.0 Release Preparation | (pending) | 4,176 | RELEASE_NOTES_v070_STABLE.md |
+| 107A | v0.7.0 Release Preparation | `wave-107a-lock` | 4,176 | RELEASE_NOTES_v070_STABLE.md |
+| 107B | v0.7.0 Declaration | `v0.7.0` | 4,176 | Tag v0.7.0 |
 | **v0.7.0** | **Stable Release** | **`v0.7.0`** | **4,176** | **RELEASE_NOTES_v070_STABLE.md** |

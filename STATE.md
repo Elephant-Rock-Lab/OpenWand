@@ -55,14 +55,15 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 103A | Post-v0.6 Roadmap Reset | `wave-103a-lock` | v0.7.0 roadmap (VG-1 through VG-5) |
 | 104A | External Anchor Design | `wave-104a-lock` | Anchor DTOs, root-hash computation, verification semantics |
 | 104B | CheckpointWriter + Anchor CLI | `wave-104b-lock` | Writer, path containment, CLI commands, integration tests |
-| 105A | Automated Security Scanning | (this wave) | cargo audit, clippy, authority guards, SECURITY_SCAN_RESULTS.md |
+| 105A | Automated Security Scanning | `wave-105a-lock` | cargo audit, clippy, authority guards, SECURITY_SCAN_RESULTS.md |
+| 105B | Structured Authority Review | (this wave) | AUTHORITY_REVIEW.md: 12 surfaces, write-authority map, residual risks |
 
 ## v0.7.0 Blocker Plan
 
 | Blocker | Description | Priority |
 |---------|-------------|----------|
 | VG-1: External anchor / checkpoint | Periodic checkpoint hash persisted outside store root; verifier checks anchor | P1 (core) |
-| VG-2: Security review execution | Automated scanning + structured authority review | P1 (core) |
+| VG-2: Security review execution | RESOLVED (105A-105B): Automated scanning + structured authority review | P1 (core) |
 | VG-3: Linux GUI runtime | Environment-gated; may defer | P2 |
 | VG-4: Provider validation expansion | Direct OpenAI/Anthropic/Ollama if strategic | P2 |
 | VG-5: Evidence UX hardening | Exportable verification reports | P2 |

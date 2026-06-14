@@ -1,7 +1,7 @@
 # v0.5.0 Roadmap — Post-v0.4 Reset
 
 **Created:** 2026-06-13 (Wave 91A)
-**Status:** Planning
+**Status:** Complete (Wave 96A)
 **Predecessor:** v0.4.0 stable (`cb6b56b`)
 
 ---

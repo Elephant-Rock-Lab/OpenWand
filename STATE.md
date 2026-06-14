@@ -1,16 +1,17 @@
 # OpenWand — Project State
 
 ## Version
-0.4.0 (stable) — planning v0.5.0
+0.5.0 (stable)
 
 ## Status
-**v0.4.0 stable released. v0.5.0 in progress. Wave 94A (security review preparation) locked.**
+**v0.5.0 stable released. Tag `v0.5.0`.**
 
-Release: v0.4.0 — tag `v0.4.0`
+Release: v0.5.0 — tag `v0.5.0`
 
-Binary: 17,853,952 bytes (~17.0 MB), SHA-256 `6C928123E05FD16B5AA2B223C19E3A990F222C679C90818FC56696CDB028C934`
+Binary: 18,018,816 bytes (~17.2 MB), SHA-256 `F0BE80A04D3322C8319711AF51C48BC91CED93D01AD20CFD1AC2DB4B85CA2A3D`
 
-Stable for v0.4.0 milestone scope. Not production-ready. Not formal security review.
+Stable for v0.5.0 milestone scope. Not production-ready. Not formal security review.
+No full hash recomputation. No full immutability proof.
 
 ## Workspace Structure
 ```
@@ -38,11 +39,9 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 - 3,939 carried from v0.3.0
 - +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.5.0 current (Wave 94A):** 4,071 tests, 0 failures.
+**v0.5.0 stable baseline (Wave 96A):** 4,071 tests on Windows, 0 failures.
 - 3,999 carried from v0.4.0
-- +26 from 92A-92B (trace verifier core + CLI)
-- +35 from 93A-93B (operation replay verifier + CLI)
-- +3 from 94A (security review documentation guards)
+- +72 from v0.5.0 arc (92A: +16, 92B: +10, 93A: +35, 93B: +8, 94A: +3)
 
 **Clippy posture:** 0 actionable production warnings on 11 non-app crates (HB-G5).
 50 app crate pedantic/test-only warnings accepted as cosmetic.
@@ -58,7 +57,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 92B | Trace Verifier CLI | `wave-92b-lock` | `openwand trace-verify` with distinct exit codes |
 | 93A | Operation Replay | `wave-93a-lock` | `OperationReplayVerifier` - desktop operations to trace correspondence |
 | 93B | Operation Replay CLI | `wave-93b-lock` | `openwand operation-replay` with JSON operation descriptors |
-| 94A | Security Review Preparation | (this wave) | Threat model, authority-boundary checklist, caveat ledger |
+| 94A | Security Review Preparation | `wave-94a-lock` | Threat model, authority-boundary checklist, caveat ledger |
+| 96A | v0.5.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
 
 ## v0.4.0 Operation Arc
 
@@ -82,7 +82,7 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 ## Release Lineage
 
 ```
-v0.1.0-alpha → v0.1.0-beta → v0.2.0-beta → v0.2.0-rc.1 → v0.2.0 → v0.3.0 → v0.4.0
+v0.1.0-alpha -> v0.1.0-beta -> v0.2.0-beta -> v0.2.0-rc.1 -> v0.2.0 -> v0.3.0 -> v0.4.0 -> v0.5.0
 ```
 
 ## Hard Boundaries (Global)

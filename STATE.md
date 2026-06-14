@@ -57,17 +57,18 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 104B | CheckpointWriter + Anchor CLI | `wave-104b-lock` | Writer, path containment, CLI commands, integration tests |
 | 105A | Automated Security Scanning | `wave-105a-lock` | cargo audit, clippy, authority guards, SECURITY_SCAN_RESULTS.md |
 | 105B | Structured Authority Review | `wave-105b-lock` | AUTHORITY_REVIEW.md: 12 surfaces, write-authority map, residual risks |
-| 106A | Evidence Report Export | (this wave) | Aggregated JSON report: trace verify + operation replay + anchor + scan + authority review |
+| 106A | Evidence Report Export | `wave-106a-lock` | Aggregated JSON report: trace verify + operation replay + anchor + scan + authority review |
+| 107A | v0.7.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
 
 ## v0.7.0 Blocker Plan
 
 | Blocker | Description | Priority |
 |---------|-------------|----------|
-| VG-1: External anchor / checkpoint | Periodic checkpoint hash persisted outside store root; verifier checks anchor | P1 (core) |
+| VG-1: External anchor/checkpoint | RESOLVED (104A-104B): CheckpointWriter + verify_anchor + CLI | P1 (core) |
 | VG-2: Security review execution | RESOLVED (105A-105B): Automated scanning + structured authority review | P1 (core) |
-| VG-3: Linux GUI runtime | Environment-gated; may defer | P2 |
-| VG-4: Provider validation expansion | Direct OpenAI/Anthropic/Ollama if strategic | P2 |
-| VG-5: Evidence UX hardening | Exportable verification reports | P2 |
+| VG-3: Linux GUI runtime | DEFERRED: Environment-gated; compile-validated only | P2 |
+| VG-4: Provider validation expansion | DEFERRED: Strategic; LM Studio + Z.AI validated | P2 |
+| VG-5: Evidence UX hardening | RESOLVED (106A): Evidence report export with sourced summaries | P2 |
 
 ## v0.6.0 Evidence-Backed Assurance Arc
 

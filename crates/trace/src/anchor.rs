@@ -32,8 +32,8 @@
 //! signatures, which are out of scope.
 
 use crate::entry::TraceEntry;
-// EntryHash used in tests via make_entry
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 // ── Anchor DTO ─────────────────────────────────────────────
 
@@ -308,6 +308,209 @@ pub fn verify_anchor<E>(
             ),
         }
     }
+}
+
+// ── Anchor File I/O (104B) ─────────────────────────────
+
+/// Errors that can occur during anchor file operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnchorError {
+    /// The anchor root is the same as the store root after canonicalization.
+    AnchorRootEqualsStoreRoot,
+    /// The anchor root is inside the store root after canonicalization.
+    AnchorRootInsideStoreRoot,
+    /// The store root is inside the anchor root after canonicalization.
+    StoreRootInsideAnchorRoot,
+    /// A path could not be canonicalized (may not exist).
+    CanonicalizationFailed(String),
+    /// A checkpoint file with this sequence already exists.
+    CheckpointSequenceCollision(u64),
+    /// File I/O error.
+    IoError(String),
+    /// Anchor file parsing error.
+    ParseError(String),
+}
+
+impl std::fmt::Display for AnchorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnchorError::AnchorRootEqualsStoreRoot => {
+                write!(f, "anchor_root must not equal store_root after canonicalization")
+            }
+            AnchorError::AnchorRootInsideStoreRoot => {
+                write!(f, "anchor_root must not be inside store_root after canonicalization")
+            }
+            AnchorError::StoreRootInsideAnchorRoot => {
+                write!(f, "store_root must not be inside anchor_root after canonicalization")
+            }
+            AnchorError::CanonicalizationFailed(p) => {
+                write!(f, "failed to canonicalize path: {p}")
+            }
+            AnchorError::CheckpointSequenceCollision(seq) => {
+                write!(f, "checkpoint sequence {seq} already exists")
+            }
+            AnchorError::IoError(msg) => write!(f, "I/O error: {msg}"),
+            AnchorError::ParseError(msg) => write!(f, "parse error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for AnchorError {}
+
+/// Validate that the anchor root is properly separated from the store root.
+///
+/// Checks (after canonicalization):
+/// 1. `anchor_root != store_root`
+/// 2. `anchor_root` is not inside `store_root`
+/// 3. `store_root` is not inside `anchor_root` (stronger separation)
+///
+/// Both paths must exist for canonicalization to succeed. The caller should
+/// create the anchor root directory before calling this function.
+pub fn validate_anchor_root(
+    anchor_root: &Path,
+    store_root: &Path,
+) -> Result<PathBuf, AnchorError> {
+    let canon_anchor = anchor_root
+        .canonicalize()
+        .map_err(|e| AnchorError::CanonicalizationFailed(format!("{}: {}", anchor_root.display(), e)))?;
+    let canon_store = store_root
+        .canonicalize()
+        .map_err(|e| AnchorError::CanonicalizationFailed(format!("{}: {}", store_root.display(), e)))?;
+
+    // Reject equality
+    if canon_anchor == canon_store {
+        return Err(AnchorError::AnchorRootEqualsStoreRoot);
+    }
+
+    // Reject anchor_root inside store_root
+    if canon_anchor.starts_with(&canon_store) {
+        return Err(AnchorError::AnchorRootInsideStoreRoot);
+    }
+
+    // Reject store_root inside anchor_root (stronger separation)
+    if canon_store.starts_with(&canon_anchor) {
+        return Err(AnchorError::StoreRootInsideAnchorRoot);
+    }
+
+    Ok(canon_anchor)
+}
+
+/// Controlled checkpoint writer — creates anchor files outside the trace store.
+///
+/// **Authority:** Creates anchor files ONLY. Does not mutate trace entries,
+/// does not execute tools, does not approve actions, does not modify policy.
+///
+/// The writer computes the root hash from trace entries, constructs the
+/// anchor DTO, and writes it to a JSON file in the anchor root directory.
+pub struct CheckpointWriter;
+
+impl CheckpointWriter {
+    /// Write a checkpoint anchor file.
+    ///
+    /// The anchor is written to `{anchor_root}/openwand-checkpoint-{sequence}.json`.
+    /// If a file with this sequence already exists, returns
+    /// `CheckpointSequenceCollision`.
+    ///
+    /// The `anchor_root` must be canonicalized and separated from `store_root`
+    /// (call `validate_anchor_root` first).
+    ///
+    /// Returns the path to the written anchor file.
+    pub fn write_checkpoint<E>(
+        entries: &[TraceEntry<E>],
+        anchor_root: &Path,
+        store_root: &Path,
+        workspace_id: &str,
+        checkpoint_sequence: u64,
+    ) -> Result<PathBuf, AnchorError> {
+        // Validate path separation
+        let canon_anchor = validate_anchor_root(anchor_root, store_root)?;
+
+        // Compute root hash over all entries
+        let root_hash = compute_root_hash(entries);
+        let entry_count = entries.len() as u64;
+        let last_global_sequence = entries
+            .iter()
+            .map(|e| e.global_sequence)
+            .max()
+            .unwrap_or(0);
+
+        // Construct anchor
+        let anchor = CheckpointAnchor {
+            version: ANCHOR_FORMAT_VERSION,
+            checkpoint_sequence,
+            workspace_id: workspace_id.to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            trace: CheckpointTraceState {
+                entry_count,
+                last_global_sequence,
+                root_hash,
+            },
+            hash_algorithm: "blake3".to_string(),
+            anchor_source: "openwand-checkpoint-writer".to_string(),
+        };
+
+        // Build filename
+        let filename = format!("openwand-checkpoint-{}.json", checkpoint_sequence);
+        let anchor_path = canon_anchor.join(&filename);
+
+        // Collision check
+        if anchor_path.exists() {
+            return Err(AnchorError::CheckpointSequenceCollision(checkpoint_sequence));
+        }
+
+        // Serialize and write
+        let json = serde_json::to_string_pretty(&anchor)
+            .map_err(|e| AnchorError::IoError(format!("failed to serialize anchor: {e}")))?;
+
+        std::fs::write(&anchor_path, &json)
+            .map_err(|e| AnchorError::IoError(format!("failed to write anchor file: {e}")))?;
+
+        Ok(anchor_path)
+    }
+
+    /// Compute the next available checkpoint sequence by scanning existing
+    /// anchor files in the anchor root.
+    ///
+    /// Looks for files matching `openwand-checkpoint-*.json` and returns
+    /// `max(existing) + 1`, or 1 if none exist.
+    pub fn next_sequence(anchor_root: &Path) -> Result<u64, AnchorError> {
+        let canon = anchor_root
+            .canonicalize()
+            .map_err(|e| AnchorError::CanonicalizationFailed(format!("{}: {}", anchor_root.display(), e)))?;
+
+        let mut max_seq: u64 = 0;
+
+        let entries = std::fs::read_dir(&canon)
+            .map_err(|e| AnchorError::IoError(format!("failed to read anchor root: {e}")))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| AnchorError::IoError(format!("dir entry error: {e}")))?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            if let Some(seq_str) = name_str
+                .strip_prefix("openwand-checkpoint-")
+                .and_then(|s| s.strip_suffix(".json"))
+                .and_then(|s| s.parse::<u64>().ok())
+            {
+                max_seq = max_seq.max(seq_str);
+            }
+        }
+
+        Ok(max_seq + 1)
+    }
+}
+
+/// Read an anchor file from disk.
+///
+/// This is a READ-ONLY operation used by the verifier CLI to load
+/// externally persisted anchors.
+pub fn read_anchor_file(path: &Path) -> Result<CheckpointAnchor, AnchorError> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|e| AnchorError::IoError(format!("failed to read anchor file {}: {}", path.display(), e)))?;
+
+    serde_json::from_str(&contents)
+        .map_err(|e| AnchorError::ParseError(format!("failed to parse anchor JSON: {e}")))
 }
 
 // ── Tests ──────────────────────────────────────────────────
@@ -677,17 +880,13 @@ mod tests {
     // ── Source-level authority guard ──
 
     #[test]
-    fn anchor_module_does_not_write_files() {
+    fn anchor_module_does_not_mutate_trace() {
         let src = include_str!("anchor.rs");
         let impl_only = src.split("#[cfg(test)]").next().unwrap_or("");
-        assert!(!impl_only.contains("std::fs::write"),
-            "anchor module must not write files (writing is deferred to 104B CheckpointWriter)");
-        assert!(!impl_only.contains("std::fs::create_dir"),
-            "anchor module must not create directories");
-        assert!(!impl_only.contains("tokio::fs::write"),
-            "anchor module must not write files async");
-        assert!(!impl_only.contains("std::fs::remove"),
-            "anchor module must not delete files");
+        assert!(!impl_only.contains("append_trace"),
+            "anchor module must not append to trace");
+        assert!(!impl_only.contains("delete_entry") && !impl_only.contains("remove_entry"),
+            "anchor module must not delete trace entries");
     }
 
     #[test]
@@ -700,5 +899,231 @@ mod tests {
             "anchor module must not import openwand-core (domain coupling)");
         assert!(!impl_only.contains("openwand_session"),
             "anchor module must not import openwand-session");
+    }
+
+    // ── Wave 104B: Writer and path containment tests ──
+
+    use std::path::PathBuf;
+
+    fn make_temp_dirs() -> (tempfile::TempDir, tempfile::TempDir) {
+        (
+            tempfile::TempDir::new().unwrap(),
+            tempfile::TempDir::new().unwrap(),
+        )
+    }
+
+    #[test]
+    fn validate_anchor_root_rejects_equality() {
+        let (anchor, _store) = make_temp_dirs();
+        let err = validate_anchor_root(anchor.path(), anchor.path()).unwrap_err();
+        assert_eq!(err, AnchorError::AnchorRootEqualsStoreRoot);
+    }
+
+    #[test]
+    fn validate_anchor_root_rejects_anchor_inside_store() {
+        let store = tempfile::TempDir::new().unwrap();
+        let anchor_inside = store.path().join("subdir");
+        std::fs::create_dir_all(&anchor_inside).unwrap();
+        let err = validate_anchor_root(&anchor_inside, store.path()).unwrap_err();
+        assert_eq!(err, AnchorError::AnchorRootInsideStoreRoot);
+    }
+
+    #[test]
+    fn validate_anchor_root_rejects_store_inside_anchor() {
+        let anchor = tempfile::TempDir::new().unwrap();
+        let store_inside = anchor.path().join("store");
+        std::fs::create_dir_all(&store_inside).unwrap();
+        let err = validate_anchor_root(anchor.path(), &store_inside).unwrap_err();
+        assert_eq!(err, AnchorError::StoreRootInsideAnchorRoot);
+    }
+
+    #[test]
+    fn validate_anchor_root_accepts_separate_paths() {
+        let (anchor, store) = make_temp_dirs();
+        let result = validate_anchor_root(anchor.path(), store.path());
+        assert!(result.is_ok(), "separate canonicalized paths should be accepted");
+    }
+
+    #[test]
+    fn validate_anchor_root_rejects_nonexistent_path() {
+        let anchor = tempfile::TempDir::new().unwrap();
+        let store = tempfile::TempDir::new().unwrap();
+        let nonexistent = anchor.path().join("does-not-exist");
+        let err = validate_anchor_root(&nonexistent, store.path()).unwrap_err();
+        assert!(matches!(err, AnchorError::CanonicalizationFailed(_)));
+    }
+
+    #[test]
+    fn writer_creates_anchor_file() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+
+        let path = CheckpointWriter::write_checkpoint(
+            &entries,
+            anchor.path(),
+            store.path(),
+            "test-ws",
+            1,
+        ).unwrap();
+
+        assert!(path.exists(), "anchor file should exist");
+        assert!(path.file_name().unwrap().to_str().unwrap().contains("checkpoint-1"));
+    }
+
+    #[test]
+    fn writer_anchor_file_is_valid_json() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![make_entry(1, "hash_a")];
+
+        let path = CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+
+        let loaded = read_anchor_file(&path).unwrap();
+        assert_eq!(loaded.version, ANCHOR_FORMAT_VERSION);
+        assert_eq!(loaded.workspace_id, "ws1");
+        assert_eq!(loaded.trace.entry_count, 1);
+        assert!(loaded.trace.root_hash.starts_with("blake3:"));
+    }
+
+    #[test]
+    fn writer_written_anchor_roundtrips_through_verify() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+
+        let path = CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+
+        let loaded_anchor = read_anchor_file(&path).unwrap();
+
+        let report = verify_anchor(&entries, Some(&loaded_anchor));
+        assert_eq!(report.result, AnchorVerificationResult::Pass);
+        assert_eq!(report.freshness, AnchorFreshness::Current);
+    }
+
+    #[test]
+    fn writer_rejects_collision() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![make_entry(1, "hash_a")];
+
+        CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+
+        let err = CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap_err();
+        assert_eq!(err, AnchorError::CheckpointSequenceCollision(1));
+    }
+
+    #[test]
+    fn writer_rejects_anchor_inside_store() {
+        let store = tempfile::TempDir::new().unwrap();
+        let anchor_inside = store.path().join("anchors");
+        std::fs::create_dir_all(&anchor_inside).unwrap();
+        let entries = vec![make_entry(1, "hash_a")];
+
+        let err = CheckpointWriter::write_checkpoint(
+            &entries, &anchor_inside, store.path(), "ws1", 1,
+        ).unwrap_err();
+        assert_eq!(err, AnchorError::AnchorRootInsideStoreRoot);
+    }
+
+    #[test]
+    fn next_sequence_empty_returns_1() {
+        let anchor = tempfile::TempDir::new().unwrap();
+        let seq = CheckpointWriter::next_sequence(anchor.path()).unwrap();
+        assert_eq!(seq, 1);
+    }
+
+    #[test]
+    fn next_sequence_after_existing_returns_max_plus_1() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![make_entry(1, "hash_a")];
+
+        CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+        CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 3,
+        ).unwrap();
+
+        let seq = CheckpointWriter::next_sequence(anchor.path()).unwrap();
+        assert_eq!(seq, 4, "next sequence should be max(1,3)+1 = 4");
+    }
+
+    #[test]
+    fn next_sequence_ignores_non_anchor_files() {
+        let anchor = tempfile::TempDir::new().unwrap();
+        std::fs::write(anchor.path().join("random.json"), "{}").unwrap();
+        std::fs::write(anchor.path().join("openwand-checkpoint-5.json"), "{}").unwrap();
+        std::fs::write(anchor.path().join("openwand-checkpoint-not-a-number.json"), "{}").unwrap();
+
+        let seq = CheckpointWriter::next_sequence(anchor.path()).unwrap();
+        assert_eq!(seq, 6, "should find 5 and return 6");
+    }
+
+    #[test]
+    fn read_anchor_file_rejects_nonexistent() {
+        let path = PathBuf::from("/nonexistent/anchor.json");
+        let err = read_anchor_file(&path).unwrap_err();
+        assert!(matches!(err, AnchorError::IoError(_)));
+    }
+
+    #[test]
+    fn read_anchor_file_rejects_malformed_json() {
+        let anchor = tempfile::TempDir::new().unwrap();
+        let path = anchor.path().join("bad.json");
+        std::fs::write(&path, "not valid json {{{").unwrap();
+        let err = read_anchor_file(&path).unwrap_err();
+        assert!(matches!(err, AnchorError::ParseError(_)));
+    }
+
+    #[test]
+    fn writer_full_workflow_write_then_verify_after_growth() {
+        let (anchor, store) = make_temp_dirs();
+        let checkpoint_entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+
+        let path = CheckpointWriter::write_checkpoint(
+            &checkpoint_entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+        let anchor_obj = read_anchor_file(&path).unwrap();
+
+        let mut grown = checkpoint_entries.clone();
+        grown.push(make_entry(3, "hash_c"));
+
+        let report = verify_anchor(&grown, Some(&anchor_obj));
+        assert_eq!(report.result, AnchorVerificationResult::Pass);
+        assert_eq!(report.freshness, AnchorFreshness::Stale { additional_entries: 1 });
+    }
+
+    #[test]
+    fn writer_full_workflow_detects_tamper() {
+        let (anchor, store) = make_temp_dirs();
+        let entries = vec![
+            make_entry(1, "hash_a"),
+            make_entry(2, "hash_b"),
+        ];
+
+        let path = CheckpointWriter::write_checkpoint(
+            &entries, anchor.path(), store.path(), "ws1", 1,
+        ).unwrap();
+        let anchor_obj = read_anchor_file(&path).unwrap();
+
+        let mut tampered = entries.clone();
+        tampered[1].entry_hash = crate::stream::EntryHash("hash_EVIL".into());
+
+        let report = verify_anchor(&tampered, Some(&anchor_obj));
+        assert_eq!(report.result, AnchorVerificationResult::Fail);
     }
 }

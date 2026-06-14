@@ -53,7 +53,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | Wave | Title | Tag | Deliverable |
 |------|-------|-----|-------------|
 | 103A | Post-v0.6 Roadmap Reset | `wave-103a-lock` | v0.7.0 roadmap (VG-1 through VG-5) |
-| 104A | External Anchor Design | (this wave) | Anchor DTOs, root-hash computation, verification semantics |
+| 104A | External Anchor Design | `wave-104a-lock` | Anchor DTOs, root-hash computation, verification semantics |
+| 104B | CheckpointWriter + Anchor CLI | (this wave) | Writer, path containment, CLI commands, integration tests |
 
 ## v0.7.0 Blocker Plan
 

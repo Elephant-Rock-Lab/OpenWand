@@ -64,6 +64,29 @@ enum Commands {
         operations: String,
     },
 
+    /// Write a checkpoint anchor file outside the trace store
+    #[command(name = "anchor-write")]
+    AnchorWrite {
+        /// Session ID to checkpoint
+        session_id: String,
+        /// Directory to write the anchor file (must be outside store root)
+        #[arg(long)]
+        anchor_root: String,
+        /// Explicit checkpoint sequence (optional; auto-computed if omitted)
+        #[arg(long)]
+        sequence: Option<u64>,
+    },
+
+    /// Verify a checkpoint anchor against the current trace
+    #[command(name = "anchor-verify")]
+    AnchorVerify {
+        /// Session ID to verify
+        session_id: String,
+        /// Path to the anchor file
+        #[arg(long)]
+        anchor: String,
+    },
+
     #[command(name = "audit-check")]
     AuditCheck {
         /// Session ID to audit
@@ -1042,6 +1065,8 @@ async fn main() -> Result<()> {
         Commands::Explain { session_id } => cmd_explain(&cli, &session_id).await,
         Commands::TraceVerify { session_id } => cmd_trace_verify(&cli, &session_id).await,
         Commands::OperationReplay { session, operations } => cmd_operation_replay(&cli, &session, &operations).await,
+        Commands::AnchorWrite { session_id, anchor_root, sequence } => cmd_anchor_write(&cli, &session_id, &anchor_root, sequence).await,
+        Commands::AnchorVerify { session_id, anchor } => cmd_anchor_verify(&cli, &session_id, &anchor).await,
         Commands::AuditCheck { session_id } => cmd_audit_check(&cli, &session_id).await,
         Commands::SessionRebuild { session_id } => cmd_session_rebuild(&cli, &session_id).await,
         Commands::TaskPlan { task_plan_cmd } => { cmd_eval_task_plan(task_plan_cmd)?; Ok(()) },
@@ -1485,6 +1510,251 @@ Note: Pass verifies correspondence where trace evidence exists."); OP_REPLAY_EXI
         ReplayResult::Unsupported => OP_REPLAY_EXIT_UNSUPPORTED,
     };
     std::process::exit(code);
+}
+
+const ANCHOR_EXIT_PASS: i32 = 0;
+const ANCHOR_EXIT_FAIL: i32 = 2;
+const ANCHOR_EXIT_MISSING: i32 = 3;
+const ANCHOR_EXIT_UNSUPPORTED: i32 = 4;
+const ANCHOR_EXIT_OPERATIONAL: i32 = 1;
+
+async fn cmd_anchor_write(
+    _cli: &Cli,
+    session_id: &str,
+    anchor_root: &str,
+    sequence: Option<u64>,
+) -> Result<()> {
+    use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
+    use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
+    use openwand_trace::anchor::{CheckpointWriter, AnchorError};
+
+    // Determine DB path
+    let db_path = dirs::data_dir()
+        .map(|d| d.join("openwand").join("openwand.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("openwand.db"));
+
+    if !db_path.exists() {
+        eprintln!("error: trace database not found at {}", db_path.display());
+        std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+    }
+
+    let store = match SqliteStore::open(SqliteStoreConfig::file(&db_path)).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to open trace store: {e}");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+    };
+
+    // Load all entries for this session
+    let stream_id = TraceStreamId {
+        scope: TraceStreamScope::Session,
+        id: session_id.to_string(),
+    };
+
+    let mut all_entries = Vec::new();
+    let mut cursor: Option<openwand_trace::TraceId> = None;
+
+    loop {
+        let mut query = TraceQuery {
+            stream_id: Some(stream_id.clone()),
+            limit: Some(500),
+            ..Default::default()
+        };
+        query.cursor = cursor;
+
+        let page = match store.scan(query).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: failed to scan trace entries: {e}");
+                std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+            }
+        };
+
+        let page_len = page.entries.len();
+        all_entries.extend(page.entries);
+        cursor = page.next_cursor;
+        if cursor.is_none() || page_len == 0 {
+            break;
+        }
+    }
+
+    // Determine store root (parent directory of DB)
+    let store_root = db_path.parent().unwrap_or(std::path::Path::new("."));
+
+    // Ensure anchor root exists
+    let anchor_root_path = std::path::PathBuf::from(anchor_root);
+    if !anchor_root_path.exists() {
+        if let Err(e) = std::fs::create_dir_all(&anchor_root_path) {
+            eprintln!("error: failed to create anchor root {}: {e}", anchor_root_path.display());
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+    }
+
+    // Determine sequence
+    let seq = match sequence {
+        Some(s) => s,
+        None => match CheckpointWriter::next_sequence(&anchor_root_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: failed to determine next sequence: {e}");
+                std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+            }
+        },
+    };
+
+    // Write checkpoint
+    match CheckpointWriter::write_checkpoint(
+        &all_entries,
+        &anchor_root_path,
+        store_root,
+        session_id,
+        seq,
+    ) {
+        Ok(path) => {
+            println!("Checkpoint anchor written successfully.");
+            println!("  File:     {}", path.display());
+            println!("  Session:  {}", session_id);
+            println!("  Sequence: {}", seq);
+            println!("  Entries:  {}", all_entries.len());
+            println!();
+            println!("Note: The anchor proves the trace state at this point in time.");
+            println!("An attacker who can rewrite both the trace store AND the anchor");
+            println!("file can still produce a self-consistent state. Full immutability");
+            println!("requires an external trust anchor (signature, remote attestation,");
+            println!("or append-only storage), which is out of scope.");
+            Ok(())
+        }
+        Err(AnchorError::AnchorRootEqualsStoreRoot) => {
+            eprintln!("error: anchor_root must not equal store_root");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+        Err(AnchorError::AnchorRootInsideStoreRoot) => {
+            eprintln!("error: anchor_root must not be inside store_root");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+        Err(AnchorError::StoreRootInsideAnchorRoot) => {
+            eprintln!("error: store_root must not be inside anchor_root");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+        Err(AnchorError::CheckpointSequenceCollision(s)) => {
+            eprintln!("error: checkpoint sequence {} already exists", s);
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+        Err(e) => {
+            eprintln!("error: failed to write checkpoint: {e}");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+    }
+}
+
+async fn cmd_anchor_verify(
+    _cli: &Cli,
+    session_id: &str,
+    anchor_path: &str,
+) -> Result<()> {
+    use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
+    use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
+    use openwand_trace::anchor::{
+        read_anchor_file, verify_anchor,
+        AnchorVerificationResult, AnchorFreshness,
+    };
+
+    // Determine DB path
+    let db_path = dirs::data_dir()
+        .map(|d| d.join("openwand").join("openwand.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("openwand.db"));
+
+    if !db_path.exists() {
+        eprintln!("error: trace database not found at {}", db_path.display());
+        std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+    }
+
+    // Load anchor file
+    let anchor_path = std::path::PathBuf::from(anchor_path);
+    let anchor = match read_anchor_file(&anchor_path) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("error: failed to read anchor file: {e}");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+    };
+
+    // Open trace store
+    let store = match SqliteStore::open(SqliteStoreConfig::file(&db_path)).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to open trace store: {e}");
+            std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+        }
+    };
+
+    // Load all entries for this session
+    let stream_id = TraceStreamId {
+        scope: TraceStreamScope::Session,
+        id: session_id.to_string(),
+    };
+
+    let mut all_entries = Vec::new();
+    let mut cursor: Option<openwand_trace::TraceId> = None;
+
+    loop {
+        let mut query = TraceQuery {
+            stream_id: Some(stream_id.clone()),
+            limit: Some(500),
+            ..Default::default()
+        };
+        query.cursor = cursor;
+
+        let page = match store.scan(query).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: failed to scan trace entries: {e}");
+                std::process::exit(ANCHOR_EXIT_OPERATIONAL);
+            }
+        };
+
+        let page_len = page.entries.len();
+        all_entries.extend(page.entries);
+        cursor = page.next_cursor;
+        if cursor.is_none() || page_len == 0 {
+            break;
+        }
+    }
+
+    // Verify
+    let report = verify_anchor(&all_entries, Some(&anchor));
+
+    println!("Anchor Verification Report");
+    println!("==========================");
+    println!("Session:       {}", session_id);
+    println!("Result:        {:?}", report.result);
+    println!("Freshness:     {:?}", report.freshness);
+    println!();
+    println!("Checks performed:");
+    println!("  - Anchor version validation");
+    println!("  - Root hash prefix verification (BLAKE3 rollup over entry_hash values)");
+    println!("  - Entry count validation for checkpointed prefix");
+    println!("  - Freshness assessment (current vs stale-after-append)");
+    println!();
+    if let Some(ref hash) = report.recomputed_root_hash {
+        println!("Recomputed root hash: {}", &hash[..20.min(hash.len())]);
+    }
+    println!("Detail: {}", report.detail);
+    println!();
+    println!("Note: Anchor verification checks a checkpointed prefix over stored");
+    println!("entry_hash values. It relies on trace-verify for payload-level hash");
+    println!("correctness. An attacker who can rewrite both the trace store AND");
+    println!("the external anchor can still produce a self-consistent state.");
+
+    let exit_code = match report.result {
+        AnchorVerificationResult::Pass => ANCHOR_EXIT_PASS,
+        AnchorVerificationResult::Fail => ANCHOR_EXIT_FAIL,
+        AnchorVerificationResult::MissingAnchor => ANCHOR_EXIT_MISSING,
+        AnchorVerificationResult::Unsupported => ANCHOR_EXIT_UNSUPPORTED,
+    };
+
+    std::process::exit(exit_code);
 }
 
 async fn cmd_audit_check(_cli: &Cli, _session_id: &str) -> Result<()> {

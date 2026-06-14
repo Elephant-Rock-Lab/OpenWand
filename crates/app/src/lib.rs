@@ -53,3 +53,4 @@ pub mod workflow_audit_packet_review;
 pub mod workflow_audit_packet_distribution;
 pub mod settings;
 pub mod operation_replay;
+pub mod evidence_report;

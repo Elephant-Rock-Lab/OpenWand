@@ -56,7 +56,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 104A | External Anchor Design | `wave-104a-lock` | Anchor DTOs, root-hash computation, verification semantics |
 | 104B | CheckpointWriter + Anchor CLI | `wave-104b-lock` | Writer, path containment, CLI commands, integration tests |
 | 105A | Automated Security Scanning | `wave-105a-lock` | cargo audit, clippy, authority guards, SECURITY_SCAN_RESULTS.md |
-| 105B | Structured Authority Review | (this wave) | AUTHORITY_REVIEW.md: 12 surfaces, write-authority map, residual risks |
+| 105B | Structured Authority Review | `wave-105b-lock` | AUTHORITY_REVIEW.md: 12 surfaces, write-authority map, residual risks |
+| 106A | Evidence Report Export | (this wave) | Aggregated JSON report: trace verify + operation replay + anchor + scan + authority review |
 
 ## v0.7.0 Blocker Plan
 

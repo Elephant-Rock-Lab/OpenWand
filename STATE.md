@@ -1,17 +1,17 @@
 # OpenWand — Project State
 
 ## Version
-0.6.0 (stable) — planning v0.7.0
+0.7.0 (stable) — planning v0.8.0
 
 ## Status
-**v0.6.0 stable released. v0.7.0 in progress. Wave 103A (post-v0.6 roadmap reset) locked.**
+**v0.7.0 stable released. v0.8.0 in progress. Wave 108A (post-v0.7 roadmap reset) locked.**
 
-Release: v0.6.0 — tag `v0.6.0`
+Release: v0.7.0 — tag `v0.7.0`
 
-Binary: 18,027,008 bytes (~17.2 MB), SHA-256 `A9C00D5BBA402BDB42FA6E2E595C90612126E0FD604ED4066D5A27174AE860AC`
+Binary: 18,344,960 bytes (~17.5 MB), SHA-256 `3CBBB103BC386D579801F2F50EB4E3A27DCB031D015E147C0324EA9B4A02BD3C`
 
-Stable for v0.6.0 milestone scope. Not production-ready. Not formal security review.
-No full physical immutability. No external trust anchor.
+Stable for v0.7.0 milestone scope. Not production-ready. Not formal security review.
+No physical immutability. No remote attestation. No stable API guarantee.
 
 ## Workspace Structure
 ```
@@ -39,14 +39,30 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 - 3,939 carried from v0.3.0
 - +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.6.0 stable baseline (Wave 102A):** 4,099 tests on Windows, 0 failures.
-- 4,071 carried from v0.5.0
-- +28 from v0.6.0 arc (98A: +14, 98B: +4, 99A: +5, 99B: +4, 101A: rename only)
+**v0.7.0 stable baseline (Wave 107A):** 4,176 tests on Windows, 0 failures.
+- 4,099 carried from v0.6.0
+- +77 from v0.7.0 arc (104A: +22, 104B: +24, 105A: +4, 105B: +7, 106A: +20)
 
 **Clippy posture:** 0 actionable production warnings on 11 non-app crates (HB-G5).
 50 app crate pedantic/test-only warnings accepted as cosmetic.
 
 **Desktop feature build:** PASS (0 errors, 0 warnings).
+
+## v0.8.0 Operational Hardening Arc
+
+| Wave | Title | Tag | Deliverable |
+|------|-------|-----|-------------|
+| 108A | Post-v0.7 Roadmap Reset | (this wave) | v0.8.0 roadmap (VH-1 through VH-5) |
+
+## v0.8.0 Blocker Plan
+
+| Blocker | Description | Priority |
+|---------|-------------|----------|
+| VH-1: Linux GUI runtime validation | Attempt WSLg/Xvfb display smoke test; defer if unresolvable | P1 (core) |
+| VH-2: Provider validation expansion | Direct OpenAI/Anthropic/Ollama if strategic | P2 |
+| VH-3: External review packet | Bundle evidence into reviewer-ready package | P1 (core) |
+| VH-4: Evidence report UX integration | Surface evidence report in desktop or guided CLI | P2 |
+| VH-5: Release/process hardening | Repeatable release workflow scripts | P2 |
 
 ## v0.7.0 External Assurance Arc
 
@@ -139,7 +155,7 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 ## Release Lineage
 
 ```
-v0.1.0-alpha -> v0.1.0-beta -> v0.2.0-beta -> v0.2.0-rc.1 -> v0.2.0 -> v0.3.0 -> v0.4.0 -> v0.5.0 -> v0.6.0
+v0.1.0-alpha -> v0.1.0-beta -> v0.2.0-beta -> v0.2.0-rc.1 -> v0.2.0 -> v0.3.0 -> v0.4.0 -> v0.5.0 -> v0.6.0 -> v0.7.0
 ```
 
 ## Hard Boundaries (Global)

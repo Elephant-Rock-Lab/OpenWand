@@ -52,7 +52,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 
 | Wave | Title | Tag | Deliverable |
 |------|-------|-----|-------------|
-| 108A | Post-v0.7 Roadmap Reset | (this wave) | v0.8.0 roadmap (VH-1 through VH-5) |
+| 108A | Post-v0.7 Roadmap Reset | `wave-108a-lock` | v0.8.0 roadmap (VH-1 through VH-5) |
+| 109A | Linux GUI Smoke Test | (this wave) | Xvfb partial validation: binary launches, GTK initializes, rendering not verified |
 
 ## v0.8.0 Blocker Plan
 

@@ -1295,7 +1295,8 @@ const TRACE_VERIFY_EXIT_UNSUPPORTED: i32 = 4;
 async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
     use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
     use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
-    use openwand_trace::verifier::{TraceVerifier, VerificationResult};
+    use openwand_trace::verifier::{TraceVerifier, VerificationResult, Blake3HashPolicy, HashVerificationPolicy};
+    use openwand_store::StoredEvent;
 
     // Determine DB path
     let db_path = dirs::data_dir()
@@ -1364,16 +1365,24 @@ async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
         all_entries.extend(global_page.entries);
     }
 
-    // Run verifier
-    let report = TraceVerifier::verify(&all_entries);
+    // Run verifier with hash correctness recomputation (98B).
+    let policy = Blake3HashPolicy;
+    let report = TraceVerifier::verify_with_hash_policy(&all_entries, &policy);
 
-    // Print structured findings
     println!("Trace Verification Report");
     println!("=========================");
-    println!("Session:    {}", session_id);
-    println!("Result:     {:?}", report.result);
-    println!("Entries:    {}", report.entries_checked);
-    println!("Streams:    {}", report.streams_checked);
+    println!("Session:       {}", session_id);
+    println!("Result:        {:?}", report.result);
+    println!("Entries:       {}", report.entries_checked);
+    println!("Streams:       {}", report.streams_checked);
+    println!();
+    println!("Checks performed:");
+    println!("  - Global ordering (monotonic sequence)");
+    println!("  - Per-stream ordering");
+    println!("  - Hash chain continuity (prev_hash -> entry_hash linkage)");
+    println!("  - Hash correctness (BLAKE3 recomputation under Blake3HashPolicy)");
+    println!("  - Duplicate sequence detection");
+    println!("  - Entry well-formedness");
     println!();
 
     if !report.findings.is_empty() {
@@ -1391,11 +1400,15 @@ async fn cmd_trace_verify(_cli: &Cli, session_id: &str) -> Result<()> {
         println!("No findings. All supported checks pass.");
     }
 
-    // Exit with distinct status
     let exit_code = match report.result {
         VerificationResult::Pass => {
-            println!("\nNote: Pass verifies chain continuity and ordering. It does not");
-            println!("prove backend-specific hash correctness.");
+            println!();
+            println!("Note: Pass verifies ordering, chain continuity, and hash correctness");
+            println!("under Blake3HashPolicy. It does not prove physical immutability:");
+            println!("an attacker who can rewrite the trace store AND recompute all");
+            println!("hashes can still produce a self-consistent trace. Full immutability");
+            println!("requires an external trust anchor (signature, checkpoint, or");
+            println!("append-only storage guarantee), which is out of scope.");
             TRACE_VERIFY_EXIT_PASS
         }
         VerificationResult::Fail => TRACE_VERIFY_EXIT_FAIL,

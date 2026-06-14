@@ -41,8 +41,10 @@ mod authority_guards {
         // The trace-verify function should not be a stub
         assert!(!cmd_section.contains("not yet implemented"),
             "trace-verify must not be a stub");
-        assert!(cmd_section.contains("TraceVerifier::verify"),
-            "must call the verifier");
+        assert!(cmd_section.contains("verify_with_hash_policy"),
+            "must use hash policy verification (98B)");
+        assert!(cmd_section.contains("Blake3HashPolicy"),
+            "must use Blake3HashPolicy (98B)");
         assert!(cmd_section.contains("exit_code"),
             "must use distinct exit codes");
     }
@@ -221,5 +223,131 @@ mod cli_exit_code_tests {
             "should print structured output, got: {}",
             combined
         );
+    }
+
+    #[test]
+    fn trace_verify_mentions_hash_correctness() {
+        let output = Command::new(openwand_bin())
+            .args(["trace-verify", "test-session-98b"])
+            .output()
+            .expect("Failed to run openwand");
+
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // The output should mention hash correctness as one of the checks
+        assert!(
+            combined.contains("hash correctness") ||
+            combined.contains("Hash correctness") ||
+            combined.contains("BLAKE3"),
+            "output should mention hash correctness verification (98B)"
+        );
+    }
+
+    #[test]
+    fn trace_verify_no_immutability_overclaim() {
+        let output = Command::new(openwand_bin())
+            .args(["trace-verify", "test-session-98b"])
+            .output()
+            .expect("Failed to run openwand");
+
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Should NOT claim physical immutability
+        assert!(
+            !combined.contains("proves physical immutability") &&
+            !combined.contains("guarantees immutability") &&
+            !combined.contains("fully immutable"),
+            "must not claim physical immutability"
+        );
+        // Should mention the limitation
+        assert!(
+            combined.contains("does not prove physical immutability") ||
+            combined.contains("external trust anchor"),
+            "should mention external trust anchor limitation"
+        );
+    }
+}
+
+#[cfg(test)]
+mod hash_policy_cli_tests {
+    use openwand_trace::verifier::{TraceVerifier, Blake3HashPolicy, HashVerificationPolicy, VerificationResult, VerificationCheck, FindingSeverity};
+    use openwand_trace::entry::TraceEntry;
+    use openwand_trace::stream::{EntryHash, TraceStreamId, TraceStreamScope};
+    use openwand_trace::actor::Actor;
+    use openwand_trace::ids::TraceId;
+
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+    struct TestEvent(String);
+
+    impl HashVerificationPolicy<TestEvent> for Blake3HashPolicy {
+        fn serialize_event(&self, event: &TestEvent) -> Result<String, serde_json::Error> {
+            serde_json::to_string(event)
+        }
+        fn compute_entry_hash(
+            &self,
+            global_sequence: u64,
+            stream_scope: &str,
+            stream_id: &str,
+            stream_sequence: u64,
+            event_kind: &str,
+            event_payload_json: &str,
+            prev_hash: Option<&EntryHash>,
+        ) -> EntryHash {
+            Blake3HashPolicy::compute_hash(
+                global_sequence, stream_scope, stream_id,
+                stream_sequence, event_kind, event_payload_json, prev_hash,
+            )
+        }
+    }
+
+    fn make_hashed_entry(global_seq: u64, stream_id: &str, stream_seq: u64, prev_hash: Option<&EntryHash>) -> TraceEntry<TestEvent> {
+        let event_json = serde_json::to_string(&TestEvent("test".into())).unwrap();
+        let hash = Blake3HashPolicy::compute_hash(
+            global_seq, "Session", stream_id, stream_seq, "test.event", &event_json, prev_hash,
+        );
+        TraceEntry {
+            id: TraceId::new(),
+            stream_id: TraceStreamId { scope: TraceStreamScope::Session, id: stream_id.into() },
+            stream_sequence: stream_seq,
+            global_sequence: global_seq,
+            occurred_at: chrono::Utc::now(),
+            actor: Actor::User,
+            event: TestEvent("test".into()),
+            event_kind: "test.event".into(),
+            event_schema_version: 1,
+            trace_schema_version: 1,
+            prev_hash: prev_hash.cloned(),
+            entry_hash: hash,
+        }
+    }
+
+    #[test]
+    fn hash_policy_correct_entries_pass_cli_verification() {
+        let e1 = make_hashed_entry(1, "s1", 1, None);
+        let e2 = make_hashed_entry(2, "s1", 2, Some(&e1.entry_hash));
+        let report = TraceVerifier::verify_with_hash_policy(&[e1, e2], &Blake3HashPolicy);
+        assert_eq!(report.result, VerificationResult::Pass);
+        assert!(!report.findings.iter().any(|f|
+            f.check == VerificationCheck::HashCorrectnessValid && f.severity == FindingSeverity::Error
+        ));
+    }
+
+    #[test]
+    fn hash_policy_tampered_content_detected_by_cli_verifier() {
+        let e1 = make_hashed_entry(1, "s1", 1, None);
+        let mut e2 = make_hashed_entry(2, "s1", 2, Some(&e1.entry_hash));
+        // Tamper: change content but leave hash unchanged
+        e2.event = TestEvent("TAMPERED".into());
+        let report = TraceVerifier::verify_with_hash_policy(&[e1, e2], &Blake3HashPolicy);
+        assert_eq!(report.result, VerificationResult::Fail);
+        assert!(report.findings.iter().any(|f| f.check == VerificationCheck::HashCorrectnessValid));
     }
 }

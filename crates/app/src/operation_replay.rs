@@ -167,14 +167,14 @@ mod tests {
     }
 
     #[test] fn no_exec_calls() {
-        let s = include_str!("operation_audit.rs");
+        let s = include_str!("operation_replay.rs");
         let impl_only = s.split("#[cfg(test)]").next().unwrap_or("");
         assert!(!impl_only.contains("export_audit_packet")); assert!(!impl_only.contains("request_workflow_run"));
         assert!(!impl_only.contains("submit_approval_resolution")); assert!(!impl_only.contains("resolve_approval"));
         assert!(!impl_only.contains("ToolExecutor")); assert!(!impl_only.contains("advance_stages")); assert!(!impl_only.contains("save_workflow_run"));
     }
     #[test] fn is_read_only() {
-        let s = include_str!("operation_audit.rs");
+        let s = include_str!("operation_replay.rs");
         let impl_only = s.split("#[cfg(test)]").next().unwrap_or("");
         assert!(!impl_only.contains(".append(")); assert!(!impl_only.contains("fn repair")); assert!(!impl_only.contains("fn execute")); assert!(!impl_only.contains("std::fs::write"));
     }

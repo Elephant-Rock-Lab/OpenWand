@@ -61,7 +61,7 @@ mod cli_behavior_tests {
 
     #[test]
     fn verifier_does_not_emit_trace() {
-        let src = include_str!("../src/operation_audit.rs");
+        let src = include_str!("../src/operation_replay.rs");
         let impl_only = src.split("#[cfg(test)]").next().unwrap_or("");
         assert!(!impl_only.contains(".append("), "verifier must not append trace");
         assert!(!impl_only.contains("AppendTraceEntry"), "verifier must not construct trace entries");

@@ -1428,7 +1428,7 @@ const OP_REPLAY_EXIT_UNSUPPORTED: i32 = 4;
 async fn cmd_operation_replay(_cli: &Cli, session_id: &str, operations_file: &str) -> Result<()> {
     use openwand_store::backends::sqlite::store::{SqliteStore, SqliteStoreConfig};
     use openwand_trace::{TraceStore, TraceQuery, TraceStreamId, TraceStreamScope};
-    use openwand_app::operation_audit::{DesktopOperation, OperationReplayVerifier, ReplayResult};
+    use openwand_app::operation_replay::{DesktopOperation, OperationReplayVerifier, ReplayResult};
     let ops_content = match std::fs::read_to_string(operations_file) {
         Ok(c) => c,
         Err(e) => { eprintln!("error: cannot read operations file: {e}"); std::process::exit(1); }

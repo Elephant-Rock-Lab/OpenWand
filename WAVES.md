@@ -366,4 +366,11 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 
 | Wave | Title | Tag | Tests | Lock Doc |
 |------|-------|-----|------:|----------|
-| 97A | Post-v0.5 Roadmap Reset | (pending) | 4,071 | docs/V060_ROADMAP.md |
+| 97A | Post-v0.5 Roadmap Reset | `wave-97a-lock` | 4,071 | docs/V060_ROADMAP.md |
+| 98A | Hash Verification Policy / Architecture | `wave-98a-lock` | 4,085 | crates/trace/src/verifier.rs |
+| 98B | Backend Hash Recomputation CLI | `wave-98b-lock` | 4,089 | crates/app/tests/trace_verify_cli.rs |
+| 99A | Trace-backed Workflow Initiation | `wave-99a-lock` | 4,095 | crates/app/src/operation_replay.rs |
+| 99B | Trace-backed Evidence Export | `wave-99b-lock` | 4,099 | crates/app/src/ui/service.rs |
+| 101A | TD-93B-1 Module Naming Maintenance | `wave-101a-lock` | 4,099 | crates/app/src/operation_replay.rs |
+| 102A | v0.6.0 Release Preparation | (pending) | 4,099 | RELEASE_NOTES_v060_STABLE.md |
+| **v0.6.0** | **Stable Release** | **`v0.6.0`** | **4,099** | **RELEASE_NOTES_v060_STABLE.md** |

@@ -1,17 +1,17 @@
 # OpenWand — Project State
 
 ## Version
-0.5.0 (stable) — planning v0.6.0
+0.6.0 (stable)
 
 ## Status
-**v0.5.0 stable released. v0.6.0 in progress. Wave 97A (post-v0.5 roadmap reset) locked.**
+**v0.6.0 stable released. Tag `v0.6.0`.**
 
-Release: v0.5.0 — tag `v0.5.0`
+Release: v0.6.0 — tag `v0.6.0`
 
-Binary: 18,018,816 bytes (~17.2 MB), SHA-256 `F0BE80A04D3322C8319711AF51C48BC91CED93D01AD20CFD1AC2DB4B85CA2A3D`
+Binary: 18,027,008 bytes (~17.2 MB), SHA-256 `A9C00D5BBA402BDB42FA6E2E595C90612126E0FD604ED4066D5A27174AE860AC`
 
-Stable for v0.5.0 milestone scope. Not production-ready. Not formal security review.
-No full hash recomputation. No full immutability proof.
+Stable for v0.6.0 milestone scope. Not production-ready. Not formal security review.
+No full physical immutability. No external trust anchor.
 
 ## Workspace Structure
 ```
@@ -39,14 +39,36 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 - 3,939 carried from v0.3.0
 - +60 new tests from v0.4.0 arc (88A: +14, 88B: +20, 88C: +16, 89A: +10)
 
-**v0.5.0 stable baseline (Wave 96A):** 4,071 tests on Windows, 0 failures.
-- 3,999 carried from v0.4.0
-- +72 from v0.5.0 arc (92A: +16, 92B: +10, 93A: +35, 93B: +8, 94A: +3)
+**v0.6.0 stable baseline (Wave 102A):** 4,099 tests on Windows, 0 failures.
+- 4,071 carried from v0.5.0
+- +28 from v0.6.0 arc (98A: +14, 98B: +4, 99A: +5, 99B: +4, 101A: rename only)
 
 **Clippy posture:** 0 actionable production warnings on 11 non-app crates (HB-G5).
 50 app crate pedantic/test-only warnings accepted as cosmetic.
 
 **Desktop feature build:** PASS (0 errors, 0 warnings).
+
+## v0.6.0 Evidence-Backed Assurance Arc
+
+| Wave | Title | Tag | Deliverable |
+|------|-------|-----|-------------|
+| 97A | Post-v0.5 Roadmap Reset | `wave-97a-lock` | v0.6.0 roadmap (VF-1 through VF-5) |
+| 98A | Hash Verification Policy | `wave-98a-lock` | HashVerificationPolicy trait + Blake3HashPolicy |
+| 98B | Hash Recomputation CLI | `wave-98b-lock` | trace-verify with hash correctness checking |
+| 99A | Trace-backed Workflow Initiation | `wave-99a-lock` | ModStarted/ModCompleted trace emission |
+| 99B | Trace-backed Evidence Export | `wave-99b-lock` | ArtifactGenerated trace emission |
+| 101A | TD-93B-1 Module Naming | `wave-101a-lock` | Renamed operation_audit.rs to operation_replay.rs |
+| 102A | v0.6.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
+
+## v0.6.0 Blocker Resolution
+
+| Blocker | Status | Resolution |
+|---------|--------|------------|
+| VF-1: Backend hash-correctness | RESOLVED | 98A-98B: HashVerificationPolicy + CLI integration |
+| VF-2: Trace-backed operation coverage | RESOLVED | 99A-99B: Workflow initiation + evidence export trace |
+| VF-3: Security review execution | DEFERRED | Post-v0.6 |
+| VF-4: Linux GUI runtime | DEFERRED | Environment-gated; compile-validated only |
+| VF-5: TD-93B-1 naming | RESOLVED | 101A: Renamed to operation_replay.rs |
 
 ## v0.5.0 Runtime Integrity Arc
 
@@ -93,7 +115,7 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 ## Release Lineage
 
 ```
-v0.1.0-alpha -> v0.1.0-beta -> v0.2.0-beta -> v0.2.0-rc.1 -> v0.2.0 -> v0.3.0 -> v0.4.0 -> v0.5.0
+v0.1.0-alpha -> v0.1.0-beta -> v0.2.0-beta -> v0.2.0-rc.1 -> v0.2.0 -> v0.3.0 -> v0.4.0 -> v0.5.0 -> v0.6.0
 ```
 
 ## Hard Boundaries (Global)

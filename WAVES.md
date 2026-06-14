@@ -372,5 +372,6 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | 99A | Trace-backed Workflow Initiation | `wave-99a-lock` | 4,095 | crates/app/src/operation_replay.rs |
 | 99B | Trace-backed Evidence Export | `wave-99b-lock` | 4,099 | crates/app/src/ui/service.rs |
 | 101A | TD-93B-1 Module Naming Maintenance | `wave-101a-lock` | 4,099 | crates/app/src/operation_replay.rs |
-| 102A | v0.6.0 Release Preparation | (pending) | 4,099 | RELEASE_NOTES_v060_STABLE.md |
+| 102A | v0.6.0 Release Preparation | `wave-102a-lock` | 4,099 | RELEASE_NOTES_v060_STABLE.md |
+| 102B | v0.6.0 Declaration | `v0.6.0` | 4,099 | Tag v0.6.0 |
 | **v0.6.0** | **Stable Release** | **`v0.6.0`** | **4,099** | **RELEASE_NOTES_v060_STABLE.md** |

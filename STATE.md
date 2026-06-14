@@ -58,7 +58,8 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 | 99A | Trace-backed Workflow Initiation | `wave-99a-lock` | ModStarted/ModCompleted trace emission |
 | 99B | Trace-backed Evidence Export | `wave-99b-lock` | ArtifactGenerated trace emission |
 | 101A | TD-93B-1 Module Naming | `wave-101a-lock` | Renamed operation_audit.rs to operation_replay.rs |
-| 102A | v0.6.0 Release Preparation | (this wave) | Release artifact, notes, blocker reconciliation |
+| 102A | v0.6.0 Release Preparation | `wave-102a-lock` | Release artifact, notes, blocker reconciliation |
+| 102B | v0.6.0 Declaration | `v0.6.0` | Tag v0.6.0, publish release |
 
 ## v0.6.0 Blocker Resolution
 

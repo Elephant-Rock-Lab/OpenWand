@@ -232,7 +232,7 @@ A structured checklist for an external reviewer:
 ### 3.6 Dependency Audit
 
 - [ ] Rerun `cargo audit` and compare with recorded results
-- [ ] Last recorded dependency audit: 0 vulnerabilities, 15 warnings at Wave 82A. Audit should be refreshed before any production-readiness claim.
+- [x] Last recorded dependency audit: 0 vulnerabilities, 15 warnings at Wave 105A. Audit refreshed 2026-06-14. See docs/SECURITY_SCAN_RESULTS.md.
 
 ### 3.7 No-Overclaim Verification
 
@@ -256,7 +256,7 @@ This section honestly documents what 94A does NOT do and what OpenWand does NOT 
 | CV-6 | Provider validation limited | Provider validation remains limited to the documented matrix: 5 models across 2 provider families, including LM Studio and Z.AI. Direct OpenAI/Anthropic/Ollama coverage remains deferred unless separately validated. |
 | CV-7 | ~~TD-93B-1: module name debt~~ | RESOLVED (101A). Module renamed from `operation_audit.rs` to `operation_replay.rs`. All references updated. |
 | CV-8 | Windows final-component TOCTOU residual | Windows final file component still relies on the 72B no-follow final-write path; directory traversal uses hardened NtCreateFile handle-relative traversal. Residual is safe-failure/limited final-component race posture, not a known arbitrary write vulnerability. |
-| CV-9 | Transitive dependency warnings | Last recorded dependency audit: 0 vulnerabilities, 15 warnings at Wave 82A. All transitive via Dioxus desktop stack (12) or Loro CRDT (1) or CSS selector path (2). Audit should be refreshed before any production-readiness claim. |
+| CV-9 | Transitive dependency warnings | Last recorded dependency audit: 0 vulnerabilities, 15 warnings at Wave 105A (refreshed 2026-06-14). All upstream-blocked: 13 GTK3 bindings (desktop), 1 atomic-polyfill (Loro CRDT), 1 rand 0.7 (desktop). See docs/SECURITY_SCAN_RESULTS.md. |
 | CV-10 | Workflow trace gap | Workflow modules declare `appends_trace: false`. No dedicated workflow trace events are emitted. Operation replay reports Inconclusive for workflow initiation. This is a known architectural decision, not a defect. |
 | CV-11 | Evidence export trace gap | Evidence export does not emit trace events. Operation replay reports Unsupported for evidence export. The export operation integrity is verified through checksum scope rules (88C), not through trace correspondence. |
 

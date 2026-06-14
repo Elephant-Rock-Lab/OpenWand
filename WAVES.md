@@ -377,4 +377,5 @@ Some waves collapse commits (e.g., commits 2+3 combined) when scope is smaller.
 | **v0.6.0** | **Stable Release** | **`v0.6.0`** | **4,099** | **RELEASE_NOTES_v060_STABLE.md** |
 | 103A | Post-v0.6 Roadmap Reset | `wave-103a-lock` | 4,099 | docs/V070_ROADMAP.md |
 | 104A | External Anchor Design | `wave-104a-lock` | 4,121 | crates/trace/src/anchor.rs |
-| 104B | CheckpointWriter + Anchor CLI | (pending) | 4,145 | crates/trace/src/anchor.rs + CLI |
+| 104B | CheckpointWriter + Anchor CLI | `wave-104b-lock` | 4,145 | crates/trace/src/anchor.rs + CLI |
+| 105A | Automated Security Scanning | (pending) | 4,149 | docs/SECURITY_SCAN_RESULTS.md |

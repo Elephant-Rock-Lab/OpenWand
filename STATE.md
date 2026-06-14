@@ -1,10 +1,10 @@
 # OpenWand — Project State
 
 ## Version
-0.6.0 (stable)
+0.6.0 (stable) — planning v0.7.0
 
 ## Status
-**v0.6.0 stable released. Tag `v0.6.0`.**
+**v0.6.0 stable released. v0.7.0 in progress. Wave 103A (post-v0.6 roadmap reset) locked.**
 
 Release: v0.6.0 — tag `v0.6.0`
 
@@ -47,6 +47,22 @@ Note: `openwand-content` is a stub crate (add() only). Will be implemented when 
 50 app crate pedantic/test-only warnings accepted as cosmetic.
 
 **Desktop feature build:** PASS (0 errors, 0 warnings).
+
+## v0.7.0 External Assurance Arc
+
+| Wave | Title | Tag | Deliverable |
+|------|-------|-----|-------------|
+| 103A | Post-v0.6 Roadmap Reset | (this wave) | v0.7.0 roadmap (VG-1 through VG-5) |
+
+## v0.7.0 Blocker Plan
+
+| Blocker | Description | Priority |
+|---------|-------------|----------|
+| VG-1: External anchor / checkpoint | Periodic checkpoint hash persisted outside store root; verifier checks anchor | P1 (core) |
+| VG-2: Security review execution | Automated scanning + structured authority review | P1 (core) |
+| VG-3: Linux GUI runtime | Environment-gated; may defer | P2 |
+| VG-4: Provider validation expansion | Direct OpenAI/Anthropic/Ollama if strategic | P2 |
+| VG-5: Evidence UX hardening | Exportable verification reports | P2 |
 
 ## v0.6.0 Evidence-Backed Assurance Arc
 

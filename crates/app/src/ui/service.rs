@@ -578,6 +578,65 @@ impl UiSessionService {
     /// export operation. It does not expose general file-read authority.
     /// The desktop UI does not read evidence files, assemble packets, or
     /// write export artifacts.
+    /// Instance method for evidence export that appends trace events (Wave 99B).
+    ///
+    /// Delegates to the static `export_evidence()` for the actual export,
+    /// then emits an ArtifactEvent::Generated trace event on success.
+    /// The trace event provides evidence for operation-replay verification.
+    ///
+    /// Authority: The service boundary (not the desktop UI, not the verifier)
+    /// appends trace events after the export succeeds.
+    pub async fn request_evidence_export(
+        &self,
+        request: &crate::ui::evidence_export_request::EvidenceExportRequest,
+        store_root: &std::path::Path,
+        export_root: &std::path::Path,
+    ) -> crate::ui::evidence_export_request::EvidenceExportState {
+        let result = Self::export_evidence(request, store_root, export_root);
+
+        // Append artifact trace evidence after successful export (Wave 99B).
+        if let crate::ui::evidence_export_request::EvidenceExportState::Exported {
+            ref artifact_path, ref packet_hash, ..
+        } = result
+        {
+            let _ = openwand_trace::TraceStore::append(
+                self.trace.as_ref(),
+                openwand_trace::AppendTraceEntry {
+                    actor: openwand_trace::Actor::System {
+                        component: "ui_evidence_export".into(),
+                    },
+                    event: openwand_store::StoredEvent(
+                        openwand_core::OpenWandTraceEvent::Artifact(
+                            openwand_core::ArtifactEvent::Generated {
+                                paths: vec![artifact_path.clone()],
+                                artifact_kind: "audit_packet".into(),
+                                accuracy: openwand_core::snapshots::AccuracyRecordSnapshot {
+                                    commit_hash: None,
+                                    file_coverage: 1.0,
+                                    sensitivity: packet_hash.clone(),
+                                },
+                            },
+                        ),
+                    ),
+                    relations: vec![],
+                    stream_id: openwand_trace::TraceStreamId {
+                        scope: openwand_trace::TraceStreamScope::Session,
+                        id: format!("export:{}", request.workflow_execution_id),
+                    },
+                    idempotency_key: None,
+                },
+            );
+        }
+
+        result
+    }
+
+    /// Static evidence export — callable without a service instance.
+    ///
+    /// The service may read ONLY the artifact path produced by the delegated
+    /// export operation. It does not expose general file-read authority.
+    /// The desktop UI does not read evidence files, assemble packets, or
+    /// write export artifacts.
     pub fn export_evidence(
         request: &crate::ui::evidence_export_request::EvidenceExportRequest,
         store_root: &std::path::Path,

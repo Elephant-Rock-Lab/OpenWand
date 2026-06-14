@@ -96,12 +96,38 @@ impl OperationReplayVerifier {
         f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No evidence for arid={arid}{}", tcid.map(|t| format!(" or tcid={t}")).unwrap_or_default()) });
         (f, ReplayResult::Fail)
     }
-    fn verify_exp(eid: &str, ap: Option<&str>, _ah: Option<&str>, entries: &[TraceEntry<StoredEvent>]) -> (Vec<OperationReplayFinding>, ReplayResult) {
+    fn verify_exp(eid: &str, ap: Option<&str>, ah: Option<&str>, entries: &[TraceEntry<StoredEvent>]) -> (Vec<OperationReplayFinding>, ReplayResult) {
         let mut f = Vec::new();
         let ae: Vec<_> = entries.iter().filter(|e| e.event_kind == "artifact.generated").collect();
-        if ae.is_empty() { f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No artifact.generated for {eid}. Export does not emit trace.") }); return (f, ReplayResult::Unsupported); }
-        let m = ae.iter().any(|e| { if let OpenWandTraceEvent::Artifact(openwand_core::events::ArtifactEvent::Generated { paths, artifact_kind, .. }) = &e.event.0 { let km = artifact_kind.contains("audit") || artifact_kind.contains("evidence") || artifact_kind.contains("export"); let pm = ap.map(|x| paths.iter().any(|p| p == x)).unwrap_or(true); km && pm } else { false } });
-        if m { f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("Found artifact.generated for {eid}.") }); return (f, ReplayResult::Pass); }
+        if ae.is_empty() {
+            f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("No artifact.generated for {eid}. Legacy export path does not emit trace.") });
+            return (f, ReplayResult::Unsupported);
+        }
+        let expected_stream = format!("export:{}", eid);
+        for e in &ae {
+            if let OpenWandTraceEvent::Artifact(openwand_core::events::ArtifactEvent::Generated { paths, artifact_kind, accuracy, .. }) = &e.event.0 {
+                let stream_match = e.stream_id.id == expected_stream;
+                let kind_match = artifact_kind.contains("audit") || artifact_kind.contains("evidence") || artifact_kind.contains("export");
+                let path_match = ap.map(|x| paths.iter().any(|p| p == x)).unwrap_or(true);
+                let hash_ok = ah.map(|x| accuracy.sensitivity == x).unwrap_or(true);
+
+                // New shape: stream matches + kind + path
+                if stream_match && kind_match && path_match && hash_ok {
+                    f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("Found artifact.generated for {eid} with matching stream/kind/path.") });
+                    return (f, ReplayResult::Pass);
+                }
+                // New shape with hash mismatch = Fail
+                if stream_match && kind_match && !hash_ok && ah.is_some() {
+                    f.push(OperationReplayFinding { severity: ReplaySeverity::Error, check: ReplayCheck::ExpectedEventsPresent, detail: format!("artifact.generated for {eid} but hash mismatch.") });
+                    return (f, ReplayResult::Fail);
+                }
+                // Legacy shape: no stream match, but kind + path match (pre-99B traces)
+                if !stream_match && kind_match && path_match && hash_ok {
+                    f.push(OperationReplayFinding { severity: ReplaySeverity::Info, check: ReplayCheck::ExpectedEventsPresent, detail: format!("Found artifact.generated (legacy match, no stream binding) for {eid}.") });
+                    return (f, ReplayResult::Pass);
+                }
+            }
+        }
         f.push(OperationReplayFinding { severity: ReplaySeverity::Warning, check: ReplayCheck::ExpectedEventsPresent, detail: format!("artifact.generated events exist but none match {eid}.") });
         (f, ReplayResult::Inconclusive)
     }
@@ -126,6 +152,14 @@ mod tests {
     fn mk(gs: u64, ss: u64, ev: OpenWandTraceEvent, ek: &str) -> TraceEntry<StoredEvent> {
         TraceEntry {
             id: TraceId::new(), stream_id: TraceStreamId { scope: TraceStreamScope::Session, id: "t".into() },
+            stream_sequence: ss, global_sequence: gs, occurred_at: chrono::Utc::now(), actor: Actor::User,
+            event: StoredEvent::from(ev), event_kind: ek.into(), event_schema_version: 1, trace_schema_version: 1,
+            prev_hash: None, entry_hash: EntryHash(format!("h{gs}")),
+        }
+    }
+    fn mk_in_stream(gs: u64, ss: u64, ev: OpenWandTraceEvent, ek: &str, stream: &str) -> TraceEntry<StoredEvent> {
+        TraceEntry {
+            id: TraceId::new(), stream_id: TraceStreamId { scope: TraceStreamScope::Session, id: stream.into() },
             stream_sequence: ss, global_sequence: gs, occurred_at: chrono::Utc::now(), actor: Actor::User,
             event: StoredEvent::from(ev), event_kind: ek.into(), event_schema_version: 1, trace_schema_version: 1,
             prev_hash: None, entry_hash: EntryHash(format!("h{gs}")),
@@ -322,5 +356,97 @@ mod tests {
         let o = vec![DesktopOperation::WorkflowInitiation { workflow_execution_id: eid.into() }];
         let r = OperationReplayVerifier::verify(&o, &e);
         assert_eq!(r.result, ReplayResult::Pass, "ModStarted alone is sufficient evidence");
+    }
+
+    // ── Wave 99B: Trace-backed evidence export tests ──
+
+    #[test]
+    fn exp_with_trace_events_passes() {
+        // When artifact.generated trace event exists with matching stream
+        // (export:{execution_id}), kind, and path, the verifier reports Pass.
+        let eid = "wfx_99b_export";
+        let e = vec![
+            mk_in_stream(1, 1,
+                OpenWandTraceEvent::Artifact(ArtifactEvent::Generated {
+                    paths: vec!["/export/evidence.zip".into()],
+                    artifact_kind: "audit_packet".into(),
+                    accuracy: openwand_core::snapshots::AccuracyRecordSnapshot {
+                        commit_hash: None, file_coverage: 1.0, sensitivity: "abc123".into()
+                    },
+                }),
+                "artifact.generated",
+                &format!("export:{}", eid),
+            ),
+        ];
+        let o = vec![DesktopOperation::EvidenceExport {
+            workflow_execution_id: eid.into(),
+            artifact_path: Some("/export/evidence.zip".into()),
+            artifact_hash: Some("abc123".into()),
+        }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Pass, "matching export trace should Pass");
+    }
+
+    #[test]
+    fn exp_wrong_workflow_id_in_stream_inconclusive() {
+        // Artifact event exists but stream references different execution_id
+        let e = vec![
+            mk_in_stream(1, 1,
+                OpenWandTraceEvent::Artifact(ArtifactEvent::Generated {
+                    paths: vec!["/export/e.zip".into()],
+                    artifact_kind: "audit_packet".into(),
+                    accuracy: openwand_core::snapshots::AccuracyRecordSnapshot {
+                        commit_hash: None, file_coverage: 1.0, sensitivity: "h".into()
+                    },
+                }),
+                "artifact.generated",
+                "export:wfx_other",
+            ),
+        ];
+        let o = vec![DesktopOperation::EvidenceExport {
+            workflow_execution_id: "wfx_99b_test".into(),
+            artifact_path: Some("/export/other.zip".into()),
+            artifact_hash: None,
+        }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Inconclusive, "wrong workflow ID should be Inconclusive");
+    }
+
+    #[test]
+    fn exp_hash_mismatch_fails() {
+        // Stream matches and kind matches, but hash doesn't match
+        let eid = "wfx_99b_hash";
+        let e = vec![
+            mk_in_stream(1, 1,
+                OpenWandTraceEvent::Artifact(ArtifactEvent::Generated {
+                    paths: vec!["/export/e.zip".into()],
+                    artifact_kind: "audit_packet".into(),
+                    accuracy: openwand_core::snapshots::AccuracyRecordSnapshot {
+                        commit_hash: None, file_coverage: 1.0, sensitivity: "actual_hash".into()
+                    },
+                }),
+                "artifact.generated",
+                &format!("export:{}", eid),
+            ),
+        ];
+        let o = vec![DesktopOperation::EvidenceExport {
+            workflow_execution_id: eid.into(),
+            artifact_path: Some("/export/e.zip".into()),
+            artifact_hash: Some("wrong_hash".into()),
+        }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Fail, "hash mismatch should Fail");
+    }
+
+    #[test]
+    fn exp_legacy_no_events_remains_unsupported() {
+        // Legacy traces without artifact events remain Unsupported
+        let e: Vec<TraceEntry<StoredEvent>> = vec![];
+        let o = vec![DesktopOperation::EvidenceExport {
+            workflow_execution_id: "wfx_legacy".into(),
+            artifact_path: None, artifact_hash: None,
+        }];
+        let r = OperationReplayVerifier::verify(&o, &e);
+        assert_eq!(r.result, ReplayResult::Unsupported, "legacy traces without events must remain Unsupported");
     }
 }
